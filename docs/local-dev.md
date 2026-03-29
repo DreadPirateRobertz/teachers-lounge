@@ -55,7 +55,7 @@ All 6 services start in dependency order. The first build takes 2-4 minutes
 
 ## Dev Mode (Hot Reload)
 
-Add the `dev` override to mount source code and enable hot reload:
+Use the Compose override file to mount source code and enable hot reload:
 
 ```bash
 docker compose --env-file .env.local \
@@ -63,6 +63,9 @@ docker compose --env-file .env.local \
   -f docker-compose.dev.yml \
   up --build
 ```
+
+> **Note:** `docker-compose.dev.yml` is a Compose *override file*, not a profile.
+> You must pass both `-f` flags explicitly as shown above.
 
 | Service | Hot Reload Mechanism |
 |---------|---------------------|
@@ -112,6 +115,12 @@ All variables are in `.env.example`. Copy to `.env.local` and customise.
 | `JWT_SECRET` | No | placeholder | JWT signing secret |
 | `POSTGRES_PASSWORD` | No | `localdevpassword` | Postgres password |
 | `REDIS_PASSWORD` | No | `localredispassword` | Redis password |
+| `NEXT_PUBLIC_API_URL` | No | `http://localhost:8080` | Browser-facing user-service URL |
+| `NEXT_PUBLIC_TUTORING_URL` | No | `http://localhost:8000` | Browser-facing tutoring-service URL |
+
+> **`NEXT_PUBLIC_*` variables are baked into the JS bundle at build time.**
+> Setting them in `.env.local` takes effect on the *next* `docker compose up --build`.
+> Changing them without rebuilding the frontend image has no effect.
 | `STRIPE_SECRET_KEY` | No | placeholder | Stripe test key |
 | `STRIPE_WEBHOOK_SECRET` | No | placeholder | Stripe webhook secret |
 

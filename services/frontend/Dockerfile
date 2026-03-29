@@ -11,6 +11,15 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+
+# NEXT_PUBLIC_* vars must be declared as ARGs here so Next.js can bake them
+# into the client bundle at build time. Passing them only as ENV at runtime
+# has no effect on already-compiled client code.
+ARG NEXT_PUBLIC_API_URL=http://localhost:8080
+ARG NEXT_PUBLIC_TUTORING_URL=http://localhost:8000
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_TUTORING_URL=$NEXT_PUBLIC_TUTORING_URL
+
 RUN npm run build
 
 # ── Stage 3: runner (production) ─────────────────────────────────────────────

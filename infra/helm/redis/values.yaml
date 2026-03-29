@@ -26,18 +26,22 @@ resources:
 # Redis password injected from redis-secrets (key: redis-password)
 # Set requirepass via command below
 
+# Probes use sh -c so $REDIS_PASSWORD env var is expanded from the container env.
+# Plain 'redis-cli ping' fails when requirepass is set — server returns NOAUTH.
 livenessProbe:
   exec:
     command:
-      - redis-cli
-      - ping
+      - sh
+      - -c
+      - redis-cli -a "$REDIS_PASSWORD" ping
   initialDelaySeconds: 15
   periodSeconds: 10
 
 readinessProbe:
   exec:
     command:
-      - redis-cli
-      - ping
+      - sh
+      - -c
+      - redis-cli -a "$REDIS_PASSWORD" ping
   initialDelaySeconds: 5
   periodSeconds: 5

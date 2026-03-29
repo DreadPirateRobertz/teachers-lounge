@@ -1,10 +1,10 @@
 ## Dev override — hot reload for all application services.
-## Usage: docker compose --profile dev up
-## (or: docker compose -f docker-compose.yml -f docker-compose.dev.yml up)
+## Usage: docker compose --env-file .env.local -f docker-compose.yml -f docker-compose.dev.yml up --build
 ##
+## This file is NOT a profile — it is a Compose override file. Use -f flags as above.
 ## Infrastructure services (postgres, redis) run identically to the base file.
-## Application services are replaced with dev builds that mount source code
-## and restart on file changes.
+## Application services use dev builds that bind-mount source code and
+## restart on file changes (Next.js HMR, Air for Go, uvicorn --reload for Python).
 
 services:
 
@@ -12,10 +12,14 @@ services:
     build:
       context: ./services/frontend
       dockerfile: Dockerfile.dev
+      # NEXT_PUBLIC_* must be build args even in dev mode
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
+        NEXT_PUBLIC_TUTORING_URL: ${NEXT_PUBLIC_TUTORING_URL:-http://localhost:8000}
     volumes:
       - ./services/frontend:/app
       - /app/node_modules      # preserve node_modules from image
-      - /app/.next             # preserve build cache from image
+      - /app/.next             # preserve Next.js build cache from image
     environment:
       NODE_ENV: development
       WATCHPACK_POLLING: "true"   # needed for some Docker/macOS setups
