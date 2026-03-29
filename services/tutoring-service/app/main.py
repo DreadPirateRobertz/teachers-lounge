@@ -29,9 +29,9 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],   # tightened in Phase 2 when frontend service is known
+    allow_origins=settings.allowed_origins.split(","),
     allow_methods=["GET", "POST"],
-    allow_headers=["*"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 app.include_router(chat_simple_router)   # POST /v1/chat — consumed by frontend
