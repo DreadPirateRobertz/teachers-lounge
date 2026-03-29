@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from uuid import UUID, uuid4
+from uuid import UUID
 
 from pydantic import BaseModel, Field
 
@@ -13,9 +13,7 @@ class Role(str, Enum):
 # ── Request / Response DTOs ───────────────────────────────────────────────────
 
 class CreateSessionRequest(BaseModel):
-    user_id: UUID
-    course_id: UUID | None = None
-    student_name: str | None = None  # used to personalise Nova's greeting
+    course_id: UUID | None = None       # user_id comes from JWT, not request body
 
 
 class SessionResponse(BaseModel):
@@ -47,6 +45,6 @@ class HistoryResponse(BaseModel):
 
 class SSEEvent(BaseModel):
     """Single token/chunk emitted over the SSE stream."""
-    type: str  # "delta" | "done" | "error"
+    type: str   # "delta" | "done" | "error"
     content: str = ""
     message_id: str = ""

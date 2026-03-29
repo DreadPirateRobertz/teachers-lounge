@@ -1,0 +1,11 @@
+apiVersion: v2
+name: ai-gateway
+description: LiteLLM AI Gateway for TeachersLounge — internal proxy for all LLM provider calls.
+type: application
+version: 0.1.0
+appVersion: "main-latest"
+
+dependencies:
+  - name: litellm
+    version: "0.1.*"
+    repository: "https://helm.litellm.ai"

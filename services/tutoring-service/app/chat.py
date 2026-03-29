@@ -1,27 +1,38 @@
 """
-Chat endpoint — streaming SSE response via LiteLLM proxy.
+Chat endpoint — JWT-protected, streaming SSE response via LiteLLM proxy.
 
 Flow:
-  1. Validate session exists and belongs to user (Phase 2+ will enforce auth)
-  2. Load conversation history (last N messages for context window)
-  3. Build messages array: system prompt + history + new user message
-  4. Stream from AI Gateway (LiteLLM) using OpenAI-compatible SDK
-  5. Persist user message + completed assistant message to Postgres
-  6. Emit SSE events: delta chunks → done
+  1. Validate JWT → extract user_id
+  2. Verify session exists and belongs to this user
+  3. Load last 10 exchanges (20 messages) for context window
+  4. Build messages: system prompt + history + new student message
+  5. Stream from AI Gateway (LiteLLM) via OpenAI-compatible SDK
+  6. Persist student message (pre-stream) + completed tutor reply (post-stream)
+  7. Emit SSE: delta chunks → done  (error event on failure with fallback text)
+
+SSE event format:
+  data: {"type": "delta",  "content": "<token>", "message_id": "<uuid>"}
+  data: {"type": "done",   "content": "",         "message_id": "<uuid>"}
+  data: {"type": "error",  "content": "<msg>",    "message_id": ""}
 """
 import json
+import logging
 import time
+import uuid
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, APIConnectionError, APIStatusError, APITimeoutError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .auth import JWTClaims, require_auth
 from .config import settings
 from .database import get_db
 from .history import append_message, get_history, get_session
 from .models import MessageRequest
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sessions", tags=["chat"])
 
@@ -31,21 +42,28 @@ platform. You are brilliant, patient, encouraging, and a little bit nerdy. You \
 use vivid analogies, celebrate curiosity, and make hard concepts feel approachable.
 
 Guidelines:
-- Ask clarifying questions before diving into a long explanation if the question is vague.
+- Ask a clarifying question before a long explanation if the question is vague.
 - Use concrete examples. Always pair an abstraction with something tangible.
-- When a student is wrong, be gentle but clear. Explain why, don't just give the answer.
+- When a student is wrong, be gentle but clear — explain why, don't just give the answer.
 - Use LaTeX notation for math/formulas: $E = mc^2$ inline, $$...$$ for display.
 - Keep responses focused. If a topic is huge, offer to go deeper on a specific part.
-- You don't have access to the student's course materials yet (Phase 2 will add that).
-  For now, draw on your broad knowledge and acknowledge when you're working from \
-  general knowledge rather than their specific textbook.
+- You do not yet have access to the student's uploaded course materials (that's \
+  coming in Phase 2). For now, draw on your broad knowledge and be transparent \
+  when you're working from general knowledge rather than their specific textbook.
 """
 
+FALLBACK_MESSAGE = (
+    "I'm having a moment of technical difficulty — my connection to the knowledge "
+    "network seems unstable. Could you try sending your question again? I'll be right "
+    "here when you do. 🔧"
+)
 
-def _build_openai_client() -> AsyncOpenAI:
+
+def _gateway_client() -> AsyncOpenAI:
     return AsyncOpenAI(
         base_url=settings.ai_gateway_url + "/v1",
         api_key=settings.ai_gateway_key,
+        timeout=60.0,
     )
 
 
@@ -66,25 +84,20 @@ async def send_message(
     session_id: UUID,
     body: MessageRequest,
     db: AsyncSession = Depends(get_db),
+    user: JWTClaims = Depends(require_auth),
 ):
-    """
-    Send a student message and receive a streaming SSE response from Professor Nova.
-
-    SSE event shapes:
-      data: {"type": "delta",  "content": "<token>", "message_id": "<uuid>"}
-      data: {"type": "done",   "content": "",         "message_id": "<uuid>"}
-      data: {"type": "error",  "content": "<msg>",    "message_id": ""}
-    """
+    """Send a student message and receive a streaming SSE response from Professor Nova."""
     session = await get_session(db, session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
+    if session.user_id != user.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
 
+    # Last 10 exchanges = 20 messages (10 student + 10 tutor)
     history = await get_history(db, session_id, limit=settings.max_history_messages)
 
-    # Persist the student's message before streaming so it's durable
-    student_msg = await append_message(
-        db, session_id, session.user_id, role="student", content=body.content
-    )
+    # Persist student message before streaming — durable even if stream fails
+    await append_message(db, session_id, user.user_id, role="student", content=body.content)
 
     messages = [
         {"role": "system", "content": PROFESSOR_NOVA_SYSTEM_PROMPT},
@@ -92,12 +105,12 @@ async def send_message(
         {"role": "user", "content": body.content},
     ]
 
-    client = _build_openai_client()
+    client = _gateway_client()
+    tutor_msg_id = str(uuid.uuid4())
 
     async def stream_generator():
-        full_response = []
+        full_response: list[str] = []
         start_ms = int(time.time() * 1000)
-        tutor_msg_id = None
 
         try:
             stream = await client.chat.completions.create(
@@ -107,38 +120,51 @@ async def send_message(
                 max_tokens=4096,
             )
 
-            # Pre-generate the message ID so the client can reference it
-            import uuid as _uuid
-            tutor_msg_id = str(_uuid.uuid4())
-
             async for chunk in stream:
                 delta = chunk.choices[0].delta
                 if delta.content:
                     full_response.append(delta.content)
                     yield await _sse("delta", content=delta.content, message_id=tutor_msg_id)
 
-            # Persist completed assistant response
             complete_text = "".join(full_response)
             elapsed_ms = int(time.time() * 1000) - start_ms
+
             await append_message(
                 db,
                 session_id,
-                session.user_id,
+                user.user_id,
                 role="tutor",
                 content=complete_text,
                 response_time_ms=elapsed_ms,
             )
+            yield await _sse("done", message_id=tutor_msg_id)
 
+        except (APIConnectionError, APITimeoutError) as exc:
+            logger.warning("AI Gateway unreachable: %s", exc)
+            # Persist fallback so history stays coherent
+            await append_message(
+                db, session_id, user.user_id, role="tutor", content=FALLBACK_MESSAGE
+            )
+            yield await _sse("delta", content=FALLBACK_MESSAGE, message_id=tutor_msg_id)
+            yield await _sse("done", message_id=tutor_msg_id)
+
+        except APIStatusError as exc:
+            logger.error("AI Gateway error %s: %s", exc.status_code, exc.message)
+            await append_message(
+                db, session_id, user.user_id, role="tutor", content=FALLBACK_MESSAGE
+            )
+            yield await _sse("delta", content=FALLBACK_MESSAGE, message_id=tutor_msg_id)
             yield await _sse("done", message_id=tutor_msg_id)
 
         except Exception as exc:
-            yield await _sse("error", content=str(exc))
+            logger.exception("Unexpected error in chat stream: %s", exc)
+            yield await _sse("error", content="An unexpected error occurred. Please try again.")
 
     return StreamingResponse(
         stream_generator(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",   # disable nginx buffering
+            "X-Accel-Buffering": "no",   # disable nginx buffering for SSE
         },
     )

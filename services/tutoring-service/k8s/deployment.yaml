@@ -33,6 +33,11 @@ spec:
                 secretKeyRef:
                   name: tutoring-service-secrets
                   key: AI_GATEWAY_KEY
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: tutoring-service-secrets
+                  key: JWT_SECRET
             - name: AI_GATEWAY_URL
               valueFrom:
                 configMapKeyRef:
@@ -115,6 +120,8 @@ type: Opaque
 stringData:
   DATABASE_URL: "postgresql+asyncpg://tutoring:REPLACE_ME@localhost:5432/teachers_lounge"
   AI_GATEWAY_KEY: "REPLACE_ME"
+  # Shared with User Service — same secret used to sign and validate JWTs
+  JWT_SECRET: "REPLACE_ME"
 ---
 apiVersion: v1
 kind: ServiceAccount

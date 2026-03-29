@@ -15,13 +15,19 @@ class Settings(BaseSettings):
     tutor_primary_model: str = "tutor-primary"
     tutor_fast_model: str = "tutor-fast"
 
+    # JWT validation (shared secret from User Service)
+    # User Service signs tokens with this secret; all services validate with it.
+    jwt_secret: str = "REPLACE_ME"
+    jwt_algorithm: str = "HS256"
+
     # Service
     service_host: str = "0.0.0.0"
     service_port: int = 8080
     log_level: str = "info"
 
     # Conversation limits
-    max_history_messages: int = 50     # messages kept in context window
+    # "last 10 exchanges" = 10 student messages + 10 tutor replies = 20 messages
+    max_history_messages: int = 20
     max_message_length: int = 8000     # chars per student message
 
 
