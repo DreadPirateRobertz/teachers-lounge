@@ -1,5 +1,7 @@
 ## LiteLLM config.yaml mounted into the container.
 ## Add or remove models here — restart of the pod picks up the change (ArgoCD handles that).
+##
+## Phase 1: single provider (Anthropic). OpenAI added in Phase 2.
 apiVersion: v1
 kind: ConfigMap
 metadata:
@@ -9,26 +11,35 @@ metadata:
 data:
   config.yaml: |
     model_list:
-      # Primary model — Claude Sonnet
+      # Canonical alias used by all internal services (Tutoring Service, etc.)
+      - model_name: tutor-model
+        litellm_params:
+          model: anthropic/claude-sonnet-4-6
+          api_key: os.environ/ANTHROPIC_API_KEY
+          # Basic rate limiting — raise in Phase 2 once usage is measured
+          rpm: 60      # requests per minute
+          tpm: 100000  # tokens per minute
+
+      # Generic alias for ad-hoc / exploratory use
       - model_name: claude-sonnet
         litellm_params:
           model: anthropic/claude-sonnet-4-6
           api_key: os.environ/ANTHROPIC_API_KEY
+          rpm: 60
+          tpm: 100000
 
-      # Fallback — GPT-4o
-      - model_name: gpt-4o
-        litellm_params:
-          model: openai/gpt-4o
-          api_key: os.environ/OPENAI_API_KEY
+    general_settings:
+      # Require callers to present this key (set via ai-gateway-secrets)
+      master_key: os.environ/LITELLM_MASTER_KEY
 
     router_settings:
-      routing_strategy: latency-based-routing
       num_retries: 3
       timeout: 30
 
     litellm_settings:
       # Drop unsupported params rather than erroring
       drop_params: true
-      # Request/response logging — outputs to stdout, picked up by Fluentbit
+      # Request/response logging to stdout — picked up by Fluentbit.
+      # LITELLM_LOG env var controls verbosity (INFO in dev, WARNING in prod).
       success_callback: []
       failure_callback: []
