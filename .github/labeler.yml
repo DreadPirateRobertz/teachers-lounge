@@ -1,0 +1,39 @@
+frontend:
+  - changed-files:
+      - any-glob-to-any-file: ['services/frontend/**']
+
+user-service:
+  - changed-files:
+      - any-glob-to-any-file: ['services/user-service/**']
+
+tutoring-service:
+  - changed-files:
+      - any-glob-to-any-file: ['services/tutoring-service/**']
+
+ai-gateway:
+  - changed-files:
+      - any-glob-to-any-file: ['services/ai-gateway/**']
+
+gaming-service:
+  - changed-files:
+      - any-glob-to-any-file: ['services/gaming-service/**']
+
+ingestion-service:
+  - changed-files:
+      - any-glob-to-any-file: ['services/ingestion-service/**']
+
+search-service:
+  - changed-files:
+      - any-glob-to-any-file: ['services/search-service/**']
+
+infra:
+  - changed-files:
+      - any-glob-to-any-file: ['infra/**']
+
+ci:
+  - changed-files:
+      - any-glob-to-any-file: ['.github/**']
+
+docs:
+  - changed-files:
+      - any-glob-to-any-file: ['*.md', 'docs/**']
