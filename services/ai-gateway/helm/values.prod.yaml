@@ -1,0 +1,45 @@
+## Production overrides — applied on top of values.yaml
+## Usage:
+##   helm upgrade ai-gateway ./helm \
+##     -f helm/values.yaml \
+##     -f helm/values.prod.yaml \
+##     --set gcp.project=teachers-lounge-prod \
+##     --set gcp.region=us-central1 \
+##     -n teachers-lounge
+
+litellm:
+  replicaCount: 2    # HPA min; autoscaling handles the rest
+
+  image:
+    # Pin to a specific digest in production — never use :latest in prod
+    # tag: "main-<git-sha>"
+
+  serviceAccount:
+    annotations:
+      # Workload Identity — set gcp.project first, then this resolves correctly.
+      # Rendered via: ai-gateway@<gcp.project>.iam.gserviceaccount.com
+      # This SA needs: roles/cloudsql.client
+      iam.gke.io/gcp-service-account: ""  # overridden at deploy time via --set
+
+  config:
+    litellm_settings:
+      success_callback: ["langfuse", "prometheus"]
+      failure_callback: ["langfuse", "prometheus"]
+      service_callback: ["otel"]
+
+    general_settings:
+      rate_limit_policy:
+        default:
+          tpm: 100000
+          rpm: 60
+        premium:
+          tpm: 500000
+          rpm: 300
+
+  resources:
+    requests:
+      cpu: "500m"
+      memory: "1Gi"
+    limits:
+      cpu: "2000m"
+      memory: "2Gi"

@@ -1,0 +1,14 @@
+{{/*
+ConfigMap consumed by the Cloud SQL Auth Proxy sidecar.
+Renders the full instance connection string from chart values so there are
+no literal PROJECT_ID placeholders anywhere in the deployed manifests.
+*/}}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ai-gateway-env
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "ai-gateway.labels" . | nindent 4 }}
+data:
+  CLOUD_SQL_INSTANCE: {{ include "ai-gateway.cloudSqlInstance" . | quote }}

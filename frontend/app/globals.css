@@ -1,0 +1,75 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --neon-blue:  #00aaff;
+  --neon-green: #00ff88;
+  --neon-pink:  #ff00aa;
+  --neon-gold:  #ffdc00;
+  --bg-deep:    #0a0a1a;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  overflow: hidden;
+  background-color: var(--bg-deep);
+  color: #c8c8e8;
+}
+
+/* Scrollbars */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: #0a0a1a;
+}
+::-webkit-scrollbar-thumb {
+  background: #252560;
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #00aaff66;
+}
+
+/* Neon text glow utilities */
+@layer utilities {
+  .text-glow-blue {
+    text-shadow: 0 0 8px #00aaff99, 0 0 16px #00aaff44;
+  }
+  .text-glow-green {
+    text-shadow: 0 0 8px #00ff8899, 0 0 16px #00ff8844;
+  }
+  .text-glow-pink {
+    text-shadow: 0 0 8px #ff00aa99, 0 0 16px #ff00aa44;
+  }
+  .text-glow-gold {
+    text-shadow: 0 0 8px #ffdc0099, 0 0 16px #ffdc0044;
+  }
+
+  .border-glow-blue {
+    border-color: #00aaff66;
+    box-shadow: 0 0 6px #00aaff33, inset 0 0 6px #00aaff11;
+  }
+  .border-glow-green {
+    border-color: #00ff8866;
+    box-shadow: 0 0 6px #00ff8833, inset 0 0 6px #00ff8811;
+  }
+}
+
+/* Animated typing cursor */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.typing-cursor::after {
+  content: '▋';
+  animation: blink 0.8s step-end infinite;
+  color: var(--neon-blue);
+}

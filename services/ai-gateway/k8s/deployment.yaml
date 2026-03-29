@@ -1,0 +1,129 @@
+## ============================================================
+## REFERENCE ONLY — do NOT apply this file directly.
+## Use the Helm chart (helm/) for all deployments.
+##
+## This file documents the raw K8s object structure for review.
+## It contains REPLACE_WITH_* tokens that are intentionally not
+## filled in — the Helm chart renders real values from values.yaml.
+## ============================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ai-gateway
+  namespace: teachers-lounge
+  labels:
+    app: ai-gateway
+    version: "1"
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ai-gateway
+  template:
+    metadata:
+      labels:
+        app: ai-gateway
+    spec:
+      serviceAccountName: ai-gateway
+      containers:
+        - name: litellm
+          image: ghcr.io/berriai/litellm:main-latest
+          ports:
+            - containerPort: 4000
+              name: http
+          command:
+            - litellm
+            - --config
+            - /app/litellm_config.yaml
+            - --port
+            - "4000"
+            - --detailed_debug
+          env:
+            - name: ANTHROPIC_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-secrets
+                  key: ANTHROPIC_API_KEY
+            - name: LITELLM_MASTER_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-secrets
+                  key: LITELLM_MASTER_KEY
+            - name: LITELLM_DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: litellm-secrets
+                  key: LITELLM_DATABASE_URL
+          volumeMounts:
+            - name: config
+              mountPath: /app/litellm_config.yaml
+              subPath: litellm_config.yaml
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "512Mi"
+            limits:
+              cpu: "1000m"
+              memory: "1Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 4000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: 4000
+            initialDelaySeconds: 10
+            periodSeconds: 5
+            failureThreshold: 3
+
+        # Cloud SQL Auth Proxy sidecar for Postgres connectivity
+        - name: cloud-sql-proxy
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2
+          args:
+            - "--structured-logs"
+            - "--port=5432"
+            - "$(CLOUD_SQL_INSTANCE)"
+          env:
+            - name: CLOUD_SQL_INSTANCE
+              valueFrom:
+                configMapKeyRef:
+                  name: litellm-config-env
+                  key: CLOUD_SQL_INSTANCE
+          securityContext:
+            runAsNonRoot: true
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+
+      volumes:
+        - name: config
+          configMap:
+            name: litellm-config
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: litellm-config-env
+  namespace: teachers-lounge
+  labels:
+    app: ai-gateway
+data:
+  # Format: project:region:instance-name
+  CLOUD_SQL_INSTANCE: "REPLACE_WITH_PROJECT:REPLACE_WITH_REGION:teachers-lounge-pg"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: ai-gateway
+  namespace: teachers-lounge
+  annotations:
+    # Workload Identity — maps to GCP service account with Cloud SQL Client role
+    iam.gke.io/gcp-service-account: "ai-gateway@REPLACE_WITH_PROJECT.iam.gserviceaccount.com"

@@ -1,0 +1,132 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: tutoring-service
+  namespace: teachers-lounge
+  labels:
+    app: tutoring-service
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: tutoring-service
+  template:
+    metadata:
+      labels:
+        app: tutoring-service
+    spec:
+      serviceAccountName: tutoring-service
+      containers:
+        - name: tutoring-service
+          image: REPLACE_WITH_ARTIFACT_REGISTRY/tutoring-service:latest
+          ports:
+            - containerPort: 8080
+              name: http
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: tutoring-service-secrets
+                  key: DATABASE_URL
+            - name: AI_GATEWAY_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: tutoring-service-secrets
+                  key: AI_GATEWAY_KEY
+            - name: JWT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: tutoring-service-secrets
+                  key: JWT_SECRET
+            - name: AI_GATEWAY_URL
+              valueFrom:
+                configMapKeyRef:
+                  name: tutoring-service-config
+                  key: AI_GATEWAY_URL
+            - name: LOG_LEVEL
+              valueFrom:
+                configMapKeyRef:
+                  name: tutoring-service-config
+                  key: LOG_LEVEL
+          resources:
+            requests:
+              cpu: "250m"
+              memory: "256Mi"
+            limits:
+              cpu: "1000m"
+              memory: "512Mi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8080
+            initialDelaySeconds: 15
+            periodSeconds: 10
+            failureThreshold: 3
+          readinessProbe:
+            httpGet:
+              path: /health/readiness
+              port: 8080
+            initialDelaySeconds: 5
+            periodSeconds: 5
+            failureThreshold: 3
+
+        # Cloud SQL Auth Proxy sidecar
+        - name: cloud-sql-proxy
+          image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2
+          args:
+            - "--structured-logs"
+            - "--port=5432"
+            - "$(CLOUD_SQL_INSTANCE)"
+          env:
+            - name: CLOUD_SQL_INSTANCE
+              valueFrom:
+                configMapKeyRef:
+                  name: tutoring-service-config
+                  key: CLOUD_SQL_INSTANCE
+          securityContext:
+            runAsNonRoot: true
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+
+      volumes: []
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: tutoring-service-config
+  namespace: teachers-lounge
+  labels:
+    app: tutoring-service
+data:
+  AI_GATEWAY_URL: "http://ai-gateway.teachers-lounge.svc.cluster.local:4000"
+  LOG_LEVEL: "info"
+  CLOUD_SQL_INSTANCE: "REPLACE_WITH_PROJECT:REPLACE_WITH_REGION:teachers-lounge-pg"
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: tutoring-service-secrets
+  namespace: teachers-lounge
+  labels:
+    app: tutoring-service
+  annotations:
+    note: "Populate via kubectl or External Secrets Operator"
+type: Opaque
+stringData:
+  DATABASE_URL: "postgresql+asyncpg://tutoring:REPLACE_ME@localhost:5432/teachers_lounge"
+  AI_GATEWAY_KEY: "REPLACE_ME"
+  # Shared with User Service — same secret used to sign and validate JWTs
+  JWT_SECRET: "REPLACE_ME"
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tutoring-service
+  namespace: teachers-lounge
+  annotations:
+    iam.gke.io/gcp-service-account: "tutoring-service@REPLACE_WITH_PROJECT.iam.gserviceaccount.com"

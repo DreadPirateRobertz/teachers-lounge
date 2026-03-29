@@ -1,0 +1,140 @@
+## LiteLLM Helm values — TeachersLounge AI Gateway
+## Upstream chart: https://helm.litellm.ai (see Chart.yaml for pinned version)
+
+# ── GCP project configuration ─────────────────────────────────────────────────
+# Set these for every deployment — no literal PROJECT_ID in any template.
+gcp:
+  project: "REPLACE_WITH_GCP_PROJECT"    # e.g. teachers-lounge-prod
+  region: "REPLACE_WITH_REGION"          # e.g. us-central1
+  cloudSqlInstance: "teachers-lounge-pg" # Cloud SQL instance name (not connection string)
+
+# ── LiteLLM subchart values ───────────────────────────────────────────────────
+litellm:
+  replicaCount: 2
+
+  image:
+    repository: ghcr.io/berriai/litellm
+    tag: main-latest
+    pullPolicy: IfNotPresent
+
+  service:
+    type: ClusterIP
+    port: 4000
+
+  resources:
+    requests:
+      cpu: "250m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1Gi"
+
+  autoscaling:
+    enabled: true
+    minReplicas: 2
+    maxReplicas: 6
+    targetCPUUtilizationPercentage: 70
+    targetMemoryUtilizationPercentage: 80
+
+  livenessProbe:
+    httpGet:
+      path: /health
+      port: 4000
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 3
+
+  readinessProbe:
+    httpGet:
+      path: /health/readiness
+      port: 4000
+    initialDelaySeconds: 10
+    periodSeconds: 5
+    failureThreshold: 3
+
+  # LiteLLM proxy configuration (rendered into a ConfigMap by the upstream chart)
+  config:
+    model_list:
+      # Primary tutoring model — nuanced, patient explanations
+      - model_name: tutor-primary
+        litellm_params:
+          model: anthropic/claude-sonnet-4-6
+          api_key: os.environ/ANTHROPIC_API_KEY
+          max_tokens: 4096
+          temperature: 0.7
+
+      # Fast/cheap model — quiz generation, boss taunts
+      - model_name: tutor-fast
+        litellm_params:
+          model: anthropic/claude-haiku-4-5-20251001
+          api_key: os.environ/ANTHROPIC_API_KEY
+          max_tokens: 1024
+          temperature: 0.8
+
+    litellm_settings:
+      drop_params: true
+      store_prompts_in_spend_logs: false
+      success_callback: []
+      failure_callback: []
+
+    general_settings:
+      master_key: os.environ/LITELLM_MASTER_KEY
+      database_url: os.environ/LITELLM_DATABASE_URL
+      rate_limit_policy:
+        default:
+          tpm: 100000
+          rpm: 60
+
+    router_settings:
+      routing_strategy: simple-shuffle
+      num_retries: 3
+      retry_after: 1
+      timeout: 60
+
+  # Kubernetes secrets containing provider keys.
+  # Populate via External Secrets Operator or:
+  #   kubectl create secret generic litellm-secrets -n teachers-lounge \
+  #     --from-literal=ANTHROPIC_API_KEY=<key> \
+  #     --from-literal=LITELLM_MASTER_KEY=<key> \
+  #     --from-literal=LITELLM_DATABASE_URL=postgresql://...
+  envFromSecrets:
+    - name: litellm-secrets
+      keys:
+        - ANTHROPIC_API_KEY
+        - LITELLM_MASTER_KEY
+        - LITELLM_DATABASE_URL
+
+  serviceAccount:
+    create: true
+    name: ai-gateway
+    annotations:
+      # Workload Identity — populated from gcp.project via _helpers.tpl
+      # The GCP SA needs the Cloud SQL Client IAM role.
+      # Rendered value: ai-gateway@<gcp.project>.iam.gserviceaccount.com
+      iam.gke.io/gcp-service-account: ""  # set in values.prod.yaml or via --set
+
+  # Cloud SQL Auth Proxy sidecar — reads CLOUD_SQL_INSTANCE from configmap.yaml template
+  sidecars:
+    - name: cloud-sql-proxy
+      image: gcr.io/cloud-sql-connectors/cloud-sql-proxy:2
+      args:
+        - "--structured-logs"
+        - "--port=5432"
+        - "$(CLOUD_SQL_INSTANCE)"
+      env:
+        - name: CLOUD_SQL_INSTANCE
+          valueFrom:
+            configMapKeyRef:
+              name: ai-gateway-env   # rendered by helm/templates/configmap.yaml
+              key: CLOUD_SQL_INSTANCE
+      securityContext:
+        runAsNonRoot: true
+      resources:
+        requests:
+          cpu: "50m"
+          memory: "64Mi"
+        limits:
+          cpu: "200m"
+          memory: "128Mi"
+
+namespace: teachers-lounge
