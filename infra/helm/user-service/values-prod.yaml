@@ -1,0 +1,7 @@
+replicaCount: 2
+image:
+  tag: stable
+env:
+  DB_HOST: "postgres.prod.svc.cluster.local"
+  REDIS_HOST: "redis.prod.svc.cluster.local"
+  LOG_LEVEL: "warn"
