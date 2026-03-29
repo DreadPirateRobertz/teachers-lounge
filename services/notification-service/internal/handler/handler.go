@@ -51,7 +51,9 @@ func (h *Handler) Push(w http.ResponseWriter, r *http.Request) {
 
 	// TODO(Phase 8): send via FCM
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "queued"})
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "queued"}); err != nil {
+		h.logger.Error("encode push response", zap.Error(err))
+	}
 }
 
 // Email handles POST /notify/email.
@@ -75,7 +77,9 @@ func (h *Handler) Email(w http.ResponseWriter, r *http.Request) {
 
 	// TODO(Phase 8): send via SendGrid/Resend
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "queued"})
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "queued"}); err != nil {
+		h.logger.Error("encode email response", zap.Error(err))
+	}
 }
 
 // InApp handles POST /notify/in-app.
@@ -104,7 +108,9 @@ func (h *Handler) InApp(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
-	json.NewEncoder(w).Encode(n)
+	if err := json.NewEncoder(w).Encode(n); err != nil {
+		h.logger.Error("encode in-app response", zap.Error(err))
+	}
 }
 
 // ListUnread handles GET /notify/{userId}.
@@ -136,11 +142,15 @@ func (h *Handler) ListUnread(w http.ResponseWriter, r *http.Request) {
 	if notifications == nil {
 		notifications = []model.Notification{}
 	}
-	json.NewEncoder(w).Encode(notifications)
+	if err := json.NewEncoder(w).Encode(notifications); err != nil {
+		h.logger.Error("encode list-unread response", zap.Error(err))
+	}
 }
 
 // Health handles GET /health.
 func (h *Handler) Health(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]string{"status": "ok"})
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "ok"}); err != nil {
+		h.logger.Error("encode health response", zap.Error(err))
+	}
 }
