@@ -38,7 +38,7 @@ jobs:
         run: go test ./... -race -count=1 -timeout=60s
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
+        uses: golangci/golangci-lint-action@v9
         with:
           working-directory: services/user-service
           version: latest
