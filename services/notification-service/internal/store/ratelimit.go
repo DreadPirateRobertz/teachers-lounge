@@ -39,10 +39,12 @@ func (r *RateLimiter) Allow(ctx context.Context, userID string) (bool, error) {
 
 	if count == 1 {
 		// First notification in this window — set the expiry.
+		// This error is fatal: without a TTL the key never expires and the user
+		// would be permanently locked out once they hit the limit.
 		if err := r.rdb.Expire(ctx, key, pushWindow).Err(); err != nil {
-			// Non-fatal: counter is set, TTL will be missing but key will age out
-			// on next connection restart. Log via caller.
-			_ = err
+			// Roll back the increment so we don't leave a keyless counter behind.
+			r.rdb.Decr(ctx, key) //nolint:errcheck — best-effort rollback
+			return false, fmt.Errorf("ratelimit: set ttl %s: %w", key, err)
 		}
 	}
 
