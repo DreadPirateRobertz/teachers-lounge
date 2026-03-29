@@ -1,0 +1,42 @@
+## LiteLLM Proxy Configuration — Phase 1
+## Single provider: Anthropic
+
+model_list:
+  # Primary tutoring model — nuanced explanations
+  - model_name: tutor-primary
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+      max_tokens: 4096
+      temperature: 0.7
+
+  # Fast/cheap model — quiz generation, boss taunts
+  - model_name: tutor-fast
+    litellm_params:
+      model: anthropic/claude-haiku-4-5-20251001
+      api_key: os.environ/ANTHROPIC_API_KEY
+      max_tokens: 1024
+      temperature: 0.8
+
+litellm_settings:
+  # Request/response logging for debugging
+  success_callback: []
+  failure_callback: []
+  # Don't log to LiteLLM cloud
+  store_prompts_in_spend_logs: false
+  # Drop params not supported by provider
+  drop_params: true
+
+general_settings:
+  master_key: os.environ/LITELLM_MASTER_KEY
+  # Allow services within the cluster without a key
+  # (services use master_key or a per-service key)
+  database_url: os.environ/LITELLM_DATABASE_URL
+
+router_settings:
+  routing_strategy: simple-shuffle
+  num_retries: 3
+  retry_after: 1
+  timeout: 60
+  # Cache model list for 5 minutes
+  cache_responses: false

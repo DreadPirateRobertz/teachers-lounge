@@ -1,0 +1,25 @@
+.runtime/
+.claude/
+.logs/
+__pycache__/
+state.json
+CLAUDE.md
+CLAUDE.local.md
+
+# Python
+*.py[cod]
+.venv/
+*.egg-info/
+dist/
+.env
+.env.local
+
+# Secrets (never commit real values — use External Secrets Operator)
+**/k8s/secret.yaml
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
