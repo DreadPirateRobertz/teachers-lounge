@@ -2,12 +2,18 @@ import { NextRequest, NextResponse } from 'next/server'
 
 const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://user-service:8080'
 
+const ALLOWED_ACTIONS = new Set(['login', 'register', 'logout', 'refresh'])
+
 // Proxy auth requests to User Service, manage tl_token cookie
 export async function POST(
   req: NextRequest,
   { params }: { params: Promise<{ action: string }> }
 ) {
   const { action } = await params
+
+  if (!ALLOWED_ACTIONS.has(action)) {
+    return NextResponse.json({ error: 'Not found' }, { status: 404 })
+  }
 
   const upstream = await fetch(`${USER_SERVICE_URL}/auth/${action}`, {
     method: 'POST',

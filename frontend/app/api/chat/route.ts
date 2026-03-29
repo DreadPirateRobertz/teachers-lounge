@@ -26,9 +26,16 @@ export async function POST(req: NextRequest) {
 
   // Forward to Tutoring Service when available
   if (TUTORING_SERVICE_URL) {
+    const authHeader = req.headers.get('authorization') ||
+      (req.cookies.get('tl_token')?.value
+        ? `Bearer ${req.cookies.get('tl_token')!.value}`
+        : undefined)
     const upstream = await fetch(`${TUTORING_SERVICE_URL}/v1/chat`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        ...(authHeader ? { 'Authorization': authHeader } : {}),
+      },
       body: JSON.stringify({ messages }),
     })
     if (upstream.ok && upstream.body) {
