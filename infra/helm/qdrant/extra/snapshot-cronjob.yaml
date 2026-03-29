@@ -1,0 +1,121 @@
+# Qdrant Nightly GCS Snapshot CronJob
+#
+# Runs nightly at 02:00 UTC. Calls the Qdrant snapshot API for each collection,
+# then uploads the resulting files to GCS and cleans up local copies.
+#
+# Prerequisites:
+#   - snapshotPersistence.enabled=true in values.yaml (mounts /qdrant/snapshots)
+#   - ServiceAccount qdrant-snapshot-sa bound to a GCP SA with GCS write access
+#     (see docs/qdrant-design.md § 5 for Workload Identity setup)
+#   - Secret qdrant-api-key with key 'api-key'
+#
+# Apply: kubectl apply -f infra/helm/qdrant/extra/ -n qdrant
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: qdrant-snapshot-sa
+  namespace: qdrant
+  annotations:
+    # Workload Identity binding — replace with your GCP project
+    iam.gke.io/gcp-service-account: qdrant-snapshot-sa@tvtutor-prod.iam.gserviceaccount.com
+
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: qdrant-snapshot
+  namespace: qdrant
+spec:
+  schedule: "0 2 * * *"          # 02:00 UTC nightly
+  concurrencyPolicy: Forbid       # Skip if previous job still running
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      template:
+        spec:
+          serviceAccountName: qdrant-snapshot-sa
+          restartPolicy: OnFailure
+
+          containers:
+            - name: snapshot
+              image: google/cloud-sdk:alpine
+              env:
+                - name: QDRANT_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: qdrant-api-key
+                      key: api-key
+                - name: QDRANT_HOST
+                  value: "qdrant.qdrant.svc.cluster.local"
+                - name: GCS_BUCKET
+                  value: "tvtutor-backups"
+                - name: GCS_PREFIX
+                  value: "qdrant-snapshots"
+
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+
+                  DATE=$(date +%Y-%m-%d)
+                  COLLECTIONS="curriculum concepts insights"
+
+                  for COLLECTION in $COLLECTIONS; do
+                    echo "Snapshotting collection: $COLLECTION"
+
+                    # Trigger snapshot creation
+                    RESPONSE=$(curl -sf -X POST \
+                      "http://${QDRANT_HOST}:6333/collections/${COLLECTION}/snapshots" \
+                      -H "api-key: ${QDRANT_API_KEY}")
+
+                    SNAPSHOT_NAME=$(echo "$RESPONSE" | \
+                      grep -o '"name":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+                    if [ -z "$SNAPSHOT_NAME" ]; then
+                      echo "ERROR: no snapshot name returned for $COLLECTION"
+                      exit 1
+                    fi
+
+                    echo "Created snapshot: $SNAPSHOT_NAME"
+
+                    # Upload to GCS
+                    gsutil cp \
+                      "/qdrant/snapshots/${COLLECTION}/${SNAPSHOT_NAME}" \
+                      "gs://${GCS_BUCKET}/${GCS_PREFIX}/${DATE}/${SNAPSHOT_NAME}"
+
+                    # Delete local snapshot to free disk space
+                    curl -sf -X DELETE \
+                      "http://${QDRANT_HOST}:6333/collections/${COLLECTION}/snapshots/${SNAPSHOT_NAME}" \
+                      -H "api-key: ${QDRANT_API_KEY}"
+
+                    echo "Done: $COLLECTION → gs://${GCS_BUCKET}/${GCS_PREFIX}/${DATE}/${SNAPSHOT_NAME}"
+                  done
+
+                  echo "All snapshots complete."
+
+              volumeMounts:
+                - name: snapshots
+                  mountPath: /qdrant/snapshots
+                  readOnly: false
+
+              resources:
+                requests:
+                  cpu: "100m"
+                  memory: "128Mi"
+                limits:
+                  cpu: "500m"
+                  memory: "512Mi"
+
+          volumes:
+            - name: snapshots
+              persistentVolumeClaim:
+                # Must match the PVC name provisioned by snapshotPersistence
+                # in the Qdrant StatefulSet (typically qdrant-snapshots-qdrant-0/1/2)
+                # For the CronJob, mount the PVC from replica 0 (leader node).
+                # For multi-replica snapshot coverage, run one job per replica or
+                # use a ReadWriteMany storage class.
+                claimName: qdrant-snapshots-qdrant-0

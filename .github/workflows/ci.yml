@@ -1,0 +1,67 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+    branches: [main]
+
+jobs:
+  helm-lint:
+    name: Helm Lint — Qdrant
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: "3.17.0"
+
+      - name: Add Qdrant Helm repo
+        run: helm repo add qdrant https://qdrant.github.io/qdrant-helm && helm repo update
+
+      - name: Lint values.yaml against chart 1.17.1
+        run: |
+          helm pull qdrant/qdrant --version 1.17.1 --untar --untardir /tmp/qdrant-chart
+          helm lint /tmp/qdrant-chart/qdrant -f infra/helm/qdrant/values.yaml
+
+  python-ingestion:
+    name: Python — Ingestion Service
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/ingestion
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m pytest tests/ -v
+
+  python-search:
+    name: Python — Search Service
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/search
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run tests
+        run: python -m pytest tests/ -v

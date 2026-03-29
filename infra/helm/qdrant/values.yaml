@@ -1,16 +1,26 @@
 # Qdrant Helm Values — TeachersLounge Phase 2
 # Chart: qdrant/qdrant (https://qdrant.github.io/qdrant-helm)
-# Cluster: 3-replica distributed deployment on GKE general-pool
+# Pinned chart version: 1.17.1  (helm install qdrant/qdrant --version 1.17.1)
+# Cluster: 3-replica distributed deployment on GKE Standard general-pool
+#
+# REQUIRES GKE Standard — not Autopilot. Autopilot does not support custom
+# nodeSelector pool labels. Remove the nodeSelector block for Autopilot.
+#
+# Nightly GCS snapshot backup is handled by a separate CronJob manifest:
+#   infra/helm/qdrant/extra/snapshot-cronjob.yaml
+#   (not a native chart key — applied with: kubectl apply -f infra/helm/qdrant/extra/)
 #
 # Usage:
 #   helm repo add qdrant https://qdrant.github.io/qdrant-helm
-#   helm install qdrant qdrant/qdrant -n qdrant --create-namespace -f values.yaml
+#   helm install qdrant qdrant/qdrant --version 1.17.1 \
+#     -n qdrant --create-namespace -f values.yaml
+#   kubectl apply -f infra/helm/qdrant/extra/
 
 replicaCount: 3
 
 image:
   repository: qdrant/qdrant
-  tag: "v1.10.0"      # Pin to tested version; bump deliberately
+  tag: "v1.17.1"      # Pin to tested version; bump deliberately
   pullPolicy: IfNotPresent
 
 # ── Service ───────────────────────────────────────────────────────────────────
@@ -80,8 +90,10 @@ persistence:
   # Upgrade to premium-rwo (SSD) if IOPS become a bottleneck in Phase 3+.
   storageClassName: standard-rwo
 
-# ── Snapshots PVC (separate from storage) ─────────────────────────────────────
-# Snapshots are written here, then synced to GCS by the snapshot CronJob.
+# ── Snapshot PVC ──────────────────────────────────────────────────────────────
+# Native chart key — provisions a PVC at /qdrant/snapshots on each replica.
+# The nightly CronJob (extra/snapshot-cronjob.yaml) reads from this path
+# and uploads snapshots to GCS.
 
 snapshotPersistence:
   enabled: true
@@ -89,7 +101,6 @@ snapshotPersistence:
     - ReadWriteOnce
   size: 20Gi
   storageClassName: standard-rwo
-  mountPath: /qdrant/snapshots
 
 # ── Resources ─────────────────────────────────────────────────────────────────
 # Sized for GKE general-pool: e2-standard-4 (4 vCPU, 16GB RAM)
@@ -132,7 +143,9 @@ affinity:
             app.kubernetes.io/name: qdrant
         topologyKey: kubernetes.io/hostname
 
-# ── Node targeting ────────────────────────────────────────────────────────────
+# ── Node targeting (GKE Standard only) ───────────────────────────────────────
+# Remove this block for GKE Autopilot — Autopilot ignores custom node pool
+# labels and will reject pods with unresolvable nodeSelectors.
 
 nodeSelector:
   cloud.google.com/gke-nodepool: general-pool
@@ -157,24 +170,6 @@ readinessProbe:
   periodSeconds: 5
   failureThreshold: 3
 
-# ── Snapshot CronJob (GCS upload) ─────────────────────────────────────────────
-# Creates Qdrant snapshots nightly and uploads to GCS bucket tvtutor-backups.
-# Requires Workload Identity binding on snapshot-job SA → GCS write permissions.
-
-snapshotJob:
-  enabled: true
-  schedule: "0 2 * * *"    # 02:00 UTC nightly (low-traffic window)
-  image: google/cloud-sdk:alpine
-  serviceAccountName: qdrant-snapshot-sa
-  gcsBucket: tvtutor-backups
-  gcsPrefix: qdrant-snapshots
-  # Retention: keep 14 daily snapshots (older deleted by GCS lifecycle policy)
-  # Collections to snapshot: curriculum, concepts, insights
-  collections:
-    - curriculum
-    - concepts
-    - insights
-
 # ── Metrics (Prometheus) ──────────────────────────────────────────────────────
 
 metrics:
@@ -198,9 +193,9 @@ containerSecurityContext:
     drop:
       - ALL
 
-# ── Extra env ─────────────────────────────────────────────────────────────────
+# ── Environment variables ─────────────────────────────────────────────────────
 
-extraEnv:
+env:
   - name: QDRANT__SERVICE__API_KEY
     valueFrom:
       secretKeyRef:
