@@ -1,0 +1,208 @@
+# Qdrant Helm Values — TeachersLounge Phase 2
+# Chart: qdrant/qdrant (https://qdrant.github.io/qdrant-helm)
+# Cluster: 3-replica distributed deployment on GKE general-pool
+#
+# Usage:
+#   helm repo add qdrant https://qdrant.github.io/qdrant-helm
+#   helm install qdrant qdrant/qdrant -n qdrant --create-namespace -f values.yaml
+
+replicaCount: 3
+
+image:
+  repository: qdrant/qdrant
+  tag: "v1.10.0"      # Pin to tested version; bump deliberately
+  pullPolicy: IfNotPresent
+
+# ── Service ───────────────────────────────────────────────────────────────────
+
+service:
+  type: ClusterIP
+  ports:
+    # HTTP REST API (also used by Qdrant clients)
+    - name: http
+      port: 6333
+      targetPort: 6333
+      protocol: TCP
+    # gRPC API
+    - name: grpc
+      port: 6334
+      targetPort: 6334
+      protocol: TCP
+    # Internal cluster communication (distributed mode)
+    - name: p2p
+      port: 6335
+      targetPort: 6335
+      protocol: TCP
+
+# ── Qdrant Runtime Config ──────────────────────────────────────────────────
+
+config:
+  cluster:
+    enabled: true
+    p2p:
+      port: 6335
+    consensus:
+      # Raft-based consensus for distributed shard management
+      tick_period_ms: 100
+
+  # Storage paths inside container
+  storage:
+    storage_path: /qdrant/storage
+    snapshots_path: /qdrant/snapshots
+
+  # Collection defaults applied to all collections at creation
+  # (These are defaults; per-collection overrides in the init job below)
+  collection:
+    # HNSW index defaults — see collection-specific settings in docs/qdrant-design.md
+    hnsw_index:
+      m: 16
+      ef_construct: 100
+      full_scan_threshold: 10000
+      max_indexing_threads: 0     # 0 = auto (uses all available cores)
+      on_disk: false              # Keep HNSW graph in RAM for low latency
+
+  # WAL (Write-Ahead Log) — durability before index rebuild
+  wal:
+    wal_capacity_mb: 32
+    wal_segments_ahead: 0
+
+  # Logging
+  log_level: INFO
+
+# ── Persistence ───────────────────────────────────────────────────────────────
+
+persistence:
+  # One PVC per replica (StatefulSet)
+  accessModes:
+    - ReadWriteOnce
+  size: 50Gi
+  # GKE storage class — standard-rwo (balanced persistent disk) for cost efficiency.
+  # Upgrade to premium-rwo (SSD) if IOPS become a bottleneck in Phase 3+.
+  storageClassName: standard-rwo
+
+# ── Snapshots PVC (separate from storage) ─────────────────────────────────────
+# Snapshots are written here, then synced to GCS by the snapshot CronJob.
+
+snapshotPersistence:
+  enabled: true
+  accessModes:
+    - ReadWriteOnce
+  size: 20Gi
+  storageClassName: standard-rwo
+  mountPath: /qdrant/snapshots
+
+# ── Resources ─────────────────────────────────────────────────────────────────
+# Sized for GKE general-pool: e2-standard-4 (4 vCPU, 16GB RAM)
+# Qdrant is memory-bound; leave headroom for OS and other daemonsets (~2GB).
+# Phase 2 vector memory estimate: ~1-2GB per replica (see docs/qdrant-design.md).
+
+resources:
+  requests:
+    cpu: "1500m"
+    memory: "4Gi"
+  limits:
+    cpu: "3000m"
+    memory: "10Gi"
+    # Note: If a replica OOM-kills, it's almost always the HNSW index rebuild
+    # after restart. Consider bumping limit to 12Gi before Phase 3 scaling.
+
+# ── Topology Spread — distribute replicas across GKE nodes ────────────────────
+
+topologySpreadConstraints:
+  - maxSkew: 1
+    topologyKey: kubernetes.io/hostname
+    whenUnsatisfiable: DoNotSchedule
+    labelSelector:
+      matchLabels:
+        app.kubernetes.io/name: qdrant
+
+# ── Pod Disruption Budget ─────────────────────────────────────────────────────
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 2    # Always keep 2/3 replicas up (tolerates 1 node drain)
+
+# ── Anti-affinity ─────────────────────────────────────────────────────────────
+
+affinity:
+  podAntiAffinity:
+    requiredDuringSchedulingIgnoredDuringExecution:
+      - labelSelector:
+          matchLabels:
+            app.kubernetes.io/name: qdrant
+        topologyKey: kubernetes.io/hostname
+
+# ── Node targeting ────────────────────────────────────────────────────────────
+
+nodeSelector:
+  cloud.google.com/gke-nodepool: general-pool
+
+tolerations: []
+
+# ── Probes ────────────────────────────────────────────────────────────────────
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 6333
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  failureThreshold: 5
+
+readinessProbe:
+  httpGet:
+    path: /readyz
+    port: 6333
+  initialDelaySeconds: 15
+  periodSeconds: 5
+  failureThreshold: 3
+
+# ── Snapshot CronJob (GCS upload) ─────────────────────────────────────────────
+# Creates Qdrant snapshots nightly and uploads to GCS bucket tvtutor-backups.
+# Requires Workload Identity binding on snapshot-job SA → GCS write permissions.
+
+snapshotJob:
+  enabled: true
+  schedule: "0 2 * * *"    # 02:00 UTC nightly (low-traffic window)
+  image: google/cloud-sdk:alpine
+  serviceAccountName: qdrant-snapshot-sa
+  gcsBucket: tvtutor-backups
+  gcsPrefix: qdrant-snapshots
+  # Retention: keep 14 daily snapshots (older deleted by GCS lifecycle policy)
+  # Collections to snapshot: curriculum, concepts, insights
+  collections:
+    - curriculum
+    - concepts
+    - insights
+
+# ── Metrics (Prometheus) ──────────────────────────────────────────────────────
+
+metrics:
+  enabled: true
+  serviceMonitor:
+    enabled: true           # Requires prometheus-operator CRD
+    interval: 30s
+    path: /metrics
+
+# ── Security Context ──────────────────────────────────────────────────────────
+
+podSecurityContext:
+  fsGroup: 1000
+  runAsUser: 1000
+  runAsNonRoot: true
+
+containerSecurityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: false   # Qdrant writes to /qdrant/storage
+  capabilities:
+    drop:
+      - ALL
+
+# ── Extra env ─────────────────────────────────────────────────────────────────
+
+extraEnv:
+  - name: QDRANT__SERVICE__API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: qdrant-api-key
+        key: api-key
