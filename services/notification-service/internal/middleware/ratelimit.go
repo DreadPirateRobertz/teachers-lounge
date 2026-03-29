@@ -59,3 +59,9 @@ func userIDFromContext(ctx context.Context) string {
 	v, _ := ctx.Value(userIDKey).(string)
 	return v
 }
+
+// UserIDFromContext is the exported form for use outside the middleware package
+// (e.g. handlers that need to assert the caller's identity).
+func UserIDFromContext(ctx context.Context) string {
+	return userIDFromContext(ctx)
+}

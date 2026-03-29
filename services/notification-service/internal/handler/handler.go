@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
+	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/middleware"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/model"
 )
 
@@ -107,11 +108,20 @@ func (h *Handler) InApp(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListUnread handles GET /notify/{userId}.
-// Returns the list of unread in-app notifications for the user.
+// Returns the list of unread in-app notifications for the authenticated user.
+// The caller may only fetch their own notifications — path userId must match
+// the identity in the request context (set by auth middleware).
 func (h *Handler) ListUnread(w http.ResponseWriter, r *http.Request) {
 	userID := chi.URLParam(r, "userId")
 	if userID == "" {
 		http.Error(w, "userId path param required", http.StatusBadRequest)
+		return
+	}
+
+	// Identity assertion: the authenticated caller must match the requested userId.
+	callerID := middleware.UserIDFromContext(r.Context())
+	if callerID == "" || callerID != userID {
+		http.Error(w, "forbidden", http.StatusForbidden)
 		return
 	}
 

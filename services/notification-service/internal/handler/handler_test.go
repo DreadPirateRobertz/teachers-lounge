@@ -12,6 +12,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/handler"
+	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/middleware"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/model"
 )
 
@@ -131,8 +132,9 @@ func TestListUnread_ReturnsStoredNotifications(t *testing.T) {
 	h := handler.New(s, zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/notify/u1", nil)
-	// Inject chi URL param manually
 	req = withURLParam(req, "userId", "u1")
+	// Inject matching caller identity into context
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
 	rr := httptest.NewRecorder()
 
 	h.ListUnread(rr, req)
@@ -148,6 +150,41 @@ func TestListUnread_ReturnsStoredNotifications(t *testing.T) {
 	}
 	if result[0].ID != "n1" {
 		t.Fatalf("expected n1, got %s", result[0].ID)
+	}
+}
+
+func TestListUnread_ForbiddenWhenCallerMismatch(t *testing.T) {
+	s := &fakeStore{
+		notifications: []model.Notification{
+			{ID: "n1", UserID: "u1", Type: "xp", Message: "Level up!", Read: false},
+		},
+	}
+	h := handler.New(s, zap.NewNop())
+
+	req := httptest.NewRequest(http.MethodGet, "/notify/u1", nil)
+	req = withURLParam(req, "userId", "u1")
+	// Caller is u2 trying to read u1's notifications
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u2"))
+	rr := httptest.NewRecorder()
+
+	h.ListUnread(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", rr.Code)
+	}
+}
+
+func TestListUnread_ForbiddenWhenNoCallerInContext(t *testing.T) {
+	h := newHandler()
+	req := httptest.NewRequest(http.MethodGet, "/notify/u1", nil)
+	req = withURLParam(req, "userId", "u1")
+	// No user ID in context
+	rr := httptest.NewRecorder()
+
+	h.ListUnread(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403 when no caller identity, got %d", rr.Code)
 	}
 }
 
