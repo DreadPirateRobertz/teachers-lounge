@@ -63,6 +63,29 @@ body {
   }
 }
 
+/* Reusable auth/form component classes */
+@layer components {
+  .neon-input {
+    @apply w-full bg-bg-input border border-border-mid rounded-lg px-3.5 py-2.5 text-sm text-text-base placeholder:text-text-dim focus:outline-none focus:border-neon-blue/60 transition-all;
+    box-shadow: 0 0 0 0 transparent;
+  }
+  .neon-input:focus {
+    box-shadow: 0 0 0 2px #00aaff22;
+  }
+
+  .neon-btn-primary {
+    @apply w-full py-2.5 rounded-lg text-sm font-semibold text-bg-deep bg-neon-blue hover:brightness-110 disabled:opacity-40 disabled:cursor-not-allowed transition-all;
+    box-shadow: 0 0 12px #00aaff44;
+  }
+  .neon-btn-primary:hover:not(:disabled) {
+    box-shadow: 0 0 20px #00aaff66;
+  }
+
+  .neon-btn-secondary {
+    @apply w-full py-2.5 rounded-lg text-sm font-medium text-neon-blue border border-neon-blue/40 bg-transparent hover:bg-neon-blue/10 disabled:opacity-40 disabled:cursor-not-allowed transition-all;
+  }
+}
+
 /* Animated typing cursor */
 @keyframes blink {
   0%, 100% { opacity: 1; }
