@@ -20,6 +20,9 @@ class Settings(BaseSettings):
     jwt_secret: str = "REPLACE_ME"
     jwt_algorithm: str = "HS256"
 
+    # CORS — comma-separated list of allowed origins
+    allowed_origins: str = "http://localhost:3000"
+
     # Service
     service_host: str = "0.0.0.0"
     service_port: int = 8080
