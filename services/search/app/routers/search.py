@@ -1,13 +1,13 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query
 
 from app.config import settings
 from app.models import SearchResponse
 from app.services.embedder import embed_query
 from app.services.hybrid import combine_dense_sparse
-from app.services.qdrant import dense_search
+from app.services.qdrant import dense_search, sparse_search
 from app.services.reranker import rerank
 
 router = APIRouter(prefix="/v1", tags=["search"])
@@ -29,20 +29,12 @@ async def search(
     """
     Hybrid search over the curriculum collection for a given course.
 
-    Currently performs dense vector search only (random stub embeddings).
-    Phase 2 full implementation: real embeddings + BM25 sparse + RRF fusion + re-ranking.
+    Runs dense (semantic) and sparse (BM25) searches in parallel, then fuses
+    them with Reciprocal Rank Fusion (RRF) before returning ranked results.
     """
-    query_vector = await embed_query(q)
+    query_vector, dense_results, sparse_results = await _run_search(q, course_id, limit)
 
-    dense_results = await dense_search(
-        query_vector=query_vector,
-        course_id=course_id,
-        limit=limit,
-    )
-
-    # Sparse search not wired yet — pass empty list
-    fused = combine_dense_sparse(dense_results, sparse_results=[])
-
+    fused = combine_dense_sparse(dense_results, sparse_results)
     ranked = rerank(q, fused)
 
     return SearchResponse(
@@ -50,5 +42,26 @@ async def search(
         course_id=course_id,
         results=ranked[:limit],
         total=len(ranked),
-        search_mode="dense",
+        search_mode="hybrid",
     )
+
+
+async def _run_search(
+    q: str,
+    course_id: uuid.UUID,
+    limit: int,
+) -> tuple[list[float], list, list]:
+    """Run embedding, dense search, and sparse search concurrently."""
+    import asyncio
+
+    query_vector = await embed_query(q)
+
+    dense_task = asyncio.create_task(
+        dense_search(query_vector=query_vector, course_id=course_id, limit=limit)
+    )
+    sparse_task = asyncio.create_task(
+        sparse_search(query=q, course_id=course_id, limit=limit)
+    )
+
+    dense_results, sparse_results = await asyncio.gather(dense_task, sparse_task)
+    return query_vector, dense_results, sparse_results
