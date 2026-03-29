@@ -1,4 +1,5 @@
 import uuid
+from pathlib import Path
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
@@ -61,10 +62,11 @@ async def upload_file(
 
     job_id = uuid.uuid4()
     material_id = uuid.uuid4()
-    filename = file.filename or f"upload-{job_id}"
+    # Strip directory components — prevents path traversal in GCS blob names
+    filename = Path(file.filename or f"upload-{job_id}").name or f"upload-{job_id}"
 
-    # Store in GCS
-    gcs_path = gcs.upload_raw_file(
+    # Store in GCS (runs in thread pool — does not block the event loop)
+    gcs_path = await gcs.upload_raw_file(
         data=data,
         user_id=user_id,
         course_id=course_id,
@@ -83,8 +85,8 @@ async def upload_file(
         file_type=ACCEPTED_MIME_TYPES[content_type],
     )
 
-    # Publish to Pub/Sub
-    pubsub.publish_ingest_job(
+    # Publish to Pub/Sub (runs in thread pool — does not block the event loop)
+    await pubsub.publish_ingest_job(
         IngestJobMessage(
             job_id=job_id,
             user_id=user_id,

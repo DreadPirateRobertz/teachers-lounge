@@ -41,12 +41,13 @@ async def create_material(
     await pool.execute(
         """
         INSERT INTO materials
-            (id, course_id, filename, gcs_path, file_type, processing_status, chunk_count, created_at)
+            (id, course_id, user_id, filename, gcs_path, file_type, processing_status, chunk_count, created_at)
         VALUES
-            ($1, $2, $3, $4, $5, $6, 0, NOW())
+            ($1, $2, $3, $4, $5, $6, $7, 0, NOW())
         """,
         material_id,
         course_id,
+        user_id,
         filename,
         gcs_path,
         file_type,

@@ -11,14 +11,19 @@ from app.processors import route_to_processor
 logger = logging.getLogger(__name__)
 
 
-def publish_ingest_job(message: IngestJobMessage) -> None:
-    """Publish a job message to the ingest-jobs Pub/Sub topic."""
+def _publish_ingest_job_sync(message: IngestJobMessage) -> None:
+    """Synchronous Pub/Sub publish. Called via run_in_executor — never call directly from async code."""
     publisher = pubsub_v1.PublisherClient()
     topic_path = publisher.topic_path(settings.gcp_project, settings.pubsub_ingest_topic)
     data = message.model_dump_json().encode()
-    future = publisher.publish(topic_path, data)
-    msg_id = future.result()
+    msg_id = publisher.publish(topic_path, data).result()
     logger.info("published ingest job %s → msg_id=%s", message.job_id, msg_id)
+
+
+async def publish_ingest_job(message: IngestJobMessage) -> None:
+    """Publish to Pub/Sub without blocking the event loop."""
+    loop = asyncio.get_running_loop()
+    await loop.run_in_executor(None, _publish_ingest_job_sync, message)
 
 
 def start_subscriber() -> None:
