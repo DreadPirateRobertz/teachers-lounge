@@ -1,0 +1,5 @@
+replicaCount: 2
+image:
+  tag: main-stable
+env:
+  LITELLM_LOG: "WARNING"

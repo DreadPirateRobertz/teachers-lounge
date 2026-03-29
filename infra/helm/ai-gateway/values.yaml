@@ -1,0 +1,41 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/berriai/litellm
+  tag: main-latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 4000
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+env:
+  PORT: "4000"
+  LITELLM_LOG: "INFO"
+  # Telemetry off — no usage data sent to LiteLLM cloud
+  LITELLM_TELEMETRY: "False"
+
+# LiteLLM config.yaml is mounted from a ConfigMap (see configmap.yaml template)
+# API keys injected from ai-gateway-secrets
+
+livenessProbe:
+  httpGet:
+    path: /health/liveliness
+    port: 4000
+  initialDelaySeconds: 20
+  periodSeconds: 30
+
+readinessProbe:
+  httpGet:
+    path: /health/readiness
+    port: 4000
+  initialDelaySeconds: 10
+  periodSeconds: 15

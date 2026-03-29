@@ -1,0 +1,6 @@
+## Prod Postgres Application exists in ArgoCD to satisfy the app-of-apps pattern,
+## but it should point to a no-op chart or be disabled.
+## Production database = Cloud SQL (Postgres 16) — managed via Terraform.
+## This values file is a placeholder only.
+image:
+  tag: "16-alpine"
