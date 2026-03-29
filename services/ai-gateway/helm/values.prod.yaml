@@ -1,5 +1,11 @@
 ## Production overrides — applied on top of values.yaml
-## Usage: helm upgrade ai-gateway ./helm -f values.yaml -f values.prod.yaml -n teachers-lounge
+## Usage:
+##   helm upgrade ai-gateway ./helm \
+##     -f helm/values.yaml \
+##     -f helm/values.prod.yaml \
+##     --set gcp.project=teachers-lounge-prod \
+##     --set gcp.region=us-central1 \
+##     -n teachers-lounge
 
 litellm:
   replicaCount: 2    # HPA min; autoscaling handles the rest
@@ -8,12 +14,17 @@ litellm:
     # Pin to a specific digest in production — never use :latest in prod
     # tag: "main-<git-sha>"
 
+  serviceAccount:
+    annotations:
+      # Workload Identity — set gcp.project first, then this resolves correctly.
+      # Rendered via: ai-gateway@<gcp.project>.iam.gserviceaccount.com
+      # This SA needs: roles/cloudsql.client
+      iam.gke.io/gcp-service-account: ""  # overridden at deploy time via --set
+
   config:
     litellm_settings:
-      # In production: full logging pipeline
       success_callback: ["langfuse", "prometheus"]
       failure_callback: ["langfuse", "prometheus"]
-      # Emit OpenTelemetry spans to the cluster's OTel collector
       service_callback: ["otel"]
 
     general_settings:
@@ -21,7 +32,6 @@ litellm:
         default:
           tpm: 100000
           rpm: 60
-        # Premium subscribers get higher limits (set via LiteLLM API on sub creation)
         premium:
           tpm: 500000
           rpm: 300
