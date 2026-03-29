@@ -1,3 +1,11 @@
+## ============================================================
+## REFERENCE ONLY — do NOT apply this file directly.
+## Use the Helm chart (helm/) for all deployments.
+##
+## This file documents the raw K8s object structure for review.
+## It contains REPLACE_WITH_* tokens that are intentionally not
+## filled in — the Helm chart renders real values from values.yaml.
+## ============================================================
 apiVersion: apps/v1
 kind: Deployment
 metadata:

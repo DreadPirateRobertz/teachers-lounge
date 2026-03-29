@@ -22,9 +22,3 @@ Cloud SQL instance connection string: project:region:instance
 {{ .Values.gcp.project }}:{{ .Values.gcp.region }}:{{ .Values.gcp.cloudSqlInstance }}
 {{- end }}
 
-{{/*
-GCP service account email for Workload Identity
-*/}}
-{{- define "ai-gateway.gcpServiceAccount" -}}
-ai-gateway@{{ .Values.gcp.project }}.iam.gserviceaccount.com
-{{- end }}
