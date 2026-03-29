@@ -1,0 +1,43 @@
+## Dev override — hot reload for all application services.
+## Usage: docker compose --profile dev up
+## (or: docker compose -f docker-compose.yml -f docker-compose.dev.yml up)
+##
+## Infrastructure services (postgres, redis) run identically to the base file.
+## Application services are replaced with dev builds that mount source code
+## and restart on file changes.
+
+services:
+
+  frontend:
+    build:
+      context: ./services/frontend
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./services/frontend:/app
+      - /app/node_modules      # preserve node_modules from image
+      - /app/.next             # preserve build cache from image
+    environment:
+      NODE_ENV: development
+      WATCHPACK_POLLING: "true"   # needed for some Docker/macOS setups
+
+  user-service:
+    build:
+      context: ./services/user-service
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./services/user-service:/app
+    environment:
+      LOG_LEVEL: debug
+
+  tutoring-service:
+    build:
+      context: ./services/tutoring-service
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./services/tutoring-service:/app
+    environment:
+      LOG_LEVEL: debug
+
+  ai-gateway:
+    environment:
+      LITELLM_LOG: DEBUG
