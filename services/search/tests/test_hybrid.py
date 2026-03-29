@@ -1,6 +1,7 @@
 """Tests for hybrid combiner, re-ranker stubs, and embedding stub."""
 import math
 import uuid
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -21,21 +22,37 @@ def _chunk(score: float) -> ChunkResult:
 
 
 class TestEmbedder:
-    def test_returns_correct_dimension(self):
-        vec = embed_query("what is entropy?")
+    @pytest.mark.asyncio
+    async def test_returns_correct_dimension(self):
+        vec = await embed_query("what is entropy?")
         assert len(vec) == 1024
 
-    def test_returns_unit_vector(self):
-        vec = embed_query("thermodynamics")
+    @pytest.mark.asyncio
+    async def test_returns_unit_vector(self):
+        vec = await embed_query("thermodynamics")
         norm = math.sqrt(sum(x * x for x in vec))
         assert abs(norm - 1.0) < 1e-6
 
-    def test_different_queries_different_vectors(self):
-        # Random stub — high probability of different results
-        v1 = embed_query("entropy")
-        v2 = embed_query("entropy")
-        # Can't assert equality since it's random, but both must be unit vectors
-        assert len(v1) == len(v2) == 1024
+    @pytest.mark.asyncio
+    async def test_embedding_vector_is_passed_to_qdrant(self):
+        """The vector returned by embed_query must be forwarded to dense_search unchanged."""
+        fixed_vector = [0.1] * 1024
+        course_id = uuid.uuid4()
+
+        with (
+            patch("app.services.embedder.embed_query", new_callable=AsyncMock, return_value=fixed_vector),
+            patch("app.routers.search.dense_search", new_callable=AsyncMock, return_value=[]) as mock_search,
+        ):
+            from fastapi.testclient import TestClient
+            from app.main import app
+
+            with TestClient(app) as client:
+                client.get(f"/v1/search?q=entropy&course_id={course_id}")
+
+            _, kwargs = mock_search.call_args
+            assert kwargs["query_vector"] == fixed_vector, (
+                "The vector from embed_query must be passed verbatim to dense_search"
+            )
 
 
 class TestHybridCombiner:

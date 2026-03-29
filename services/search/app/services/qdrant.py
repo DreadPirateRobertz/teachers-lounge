@@ -12,13 +12,19 @@ logger = logging.getLogger(__name__)
 _client: AsyncQdrantClient | None = None
 
 
-def get_client() -> AsyncQdrantClient:
+def init_client() -> None:
+    """Eagerly initialize the Qdrant client. Call from FastAPI lifespan startup."""
     global _client
+    kwargs: dict = dict(host=settings.qdrant_host, port=settings.qdrant_port)
+    if settings.qdrant_api_key is not None:
+        kwargs["api_key"] = settings.qdrant_api_key
+    _client = AsyncQdrantClient(**kwargs)
+    logger.info("qdrant client initialized → %s:%d", settings.qdrant_host, settings.qdrant_port)
+
+
+def get_client() -> AsyncQdrantClient:
     if _client is None:
-        kwargs = dict(host=settings.qdrant_host, port=settings.qdrant_port)
-        if settings.qdrant_api_key:
-            kwargs["api_key"] = settings.qdrant_api_key
-        _client = AsyncQdrantClient(**kwargs)
+        raise RuntimeError("Qdrant client not initialized — call init_client() at startup")
     return _client
 
 

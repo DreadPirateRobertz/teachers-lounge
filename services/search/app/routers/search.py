@@ -16,6 +16,10 @@ router = APIRouter(prefix="/v1", tags=["search"])
 @router.get("/search", response_model=SearchResponse)
 async def search(
     q: Annotated[str, Query(min_length=1, max_length=1000, description="Search query")],
+    # FERPA: course_id scopes results to a single student's course. This endpoint
+    # currently has no auth — any caller can query any course_id. Auth middleware
+    # must enforce that the requesting user owns course_id before external exposure.
+    # Tracked in tl-sui (auth integration milestone).
     course_id: Annotated[uuid.UUID, Query(description="Course to search within")],
     limit: Annotated[
         int,
@@ -28,7 +32,7 @@ async def search(
     Currently performs dense vector search only (random stub embeddings).
     Phase 2 full implementation: real embeddings + BM25 sparse + RRF fusion + re-ranking.
     """
-    query_vector = embed_query(q)
+    query_vector = await embed_query(q)
 
     dense_results = await dense_search(
         query_vector=query_vector,

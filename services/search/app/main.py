@@ -4,13 +4,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 
 from app.routers import search
-from app.services.qdrant import close_client
+from app.services.qdrant import close_client, init_client
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    init_client()
     yield
     await close_client()
 
