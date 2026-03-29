@@ -4,6 +4,17 @@ Stateless chat endpoint — accepts a messages array and streams a plain-text re
 Used by the frontend when it manages its own conversation history (e.g., Neon Arcade UI).
 No session, no DB writes — pure pass-through to the AI Gateway.
 
+Why text/plain and not SSE:
+    The session-based endpoint (/v1/sessions/{id}/messages) uses SSE because it
+    needs structured events: "delta" carries the token, "done" signals completion,
+    and "error" carries a typed error payload.  The frontend controls the message
+    loop there via event.type.
+
+    This endpoint is for the Neon Arcade UI which holds its own history and just
+    wants raw token bytes to append to a streaming div — no envelope parsing needed.
+    text/plain chunked transfer is simpler to consume with fetch+ReadableStream and
+    avoids SSE parsing overhead on the client side.
+
 Request:
     POST /v1/chat
     Authorization: Bearer <token>
@@ -30,6 +41,7 @@ from openai import APIConnectionError, APIStatusError, APITimeoutError
 from pydantic import BaseModel
 
 from .auth import JWTClaims, require_auth
+from .chat import PROFESSOR_NOVA_SYSTEM_PROMPT
 from .config import settings
 from .gateway import get_gateway_client
 
@@ -63,7 +75,6 @@ async def simple_chat(
     # Prepend system prompt if caller didn't include one
     messages = [m.model_dump() for m in body.messages]
     if not messages or messages[0]["role"] != "system":
-        from .chat import PROFESSOR_NOVA_SYSTEM_PROMPT
         messages = [{"role": "system", "content": PROFESSOR_NOVA_SYSTEM_PROMPT}] + messages
 
     async def stream_generator():

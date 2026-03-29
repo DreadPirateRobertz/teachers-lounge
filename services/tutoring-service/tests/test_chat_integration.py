@@ -1,14 +1,12 @@
 """
-Integration test: POST /v1/sessions/{id}/messages returns SSE stream.
+Integration tests: chat endpoints return correct streaming responses.
 
 Uses httpx AsyncClient against the FastAPI app with a mocked AI Gateway.
 No real gateway or database required.
 
-The test verifies:
-  1. A valid JWT is accepted
-  2. The SSE stream contains at least one "delta" event
-  3. The stream ends with a "done" event
-  4. No "error" events are emitted on the happy path
+Covers:
+  POST /v1/sessions/{id}/messages — SSE stream (delta + done events)
+  POST /v1/chat                   — plain-text stream, happy path + 401
 """
 import json
 import time
@@ -133,3 +131,43 @@ async def test_sse_stream_happy_path(client, auth_headers, user_id, session_id):
 
     delta_content = "".join(e["content"] for e in events if e["type"] == "delta")
     assert delta_content == "Hello, student!"
+
+
+# ── POST /v1/chat (stateless plain-text stream) ───────────────────────────────
+
+@pytest.mark.asyncio
+async def test_simple_chat_happy_path(client, auth_headers):
+    """
+    POST /v1/chat with valid JWT + messages array → plain-text chunked stream.
+    """
+    async def _fake_stream():
+        for token in ["Photosynthesis", " is", " the", " process"]:
+            yield _make_chunk(token)
+        yield _make_chunk(None)
+
+    fake_completions = AsyncMock()
+    fake_completions.create = AsyncMock(return_value=_fake_stream())
+
+    fake_openai = MagicMock()
+    fake_openai.chat.completions = fake_completions
+
+    with patch("app.chat_simple.get_gateway_client", return_value=fake_openai):
+        resp = await client.post(
+            "/v1/chat",
+            json={"messages": [{"role": "user", "content": "What is photosynthesis?"}]},
+            headers=auth_headers,
+        )
+
+    assert resp.status_code == 200
+    assert "text/plain" in resp.headers["content-type"]
+    assert resp.text == "Photosynthesis is the process"
+
+
+@pytest.mark.asyncio
+async def test_simple_chat_requires_auth(client):
+    """POST /v1/chat without a Bearer token → 403 (HTTPBearer auto_error=True)."""
+    resp = await client.post(
+        "/v1/chat",
+        json={"messages": [{"role": "user", "content": "Hello"}]},
+    )
+    assert resp.status_code == 403

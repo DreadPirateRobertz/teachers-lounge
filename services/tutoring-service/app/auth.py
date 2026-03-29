@@ -58,7 +58,10 @@ def require_auth(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # User Service sets "uid" custom claim AND RegisteredClaims.sub to the user UUID.
+    # User Service sets "uid" custom claim AND mirrors it in RegisteredClaims.sub.
+    # We prefer "uid" and fall back to "sub" for forward compatibility while the
+    # User Service still emits both.  Once only "uid" is guaranteed, the "sub"
+    # fallback can be removed.  Tracked in tl-uid (User Service claim cleanup).
     uid = payload.get("uid") or payload.get("sub")
     if not uid:
         raise HTTPException(
