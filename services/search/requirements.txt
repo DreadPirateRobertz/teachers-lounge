@@ -2,7 +2,7 @@ fastapi==0.115.0
 uvicorn[standard]==0.30.6
 pydantic==2.9.2
 pydantic-settings==2.5.2
-qdrant-client==1.11.3
+qdrant-client==1.17.1
 
 # Test dependencies
 pytest==8.3.3
