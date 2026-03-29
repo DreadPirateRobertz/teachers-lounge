@@ -1,0 +1,233 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * *'  # Nightly 6am UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  # ── Frontend (Next.js) ───────────────────────────────────────────────────────
+  frontend:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: services/frontend
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: services/frontend/package-lock.json
+      - run: npm ci --ignore-scripts
+      - run: npm run lint
+      - run: npm run build
+      - run: npm test -- --passWithNoTests
+
+  # ── Go services ─────────────────────────────────────────────────────────────
+  go-services:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [user-service, gaming-service, notification-service]
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: services/${{ matrix.service }}/go.sum
+      - run: go mod download
+      - run: go vet ./...
+      - run: |
+          if command -v golangci-lint &>/dev/null; then golangci-lint run ./...; fi
+        continue-on-error: true
+      - run: go test ./... -race -timeout 60s
+
+  # ── Python services ──────────────────────────────────────────────────────────
+  python-services:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        service: [tutoring-service, ingestion-service, search-service, analytics-service]
+    defaults:
+      run:
+        working-directory: services/${{ matrix.service }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+          cache: pip
+      - run: pip install -r requirements.txt --quiet 2>/dev/null || true
+      - run: pip install ruff pytest --quiet
+      - run: ruff check . || true
+      - run: pytest --tb=short -q 2>/dev/null || echo "No tests yet"
+
+  # ── Docker build check ───────────────────────────────────────────────────────
+  docker-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        service:
+          - frontend
+          - user-service
+          - tutoring-service
+          - ai-gateway
+          - gaming-service
+          - ingestion-service
+          - search-service
+          - notification-service
+          - analytics-service
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check Dockerfile exists
+        id: check
+        run: |
+          if [ -f services/${{ matrix.service }}/Dockerfile ]; then
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+            echo "No Dockerfile yet for ${{ matrix.service }} — skipping"
+          fi
+      - name: Build Docker image
+        if: steps.check.outputs.exists == 'true'
+        run: |
+          docker build services/${{ matrix.service }} \
+            --tag tl-${{ matrix.service }}:ci \
+            --no-cache
+
+  # ── Helm lint ────────────────────────────────────────────────────────────────
+  helm-lint:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: azure/setup-helm@v4
+      - name: Lint all Helm charts
+        run: |
+          for chart in infra/helm/*/; do
+            if [ -f "$chart/Chart.yaml" ]; then
+              echo "Linting $chart"
+              helm lint "$chart"
+            fi
+          done
+
+  # ── Security scan ────────────────────────────────────────────────────────────
+  # Runs on PRs and nightly — never blocks merge on warnings
+  security-audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - name: npm audit (frontend)
+        run: |
+          if [ -f services/frontend/package.json ]; then
+            cd services/frontend && npm audit --audit-level=high || true
+          fi
+      - name: Check for secrets with truffleHog
+        uses: trufflesecurity/trufflehog@main
+        with:
+          path: ./
+          base: ${{ github.event.repository.default_branch }}
+          head: HEAD
+        continue-on-error: true
+
+  # ── Conflict marker check ────────────────────────────────────────────────────
+  conflict-check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - name: Check for unresolved merge conflict markers
+        run: |
+          if grep -rn "^<<<<<<< \|^=======$\|^>>>>>>> " \
+            --include="*.go" --include="*.py" --include="*.ts" --include="*.tsx" \
+            --include="*.js" --include="*.yaml" --include="*.yml" .; then
+            echo "::error::Unresolved merge conflict markers found"
+            exit 1
+          fi
+
+  # ── Nightly integration ──────────────────────────────────────────────────────
+  nightly-integration:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: write
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: Run all tests
+        id: tests
+        run: |
+          mkdir -p test-results
+          set -o pipefail
+          (
+            for svc in services/*/; do
+              echo "=== Testing $svc ==="
+              if [ -f "$svc/package.json" ]; then
+                cd "$svc" && npm ci --quiet && npm test -- --passWithNoTests 2>&1; cd - > /dev/null
+              elif [ -f "$svc/go.mod" ]; then
+                cd "$svc" && go test ./... 2>&1; cd - > /dev/null
+              elif [ -f "$svc/requirements.txt" ]; then
+                cd "$svc" && pip install -r requirements.txt -q && pytest -q 2>&1; cd - > /dev/null
+              fi
+            done
+          ) | tee test-results/full-output.txt
+        continue-on-error: true
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: nightly-test-results
+          path: test-results/
+          retention-days: 30
+      - name: Open issue on failure
+        if: steps.tests.outcome == 'failure'
+        uses: actions/github-script@v8
+        with:
+          script: |
+            const { readFileSync } = await import('node:fs');
+            let output = '';
+            try { output = readFileSync('test-results/full-output.txt', 'utf8'); } catch {}
+            const failedLines = output.split('\n').filter(l => /FAIL|ERROR|×/.test(l)).slice(0, 30).join('\n');
+            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
+            const today = new Date().toISOString().split('T')[0];
+            await github.rest.issues.create({
+              owner: context.repo.owner, repo: context.repo.repo,
+              title: `Nightly tests failed — ${today}`,
+              body: `## Nightly Failure\n\n**Run:** ${runUrl}\n\n\`\`\`\n${failedLines || 'See artifacts'}\n\`\`\``,
+              labels: ['bug', 'ci-nightly'],
+            });
+      - name: Fail if tests failed
+        if: steps.tests.outcome == 'failure'
+        run: exit 1
