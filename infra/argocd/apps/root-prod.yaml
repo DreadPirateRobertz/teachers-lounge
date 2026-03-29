@@ -1,0 +1,27 @@
+## Root Application — prod environment (app-of-apps pattern)
+## Watches infra/argocd/apps/prod/ in the repo.
+## Prod uses the same automated sync but selfHeal is intentionally kept on —
+## any drift from git is corrected. Manual changes to prod MUST go through git.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-prod
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teachers-lounge/teachers-lounge.git
+    targetRevision: main
+    path: infra/argocd/apps/prod
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

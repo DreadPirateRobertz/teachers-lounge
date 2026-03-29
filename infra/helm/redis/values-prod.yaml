@@ -1,0 +1,3 @@
+## Prod Redis = Google Memorystore — this chart is a no-op placeholder for prod.
+image:
+  tag: "7.2-alpine"

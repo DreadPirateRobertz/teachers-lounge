@@ -1,0 +1,6 @@
+apiVersion: v2
+name: postgres
+description: PostgreSQL for TeachersLounge (dev/CI only — prod uses Cloud SQL)
+type: application
+version: 0.1.0
+appVersion: "16.2"
