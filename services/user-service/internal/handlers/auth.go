@@ -19,14 +19,14 @@ import (
 )
 
 type AuthHandler struct {
-	store      *store.Store
-	cache      *cache.Client
+	store      store.Storer
+	cache      cache.Cacher
 	jwt        *auth.JWTManager
 	billing    *billing.Client
 	cfg        *config.Config
 }
 
-func NewAuthHandler(s *store.Store, c *cache.Client, j *auth.JWTManager, b *billing.Client, cfg *config.Config) *AuthHandler {
+func NewAuthHandler(s store.Storer, c cache.Cacher, j *auth.JWTManager, b *billing.Client, cfg *config.Config) *AuthHandler {
 	return &AuthHandler{store: s, cache: c, jwt: j, billing: b, cfg: cfg}
 }
 
@@ -108,11 +108,10 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 	_ = h.store.InitLearningProfile(r.Context(), user.ID)
 	_ = h.store.InitGamingProfile(r.Context(), user.ID)
 
-	// Create Stripe customer + start trial
-	stripeCustomerID, err := h.billing.CreateCustomer(r.Context(), user, h.cfg.TrialDays)
-	if err != nil {
-		// Non-fatal: log and proceed — can retry async
-		stripeCustomerID = ""
+	// Create Stripe customer + start trial (non-fatal — can be retried async)
+	var stripeCustomerID string
+	if h.billing != nil {
+		stripeCustomerID, _ = h.billing.CreateCustomer(r.Context(), user, h.cfg.TrialDays)
 	}
 
 	trialEnd := time.Now().AddDate(0, 0, h.cfg.TrialDays)

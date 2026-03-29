@@ -1,0 +1,94 @@
+name: user-service
+
+on:
+  push:
+    paths:
+      - 'services/user-service/**'
+      - 'infra/db/migrations/**'
+      - '.github/workflows/user-service.yml'
+  pull_request:
+    paths:
+      - 'services/user-service/**'
+      - 'infra/db/migrations/**'
+      - '.github/workflows/user-service.yml'
+
+jobs:
+  test:
+    name: Test & Lint
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: services/user-service
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: services/user-service/go.mod
+
+      - name: Download dependencies
+        run: go mod download
+
+      - name: Build
+        run: go build ./...
+
+      - name: Test (with race detector)
+        run: go test ./... -race -count=1 -timeout=60s
+
+      - name: golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          working-directory: services/user-service
+          version: latest
+
+  migrate:
+    name: Validate Migrations
+    runs-on: ubuntu-latest
+    needs: test
+
+    services:
+      postgres:
+        image: pgvector/pgvector:pg15
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: services/user-service/go.mod
+
+      - name: Download dependencies
+        working-directory: services/user-service
+        run: go mod download
+
+      - name: Run migrations (up)
+        working-directory: services/user-service
+        env:
+          DATABASE_URL: "postgres://testuser:testpass@localhost:5432/testdb?sslmode=disable"
+        run: make migrate-up MIGRATIONS_PATH=../../infra/db/migrations
+
+      - name: Verify migration version
+        working-directory: services/user-service
+        env:
+          DATABASE_URL: "postgres://testuser:testpass@localhost:5432/testdb?sslmode=disable"
+        run: make migrate-version MIGRATIONS_PATH=../../infra/db/migrations
+
+      - name: Smoke-test rollback (down 1)
+        working-directory: services/user-service
+        env:
+          DATABASE_URL: "postgres://testuser:testpass@localhost:5432/testdb?sslmode=disable"
+        run: make migrate-down MIGRATIONS_PATH=../../infra/db/migrations
