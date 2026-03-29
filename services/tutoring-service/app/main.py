@@ -13,6 +13,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .chat import router as chat_router
+from .chat_simple import router as chat_simple_router
 from .config import settings
 from .database import Base, engine
 from .sessions import router as sessions_router
@@ -33,6 +34,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.include_router(chat_simple_router)   # POST /v1/chat — consumed by frontend
 app.include_router(sessions_router, prefix="/v1")
 app.include_router(chat_router, prefix="/v1")
 
