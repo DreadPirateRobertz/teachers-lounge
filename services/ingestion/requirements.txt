@@ -6,6 +6,16 @@ google-cloud-storage==2.18.2
 google-cloud-pubsub==2.23.1
 asyncpg==0.29.0
 
+# PDF processing
+unstructured[pdf]==0.16.11
+pdfminer.six==20231228
+
+# Embeddings
+openai==1.58.1
+
+# Vector store
+qdrant-client==1.12.1
+
 # Test dependencies
 pytest==8.3.3
 pytest-asyncio==0.24.0

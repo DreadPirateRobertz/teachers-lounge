@@ -2,9 +2,12 @@ FROM python:3.13-slim
 
 WORKDIR /app
 
-# Install system deps (minimal)
+# Install system deps for PDF processing (poppler for pdftotext, tesseract for OCR)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
+    poppler-utils \
+    tesseract-ocr \
+    libmagic1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
