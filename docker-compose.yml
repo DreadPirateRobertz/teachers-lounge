@@ -125,23 +125,15 @@ services:
       user-service:
         condition: service_healthy
     environment:
-      PORT: "8000"
-      DB_HOST: postgres
-      DB_PORT: "5432"
-      DB_NAME: teacherslounge
-      DB_USER: tl_app
-      DB_PASSWORD: ${POSTGRES_PASSWORD:-localdevpassword}
-      REDIS_HOST: redis
-      REDIS_PORT: "6379"
-      REDIS_PASSWORD: ${REDIS_PASSWORD:-localredispassword}
+      DATABASE_URL: "postgresql+asyncpg://tl_app:${POSTGRES_PASSWORD:-localdevpassword}@postgres:5432/teacherslounge"
       AI_GATEWAY_URL: http://ai-gateway:4000
-      AI_GATEWAY_API_KEY: ${LITELLM_MASTER_KEY:-localdevmasterkey}
-      USER_SERVICE_URL: http://user-service:8080
+      AI_GATEWAY_KEY: ${LITELLM_MASTER_KEY:-localdevmasterkey}
+      JWT_SECRET: ${JWT_SECRET:-localdevjwtsecret-replace-in-prod}
       LOG_LEVEL: info
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8000:8080"
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\""]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -166,7 +158,7 @@ services:
       NODE_ENV: production
       # Server-side (SSR) URLs use Docker internal hostnames — not exposed to browser
       API_URL: http://user-service:8080
-      TUTORING_URL: http://tutoring-service:8000
+      TUTORING_URL: http://tutoring-service:8080
     ports:
       - "127.0.0.1:3000:3000"
     healthcheck:
