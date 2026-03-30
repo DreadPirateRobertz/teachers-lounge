@@ -20,7 +20,7 @@
   "devDependencies": {
     "@types/jest": "^30.0.0",
     "@types/katex": "^0.16.7",
-    "@types/node": "^22",
+    "@types/node": "^25",
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.20",
