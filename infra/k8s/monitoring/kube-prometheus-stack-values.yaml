@@ -1,0 +1,118 @@
+## Helm values for kube-prometheus-stack
+## Chart: prometheus-community/kube-prometheus-stack
+## Install: helm upgrade --install monitoring prometheus-community/kube-prometheus-stack \
+##            --namespace monitoring --create-namespace \
+##            --values infra/k8s/monitoring/kube-prometheus-stack-values.yaml
+
+## ── Prometheus ──────────────────────────────────────────────────────────────
+prometheus:
+  prometheusSpec:
+    # GKE Autopilot: burstable QoS, small footprint
+    resources:
+      requests:
+        cpu: 200m
+        memory: 400Mi
+      limits:
+        cpu: 1000m
+        memory: 1Gi
+
+    retention: 15d
+    retentionSize: "8GB"
+
+    storageSpec:
+      volumeClaimTemplate:
+        spec:
+          storageClassName: standard-rwo  # GKE default, regional SSD
+          resources:
+            requests:
+              storage: 10Gi
+
+    # Scrape all PodMonitor and ServiceMonitor resources in any namespace
+    podMonitorNamespaceSelector:
+      matchLabels: {}
+    serviceMonitorNamespaceSelector:
+      matchLabels: {}
+
+## ── Grafana ─────────────────────────────────────────────────────────────────
+grafana:
+  enabled: true
+
+  adminPassword: ""  # Set via Kubernetes Secret — do NOT commit a password here
+  # Create the secret before install:
+  #   kubectl create secret generic grafana-admin \
+  #     --from-literal=admin-password=<password> -n monitoring
+  admin:
+    existingSecret: grafana-admin
+    passwordKey: admin-password
+
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  persistence:
+    enabled: true
+    storageClassName: standard-rwo
+    size: 5Gi
+
+  # Expose via GKE Ingress (Google-managed cert)
+  ingress:
+    enabled: true
+    annotations:
+      kubernetes.io/ingress.class: gce
+      kubernetes.io/ingress.global-static-ip-name: grafana-ip
+      networking.gke.io/managed-certificates: grafana-cert
+    hosts:
+      - grafana.teacherslounge.app
+    tls: []  # TLS handled by Google-managed cert
+
+  # Pre-load Cloud Monitoring datasource so teams can query GMP alongside Prometheus
+  additionalDataSources:
+    - name: Google Cloud Monitoring
+      type: stackdriver
+      access: proxy
+      jsonData:
+        tokenUri: https://oauth2.googleapis.com/token
+        authenticationType: gce  # Uses GKE node SA; works with Workload Identity
+
+  dashboardProviders:
+    dashboardproviders.yaml:
+      apiVersion: 1
+      providers:
+        - name: default
+          orgId: 1
+          folder: TeachersLounge
+          type: file
+          options:
+            path: /var/lib/grafana/dashboards/default
+
+## ── Alertmanager ────────────────────────────────────────────────────────────
+alertmanager:
+  alertmanagerSpec:
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+
+## ── Node exporter ───────────────────────────────────────────────────────────
+# GKE Autopilot: node exporter DaemonSet is not allowed — disable it
+nodeExporter:
+  enabled: false
+
+## ── kube-state-metrics ──────────────────────────────────────────────────────
+kubeStateMetrics:
+  enabled: true
+
+## ── Component scraping ──────────────────────────────────────────────────────
+# GKE manages these; disable scraping to avoid auth errors
+kubeControllerManager:
+  enabled: false
+kubeScheduler:
+  enabled: false
+kubeEtcd:
+  enabled: false
+kubeProxy:
+  enabled: false

@@ -1,0 +1,136 @@
+name: Build & Push Images
+
+# Builds Docker images and pushes to Artifact Registry on every push to main.
+# Pull requests only build (no push) to validate the Dockerfile is healthy.
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'services/**'
+      - 'frontend/**'
+      - '.github/workflows/build-push.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'services/**'
+      - 'frontend/**'
+      - '.github/workflows/build-push.yml'
+
+permissions:
+  contents: read
+  id-token: write  # Required for Workload Identity Federation
+
+env:
+  PROJECT_ID: teachers-lounge
+  REGISTRY: us-docker.pkg.dev
+  REPOSITORY: services
+  # Set in repo/org secrets:
+  #   GCP_WORKLOAD_IDENTITY_PROVIDER  — from `terraform output workload_identity_pool_provider`
+  #   GCP_SA_EMAIL                    — from `terraform output github_actions_sa_email`
+
+jobs:
+  build-push:
+    name: ${{ matrix.service }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - service: frontend
+            context: frontend
+          - service: user-service
+            context: services/user-service
+          - service: tutoring-service
+            context: services/tutoring-service
+          - service: ai-gateway
+            context: services/ai-gateway
+          - service: gaming-service
+            context: services/gaming-service
+          - service: notification-service
+            context: services/notification-service
+          - service: ingestion
+            context: services/ingestion
+          - service: search
+            context: services/search
+          - service: analytics-service
+            context: services/analytics-service
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check Dockerfile exists
+        id: check
+        env:
+          CTX: ${{ matrix.context }}
+        run: |
+          if [ -f "${CTX}/Dockerfile" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No Dockerfile in ${CTX} — skipping"
+          fi
+
+      # Authenticate to GCP via Workload Identity Federation (no long-lived keys)
+      - name: Authenticate to GCP
+        if: steps.check.outputs.exists == 'true' && github.event_name == 'push'
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.GCP_SA_EMAIL }}
+
+      - name: Configure Docker for Artifact Registry
+        if: steps.check.outputs.exists == 'true' && github.event_name == 'push'
+        run: gcloud auth configure-docker ${{ env.REGISTRY }} --quiet
+
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.exists == 'true'
+        uses: docker/setup-buildx-action@v3
+
+      - name: Docker meta
+        if: steps.check.outputs.exists == 'true'
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.PROJECT_ID }}/${{ env.REPOSITORY }}/${{ matrix.service }}
+          tags: |
+            type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      # On PRs: build only (validates Dockerfile, no push)
+      # On push to main: build + push to Artifact Registry
+      - name: Build (and push on main)
+        if: steps.check.outputs.exists == 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.context }}
+          push: ${{ github.event_name == 'push' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Update Helm image tag (prod)
+        if: steps.check.outputs.exists == 'true' && github.event_name == 'push'
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          VALUES_PROD="infra/helm/${SERVICE}/values-prod.yaml"
+          if [ -f "${VALUES_PROD}" ]; then
+            sed -i "s/tag: .*/tag: sha-${SHORT_SHA}/" "${VALUES_PROD}"
+            echo "Updated ${VALUES_PROD} → sha-${SHORT_SHA}"
+          fi
+
+      - name: Commit updated Helm values
+        if: steps.check.outputs.exists == 'true' && github.event_name == 'push'
+        env:
+          SERVICE: ${{ matrix.service }}
+        run: |
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add "infra/helm/${SERVICE}/values-prod.yaml" 2>/dev/null || true
+          git diff --cached --quiet || \
+            git commit -m "chore(deploy): ${SERVICE} → sha-${SHORT_SHA} [skip ci]"
+          git push origin main 2>/dev/null || true

@@ -1,0 +1,31 @@
+## ArgoCD Application — Fluent Bit (prod)
+## Ships container logs from all nodes to Cloud Logging.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: logging-prod
+  namespace: argocd
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  sources:
+    - repoURL: https://github.com/teachers-lounge/teachers-lounge.git
+      targetRevision: main
+      ref: repo
+    - repoURL: https://fluent.github.io/helm-charts
+      chart: fluent-bit
+      targetRevision: ">=3.0.0"
+      helm:
+        valueFiles:
+          - $repo/infra/k8s/logging/fluentbit-values.yaml
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: logging
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true
