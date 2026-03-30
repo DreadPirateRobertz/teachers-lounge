@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # User Service signs tokens with this secret; all services validate with it.
     jwt_secret: str = "REPLACE_ME"
     jwt_algorithm: str = "HS256"
+    jwt_audience: str = "teacherslounge-services"
 
     # CORS — comma-separated list of allowed origins
     allowed_origins: str = "http://localhost:3000"

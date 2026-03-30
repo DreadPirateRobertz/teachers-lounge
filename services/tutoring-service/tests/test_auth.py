@@ -22,6 +22,9 @@ ALGORITHM = "HS256"
 USER_ID = str(uuid.uuid4())
 
 
+AUDIENCE = "teacherslounge-services"
+
+
 def _make_token(
     uid=USER_ID,
     email="nova@test.com",
@@ -29,6 +32,7 @@ def _make_token(
     sub_status="active",
     exp_offset=3600,
     secret=SECRET,
+    aud=AUDIENCE,
     extra: dict | None = None,
 ) -> str:
     payload = {
@@ -38,6 +42,8 @@ def _make_token(
         "sub_status": sub_status,
         "exp": int(time.time()) + exp_offset,
     }
+    if aud is not None:
+        payload["aud"] = aud
     if extra:
         payload.update(extra)
     return jwt.encode(payload, secret, algorithm=ALGORITHM)
@@ -52,7 +58,7 @@ def _make_credentials(token: str):
 
 @pytest.fixture(autouse=True)
 def _patch_jwt_secret(patch_settings):
-    patch_settings(jwt_secret=SECRET, jwt_algorithm=ALGORITHM)
+    patch_settings(jwt_secret=SECRET, jwt_algorithm=ALGORITHM, jwt_audience=AUDIENCE)
 
 
 # ── happy path ────────────────────────────────────────────────────────────────
@@ -92,6 +98,7 @@ def test_sub_used_as_fallback_when_uid_missing():
         "email": "fallback@test.com",
         "acct": "standard",
         "sub_status": "",
+        "aud": AUDIENCE,
         "exp": int(time.time()) + 3600,
     }
     token = jwt.encode(payload, SECRET, algorithm=ALGORITHM)
@@ -120,6 +127,7 @@ def test_missing_uid_and_sub_raises_401():
     payload = {
         "email": "ghost@test.com",
         "acct": "standard",
+        "aud": AUDIENCE,
         "exp": int(time.time()) + 3600,
     }
     token = jwt.encode(payload, SECRET, algorithm=ALGORITHM)
@@ -127,6 +135,20 @@ def test_missing_uid_and_sub_raises_401():
         require_auth(_make_credentials(token))
     assert exc_info.value.status_code == 401
     assert "uid" in exc_info.value.detail.lower()
+
+
+def test_wrong_audience_raises_401():
+    token = _make_token(aud="wrong-audience")
+    with pytest.raises(HTTPException) as exc_info:
+        require_auth(_make_credentials(token))
+    assert exc_info.value.status_code == 401
+
+
+def test_missing_audience_raises_401():
+    token = _make_token(aud=None)
+    with pytest.raises(HTTPException) as exc_info:
+        require_auth(_make_credentials(token))
+    assert exc_info.value.status_code == 401
 
 
 def test_tampered_token_raises_401():

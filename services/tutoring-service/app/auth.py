@@ -41,9 +41,7 @@ def require_auth(
             token,
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
-            # verify_aud=False: User Service does not set an "aud" claim yet.
-            # Tracked in tl-eam — enable once User Service adds aud: "teacherslounge-services".
-            options={"verify_aud": False},
+            audience=settings.jwt_audience,
         )
     except ExpiredSignatureError:
         raise HTTPException(
@@ -55,6 +53,15 @@ def require_auth(
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    # python-jose silently accepts tokens with no "aud" claim even when
+    # audience= is passed, so enforce presence explicitly.
+    if "aud" not in payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing aud claim",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
