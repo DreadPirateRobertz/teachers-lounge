@@ -1,0 +1,6 @@
+replicaCount: 1
+image:
+  tag: dev
+env:
+  DATABASE_URL: "postgres://gaming:$(DB_PASSWORD)@postgres.dev.svc.cluster.local:5432/gaming"
+  REDIS_ADDR: "redis.dev.svc.cluster.local:6379"
