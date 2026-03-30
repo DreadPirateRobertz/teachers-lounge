@@ -2,36 +2,36 @@ import logging
 from uuid import UUID
 
 from qdrant_client import AsyncQdrantClient
-from qdrant_client.models import PointStruct, NamedVector
+from qdrant_client.models import PointStruct
 
 from app.config import settings
 
 logger = logging.getLogger(__name__)
 
-_client: AsyncQdrantClient | None = None
+# Connection params stored at init; client created per event loop since
+# AsyncQdrantClient is bound to the loop it's created in. The Pub/Sub
+# subscriber thread calls asyncio.run() which creates a new loop each time.
+_client_kwargs: dict | None = None
 
 
 def init_client() -> None:
-    """Initialize the Qdrant client. Call from FastAPI lifespan startup."""
-    global _client
-    kwargs: dict = dict(host=settings.qdrant_host, port=settings.qdrant_port)
+    """Store connection params. Actual client created lazily per-loop."""
+    global _client_kwargs
+    _client_kwargs = dict(host=settings.qdrant_host, port=settings.qdrant_port)
     if settings.qdrant_api_key is not None:
-        kwargs["api_key"] = settings.qdrant_api_key
-    _client = AsyncQdrantClient(**kwargs)
-    logger.info("qdrant client initialized → %s:%d", settings.qdrant_host, settings.qdrant_port)
+        _client_kwargs["api_key"] = settings.qdrant_api_key
+    logger.info("qdrant config stored → %s:%d", settings.qdrant_host, settings.qdrant_port)
 
 
-def get_client() -> AsyncQdrantClient:
-    if _client is None:
-        raise RuntimeError("Qdrant client not initialized — call init_client() at startup")
-    return _client
+def _make_client() -> AsyncQdrantClient:
+    if _client_kwargs is None:
+        raise RuntimeError("Qdrant not configured — call init_client() at startup")
+    return AsyncQdrantClient(**_client_kwargs)
 
 
 async def close_client() -> None:
-    global _client
-    if _client:
-        await _client.close()
-        _client = None
+    """No-op — clients are created and closed per upsert call."""
+    pass
 
 
 async def upsert_chunks(
@@ -44,7 +44,7 @@ async def upsert_chunks(
     Each payload should contain: chunk_id, material_id, course_id,
     content, chapter, section, page, content_type.
     """
-    client = get_client()
+    client = _make_client()
     points = [
         PointStruct(
             id=str(chunk_id),
@@ -56,12 +56,15 @@ async def upsert_chunks(
 
     # Upsert in batches of 100 to avoid payload size limits
     batch_size = 100
-    for i in range(0, len(points), batch_size):
-        batch = points[i:i + batch_size]
-        await client.upsert(
-            collection_name=settings.curriculum_collection,
-            points=batch,
-        )
+    try:
+        for i in range(0, len(points), batch_size):
+            batch = points[i:i + batch_size]
+            await client.upsert(
+                collection_name=settings.curriculum_collection,
+                points=batch,
+            )
+    finally:
+        await client.close()
 
     logger.info("upserted %d points to collection=%s",
                 len(points), settings.curriculum_collection)
