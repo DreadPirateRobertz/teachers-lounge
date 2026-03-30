@@ -7,6 +7,8 @@ from fastapi import FastAPI
 from app.routers import ingest
 from app.services.db import close_pool
 from app.services.pubsub import start_subscriber
+from app.services import embeddings as embeddings_svc
+from app.services import qdrant as qdrant_svc
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -14,6 +16,11 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Initialize embedding + vector store clients
+    embeddings_svc.init_client()
+    qdrant_svc.init_client()
+    logger.info("embedding and qdrant clients initialized")
+
     # Start Pub/Sub subscriber in a background thread
     thread = threading.Thread(target=start_subscriber, daemon=True, name="pubsub-subscriber")
     thread.start()
@@ -21,8 +28,9 @@ async def lifespan(app: FastAPI):
 
     yield
 
+    await qdrant_svc.close_client()
     await close_pool()
-    logger.info("db pool closed")
+    logger.info("qdrant + db pool closed")
 
 
 app = FastAPI(

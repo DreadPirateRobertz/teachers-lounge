@@ -1,3 +1,4 @@
+import json
 import logging
 from uuid import UUID
 
@@ -76,3 +77,39 @@ async def update_material_status(
             material_id,
         )
     logger.info("material %s → %s", material_id, status)
+
+
+async def insert_chunks(chunks: list[dict]) -> None:
+    """Bulk-insert chunk metadata into the chunks table.
+
+    Each dict must contain: id, material_id, course_id, content,
+    chapter, section, page, content_type, metadata.
+    """
+    if not chunks:
+        return
+    pool = await get_pool()
+    await pool.executemany(
+        """
+        INSERT INTO chunks
+            (id, material_id, course_id, content, chapter, section,
+             page, content_type, figure_gcs_path, metadata, created_at)
+        VALUES
+            ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, NOW())
+        """,
+        [
+            (
+                c["id"],
+                c["material_id"],
+                c["course_id"],
+                c["content"],
+                c.get("chapter"),
+                c.get("section"),
+                c.get("page"),
+                c.get("content_type", "text"),
+                c.get("figure_gcs_path"),
+                json.dumps(c.get("metadata", {})),
+            )
+            for c in chunks
+        ],
+    )
+    logger.info("inserted %d chunks for material %s", len(chunks), chunks[0]["material_id"])
