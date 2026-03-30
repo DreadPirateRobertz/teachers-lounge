@@ -63,6 +63,26 @@ type LeaderboardResponse struct {
 	UserRank *LeaderboardEntry  `json:"user_rank,omitempty"`
 }
 
+// XPAwardRequest is the request body for POST /gaming/xp/award.
+type XPAwardRequest struct {
+	UserID string `json:"user_id"`
+	Event  string `json:"event"` // lesson_complete, quiz_correct, quiz_wrong, streak_bonus, boss_victory
+}
+
+// XPAwardResponse is the response body for POST /gaming/xp/award.
+type XPAwardResponse struct {
+	Event      string  `json:"event"`
+	BaseXP     int64   `json:"base_xp"`
+	Multiplier float64 `json:"multiplier"`
+	Awarded    int64   `json:"awarded"`
+	DailyTotal int64   `json:"daily_total"`
+	DailyCap   int64   `json:"daily_cap"`
+	Capped     bool    `json:"capped"`
+	NewXP      int64   `json:"new_xp"`
+	NewLevel   int     `json:"new_level"`
+	LevelUp    bool    `json:"level_up"`
+}
+
 // Quote is a row from scifi_quotes.
 type Quote struct {
 	ID          int    `json:"id"`

@@ -14,6 +14,7 @@ import (
 const (
 	streakKeyPrefix    = "streak:"
 	leaderboardKey     = "leaderboard:global"
+	dailyXPKeyPrefix   = "xp:today:"
 	streakResetWindow  = 24 * time.Hour
 )
 
@@ -191,6 +192,65 @@ func (s *Store) LeaderboardTop10(ctx context.Context, userID string) ([]model.Le
 	}
 
 	return entries, userEntry, nil
+}
+
+// GetDailyXP returns how much XP a user has earned today (UTC).
+func (s *Store) GetDailyXP(ctx context.Context, userID string) (int64, error) {
+	key := dailyXPKeyPrefix + userID
+	val, err := s.rdb.Get(ctx, key).Int64()
+	if err == redis.Nil {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("get daily xp %s: %w", userID, err)
+	}
+	return val, nil
+}
+
+// IncrDailyXP atomically adds amount to the user's daily XP counter.
+// The key expires at the next UTC midnight so the counter resets daily.
+func (s *Store) IncrDailyXP(ctx context.Context, userID string, amount int64) (int64, error) {
+	key := dailyXPKeyPrefix + userID
+	newVal, err := s.rdb.IncrBy(ctx, key, amount).Result()
+	if err != nil {
+		return 0, fmt.Errorf("incr daily xp %s: %w", userID, err)
+	}
+
+	// Set expiry to next UTC midnight if this is the first increment today.
+	// We use ExpireNX to only set TTL if one doesn't already exist.
+	now := time.Now().UTC()
+	midnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, time.UTC)
+	ttl := midnight.Sub(now)
+	s.rdb.ExpireNX(ctx, key, ttl)
+
+	return newVal, nil
+}
+
+// GetCurrentStreak returns the current streak count for a user from Redis.
+func (s *Store) GetCurrentStreak(ctx context.Context, userID string) (int, error) {
+	key := streakKeyPrefix + userID
+	val, err := s.rdb.HGet(ctx, key, "count").Result()
+	if err == redis.Nil {
+		return 0, nil
+	}
+	if err != nil {
+		return 0, fmt.Errorf("get streak %s: %w", userID, err)
+	}
+	var count int
+	fmt.Sscan(val, &count)
+	return count, nil
+}
+
+// LogXPEvent inserts a row into xp_events for audit purposes.
+func (s *Store) LogXPEvent(ctx context.Context, userID, event string, baseXP, awarded int64, multiplier float64, capped bool) error {
+	const q = `
+		INSERT INTO xp_events (user_id, event_type, base_xp, multiplier, awarded_xp, capped)
+		VALUES ($1, $2, $3, $4, $5, $6)`
+	_, err := s.db.Exec(ctx, q, userID, event, baseXP, multiplier, awarded, capped)
+	if err != nil {
+		return fmt.Errorf("log xp event %s: %w", userID, err)
+	}
+	return nil
 }
 
 // RandomQuote fetches a random row from scifi_quotes.

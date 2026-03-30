@@ -22,6 +22,10 @@ type Storer interface {
 	LeaderboardUpdate(ctx context.Context, userID string, xpVal int64) error
 	LeaderboardTop10(ctx context.Context, userID string) ([]model.LeaderboardEntry, *model.LeaderboardEntry, error)
 	RandomQuote(ctx context.Context) (*model.Quote, error)
+	GetDailyXP(ctx context.Context, userID string) (int64, error)
+	IncrDailyXP(ctx context.Context, userID string, amount int64) (int64, error)
+	GetCurrentStreak(ctx context.Context, userID string) (int, error)
+	LogXPEvent(ctx context.Context, userID, event string, baseXP, awarded int64, multiplier float64, capped bool) error
 }
 
 // Handler holds the store and logger.
@@ -33,6 +37,124 @@ type Handler struct {
 // New creates a Handler.
 func New(store Storer, logger *zap.Logger) *Handler {
 	return &Handler{store: store, logger: logger}
+}
+
+// AwardXP handles POST /gaming/xp/award — the event-driven XP pipeline.
+// It resolves the base XP from the event type, applies streak multipliers,
+// enforces the daily cap, updates all state, and returns the full breakdown.
+func (h *Handler) AwardXP(w http.ResponseWriter, r *http.Request) {
+	var req model.XPAwardRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.UserID == "" || req.Event == "" {
+		writeError(w, http.StatusBadRequest, "user_id and event required")
+		return
+	}
+
+	callerID := middleware.UserIDFromContext(r.Context())
+	if callerID == "" || callerID != req.UserID {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		return
+	}
+
+	eventType := xp.EventType(req.Event)
+	if !xp.ValidEvent(eventType) {
+		writeError(w, http.StatusBadRequest, "unknown event type")
+		return
+	}
+
+	ctx := r.Context()
+
+	// Fetch current streak for multiplier calculation.
+	streakDays, err := h.store.GetCurrentStreak(ctx, req.UserID)
+	if err != nil {
+		h.logger.Error("get streak", zap.String("user_id", req.UserID), zap.Error(err))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	// Fetch daily XP spent so far.
+	dailySoFar, err := h.store.GetDailyXP(ctx, req.UserID)
+	if err != nil {
+		h.logger.Error("get daily xp", zap.String("user_id", req.UserID), zap.Error(err))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	// Calculate award with multiplier and daily cap.
+	awarded, capped := xp.CalculateAward(eventType, streakDays, dailySoFar)
+	multiplier := xp.StreakMultiplier(streakDays)
+	baseXPVal := xp.BaseXPFor(eventType)
+
+	if awarded > 0 {
+		// Update daily XP counter.
+		dailyTotal, err := h.store.IncrDailyXP(ctx, req.UserID, awarded)
+		if err != nil {
+			h.logger.Error("incr daily xp", zap.String("user_id", req.UserID), zap.Error(err))
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		dailySoFar = dailyTotal
+
+		// Apply XP to profile.
+		currentXP, currentLevel, err := h.store.GetXPAndLevel(ctx, req.UserID)
+		if err != nil {
+			h.logger.Error("get xp/level", zap.String("user_id", req.UserID), zap.Error(err))
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+
+		newXP, newLevel, leveledUp := xp.Apply(currentXP, currentLevel, awarded)
+
+		if err := h.store.UpsertXP(ctx, req.UserID, newXP, newLevel); err != nil {
+			h.logger.Error("upsert xp", zap.String("user_id", req.UserID), zap.Error(err))
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+
+		// Update leaderboard.
+		if err := h.store.LeaderboardUpdate(ctx, req.UserID, newXP); err != nil {
+			h.logger.Error("leaderboard update", zap.String("user_id", req.UserID), zap.Error(err))
+			// Non-fatal: leaderboard is eventually consistent.
+		}
+
+		// Log the event for audit.
+		if err := h.store.LogXPEvent(ctx, req.UserID, req.Event, baseXPVal, awarded, multiplier, capped); err != nil {
+			h.logger.Error("log xp event", zap.String("user_id", req.UserID), zap.Error(err))
+			// Non-fatal: audit logging should not block the response.
+		}
+
+		writeJSON(w, http.StatusOK, model.XPAwardResponse{
+			Event:      req.Event,
+			BaseXP:     baseXPVal,
+			Multiplier: multiplier,
+			Awarded:    awarded,
+			DailyTotal: dailySoFar,
+			DailyCap:   xp.DailyCap,
+			Capped:     capped,
+			NewXP:      newXP,
+			NewLevel:   newLevel,
+			LevelUp:    leveledUp,
+		})
+		return
+	}
+
+	// Awarded 0 — cap already reached.
+	currentXP, currentLevel, _ := h.store.GetXPAndLevel(ctx, req.UserID)
+	writeJSON(w, http.StatusOK, model.XPAwardResponse{
+		Event:      req.Event,
+		BaseXP:     baseXPVal,
+		Multiplier: multiplier,
+		Awarded:    0,
+		DailyTotal: dailySoFar,
+		DailyCap:   xp.DailyCap,
+		Capped:     true,
+		NewXP:      currentXP,
+		NewLevel:   currentLevel,
+		LevelUp:    false,
+	})
 }
 
 // GainXP handles POST /gaming/xp

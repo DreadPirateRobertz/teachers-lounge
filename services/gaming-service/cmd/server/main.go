@@ -60,6 +60,7 @@ func main() {
 		r.Use(middleware.Authenticate(cfg.jwtSecret))
 
 		r.Post("/gaming/xp", h.GainXP)
+		r.Post("/gaming/xp/award", h.AwardXP)
 		r.Get("/gaming/profile/{userId}", h.GetProfile)
 		r.Post("/gaming/streak/checkin", h.StreakCheckin)
 		r.Post("/gaming/leaderboard/update", h.LeaderboardUpdate)
