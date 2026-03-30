@@ -23,12 +23,13 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
-from openai import AsyncOpenAI, APIConnectionError, APIStatusError, APITimeoutError
+from openai import APIConnectionError, APIStatusError, APITimeoutError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import JWTClaims, require_auth
 from .config import settings
 from .database import get_db
+from .gateway import get_gateway_client
 from .history import append_message, get_history, get_session
 from .models import MessageRequest
 
@@ -57,14 +58,6 @@ FALLBACK_MESSAGE = (
     "network seems unstable. Could you try sending your question again? I'll be right "
     "here when you do. 🔧"
 )
-
-
-def _gateway_client() -> AsyncOpenAI:
-    return AsyncOpenAI(
-        base_url=settings.ai_gateway_url + "/v1",
-        api_key=settings.ai_gateway_key,
-        timeout=60.0,
-    )
 
 
 def _history_to_messages(interactions) -> list[dict]:
@@ -105,7 +98,7 @@ async def send_message(
         {"role": "user", "content": body.content},
     ]
 
-    client = _gateway_client()
+    client = get_gateway_client()
     tutor_msg_id = str(uuid.uuid4())
 
     async def stream_generator():
