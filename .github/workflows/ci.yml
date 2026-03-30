@@ -32,7 +32,7 @@ jobs:
       docker:          ${{ steps.filter.outputs.docker }}
       helm:            ${{ steps.filter.outputs.helm }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: dorny/paths-filter@v3
         id: filter
         with:
@@ -72,7 +72,7 @@ jobs:
       run:
         working-directory: frontend
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Check frontend exists
         id: check
         run: |
@@ -109,7 +109,7 @@ jobs:
       run:
         working-directory: services/${{ matrix.service }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Check go.mod exists
         id: check
         run: |
@@ -155,7 +155,7 @@ jobs:
       run:
         working-directory: ${{ matrix.svc_path }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Check requirements.txt exists
         id: check
         run: |
@@ -207,7 +207,7 @@ jobs:
           - service: analytics-service
             svc_path: services/analytics-service
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Check Dockerfile exists
         id: check
         env:
@@ -243,7 +243,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: azure/setup-helm@v4
       - name: Lint all Helm charts
         run: |
@@ -262,7 +262,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: npm audit (frontend)
         run: |
           if [ -f frontend/package.json ]; then
@@ -282,7 +282,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - name: Check for unresolved merge conflict markers
         run: |
           if grep -rn "^<<<<<<< \|^=======$\|^>>>>>>> " \
@@ -301,7 +301,7 @@ jobs:
       issues: write
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
       - uses: actions/setup-node@v4
         with:
           node-version: 22
