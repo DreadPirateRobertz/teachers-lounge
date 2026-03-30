@@ -147,6 +147,36 @@ services:
       retries: 3
       start_period: 15s
 
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: "8084"
+      DATABASE_URL: "postgres://tl_app:${POSTGRES_PASSWORD:-localdevpassword}@postgres:5432/teacherslounge?sslmode=disable"
+      REDIS_ADDR: "redis:6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-localredispassword}
+      JWT_SECRET: ${JWT_SECRET:-localdevjwtsecret-replace-in-prod}
+      FCM_SERVER_KEY: ${FCM_SERVER_KEY:-}
+      FCM_PROJECT_ID: ${FCM_PROJECT_ID:-}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-}
+      SENDGRID_FROM_EMAIL: ${SENDGRID_FROM_EMAIL:-noreply@teacherslounge.app}
+      SENDGRID_FROM_NAME: ${SENDGRID_FROM_NAME:-Teachers Lounge}
+    ports:
+      - "127.0.0.1:8084:8084"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8084/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
   frontend:
     build:
       context: ./frontend

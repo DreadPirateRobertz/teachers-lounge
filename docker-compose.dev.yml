@@ -40,6 +40,15 @@ services:
     environment:
       LOG_LEVEL: debug
 
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    volumes:
+      - ./services/notification-service:/app
+    environment:
+      LOG_LEVEL: debug
+
   ai-gateway:
     environment:
       LITELLM_LOG: DEBUG
