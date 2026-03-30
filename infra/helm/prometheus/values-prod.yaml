@@ -1,0 +1,11 @@
+storage:
+  size: 50Gi
+  retentionDays: 30
+
+resources:
+  requests:
+    cpu: 200m
+    memory: 512Mi
+  limits:
+    cpu: 1000m
+    memory: 2Gi

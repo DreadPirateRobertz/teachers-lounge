@@ -1,0 +1,23 @@
+image:
+  repository: grafana/grafana
+  tag: "11.0.0"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 3000
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi
+
+persistence:
+  size: 1Gi
+
+datasources:
+  prometheusUrl: "http://prometheus:9090"
+  jaegerUrl: "http://jaeger:16686"

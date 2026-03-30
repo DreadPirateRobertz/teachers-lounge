@@ -1,0 +1,5 @@
+apiVersion: v2
+name: grafana
+description: Grafana dashboards for TeachersLounge
+version: 0.1.0
+appVersion: "11.0.0"

@@ -27,6 +27,7 @@ env:
   DB_NAME: "tutoring"
   REDIS_HOST: "redis.dev.svc.cluster.local"
   SSE_KEEPALIVE_INTERVAL: "15"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "otel-collector:4317"
 
 # Secrets: DB_PASSWORD, AI_GATEWAY_API_KEY injected from tutoring-service-secrets
 

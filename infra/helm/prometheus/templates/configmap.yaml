@@ -1,0 +1,96 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: prometheus-config
+data:
+  prometheus.yml: |
+    global:
+      scrape_interval: 15s
+      evaluation_interval: 15s
+
+    rule_files:
+      - /etc/prometheus/alert_rules.yml
+
+    scrape_configs:
+      - job_name: prometheus
+        static_configs:
+          - targets: ["localhost:9090"]
+
+      - job_name: user-service
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [{{ .Release.Namespace | quote }}]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            regex: user-service
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            regex: "8080"
+            action: keep
+
+      - job_name: tutoring-service
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [{{ .Release.Namespace | quote }}]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            regex: tutoring-service
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            regex: "8000"
+            action: keep
+
+      - job_name: gaming-service
+        kubernetes_sd_configs:
+          - role: endpoints
+            namespaces:
+              names: [{{ .Release.Namespace | quote }}]
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            regex: gaming-service
+            action: keep
+          - source_labels: [__meta_kubernetes_pod_container_port_number]
+            regex: "8083"
+            action: keep
+
+      - job_name: otel-collector
+        static_configs:
+          - targets: ["otel-collector:8888"]
+
+  alert_rules.yml: |
+    groups:
+      - name: service_health
+        rules:
+          - alert: ServiceDown
+            expr: up == 0
+            for: 1m
+            labels:
+              severity: critical
+            annotations:
+              summary: "{{`{{ $labels.job }}`}} is down"
+
+          - alert: HighErrorRate
+            expr: >
+              (
+                sum(rate(http_server_request_duration_seconds_count{http_response_status_code=~"5.."}[5m])) by (job)
+                /
+                sum(rate(http_server_request_duration_seconds_count[5m])) by (job)
+              ) > 0.05
+            for: 2m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High 5xx error rate on {{`{{ $labels.job }}`}}"
+
+          - alert: HighLatencyP99
+            expr: >
+              histogram_quantile(0.99,
+                sum(rate(http_server_request_duration_seconds_bucket[5m])) by (le, job)
+              ) > 2
+            for: 5m
+            labels:
+              severity: warning
+            annotations:
+              summary: "High p99 latency on {{`{{ $labels.job }}`}}"

@@ -8,3 +8,8 @@ pydantic-settings==2.7.0
 openai==1.60.0
 python-dotenv==1.0.1
 python-jose[cryptography]==3.3.0
+prometheus-client==0.21.1
+opentelemetry-api==1.29.0
+opentelemetry-sdk==1.29.0
+opentelemetry-exporter-otlp-proto-grpc==1.29.0
+opentelemetry-semantic-conventions==0.50b0

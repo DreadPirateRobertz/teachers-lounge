@@ -1,0 +1,23 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: jaeger
+  labels:
+    app: jaeger
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.queryPort }}
+      targetPort: 16686
+      protocol: TCP
+      name: query
+    - port: {{ .Values.service.collectorPort }}
+      targetPort: 14268
+      protocol: TCP
+      name: collector
+    - port: 4317
+      targetPort: 4317
+      protocol: TCP
+      name: otlp-grpc
+  selector:
+    app: jaeger

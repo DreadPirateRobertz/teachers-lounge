@@ -26,6 +26,7 @@ env:
   REDIS_HOST: "redis.dev.svc.cluster.local"
   JWT_EXPIRY_MINUTES: "15"
   REFRESH_TOKEN_EXPIRY_DAYS: "30"
+  OTEL_EXPORTER_OTLP_ENDPOINT: "otel-collector:4317"
 
 # Secrets are injected from Kubernetes Secrets — not stored in values
 # DB_PASSWORD, JWT_SECRET, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET

@@ -1,0 +1,5 @@
+apiVersion: v2
+name: jaeger
+description: Jaeger tracing backend for TeachersLounge
+version: 0.1.0
+appVersion: "1.57"

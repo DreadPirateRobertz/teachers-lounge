@@ -16,6 +16,7 @@ from .chat import router as chat_router
 from .chat_simple import router as chat_simple_router
 from .config import settings
 from .database import Base, engine
+from .observability import ObservabilityMiddleware, init_tracer, metrics_endpoint
 from .sessions import router as sessions_router
 
 logging.basicConfig(level=settings.log_level.upper())
@@ -27,6 +28,7 @@ app = FastAPI(
     description="Phase 1: basic chat with Professor Nova, streaming SSE, conversation history.",
 )
 
+app.add_middleware(ObservabilityMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins.split(","),
@@ -34,6 +36,7 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+app.add_api_route("/metrics", metrics_endpoint, methods=["GET"], tags=["ops"])
 app.include_router(sessions_router, prefix="/v1")
 app.include_router(chat_router, prefix="/v1")
 app.include_router(chat_simple_router, prefix="/v1")
@@ -41,6 +44,13 @@ app.include_router(chat_simple_router, prefix="/v1")
 
 @app.on_event("startup")
 async def on_startup():
+    # Initialize OpenTelemetry tracing
+    try:
+        init_tracer("tutoring-service")
+        logger.info("OpenTelemetry tracing initialized")
+    except Exception as e:
+        logger.warning("Failed to init tracer, continuing without tracing: %s", e)
+
     # Create tables if they don't exist (dev only — production uses Alembic migrations)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)

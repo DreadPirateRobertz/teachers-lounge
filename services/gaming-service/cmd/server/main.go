@@ -17,12 +17,22 @@ import (
 
 	"github.com/teacherslounge/gaming-service/internal/handler"
 	"github.com/teacherslounge/gaming-service/internal/middleware"
+	"github.com/teacherslounge/gaming-service/internal/observability"
 	"github.com/teacherslounge/gaming-service/internal/store"
 )
 
 func main() {
 	logger, _ := zap.NewProduction()
 	defer logger.Sync()
+
+	// ── Observability ────────────────────────────────────────
+	otelEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	shutdownTracer, err := observability.InitTracer(context.Background(), "gaming-service", otelEndpoint)
+	if err != nil {
+		logger.Warn("failed to init tracer, continuing without tracing", zap.Error(err))
+	} else {
+		defer func() { _ = shutdownTracer(context.Background()) }()
+	}
 
 	cfg := loadConfig()
 
@@ -52,7 +62,9 @@ func main() {
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
 	r.Use(chimw.Timeout(30 * time.Second))
+	r.Use(observability.Middleware("gaming-service"))
 
+	r.Handle("/metrics", observability.MetricsHandler())
 	r.Get("/health", h.Health)
 
 	// Authenticated routes

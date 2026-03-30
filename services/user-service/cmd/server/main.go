@@ -18,6 +18,7 @@ import (
 	"github.com/teacherslounge/user-service/internal/config"
 	"github.com/teacherslounge/user-service/internal/handlers"
 	"github.com/teacherslounge/user-service/internal/middleware"
+	"github.com/teacherslounge/user-service/internal/observability"
 	"github.com/teacherslounge/user-service/internal/store"
 )
 
@@ -29,6 +30,15 @@ func main() {
 	if err != nil {
 		slog.Error("loading config", "err", err)
 		os.Exit(1)
+	}
+
+	// ── Observability ────────────────────────────────────────
+	otelEndpoint := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	shutdownTracer, err := observability.InitTracer(context.Background(), "user-service", otelEndpoint)
+	if err != nil {
+		slog.Warn("failed to init tracer, continuing without tracing", "err", err)
+	} else {
+		defer func() { _ = shutdownTracer(context.Background()) }()
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
@@ -76,6 +86,10 @@ func main() {
 	r.Use(chimw.Logger)
 	r.Use(chimw.Recoverer)
 	r.Use(chimw.Timeout(30 * time.Second))
+	r.Use(observability.Middleware("user-service"))
+
+	// Metrics endpoint (no auth)
+	r.Handle("/metrics", observability.MetricsHandler())
 
 	// Health check (no auth)
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
