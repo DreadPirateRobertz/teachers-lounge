@@ -282,24 +282,25 @@ class TestProcessPdfPipeline:
 
 class TestEmbedTexts:
     @pytest.mark.asyncio
-    @patch("app.services.embeddings._client")
-    async def test_batching(self, mock_client):
+    async def test_batching(self):
         from app.services.embeddings import embed_texts
 
-        # Mock the OpenAI response
+        # Mock the OpenAI client
+        mock_client = AsyncMock()
         mock_response = MagicMock()
         mock_response.data = [
             MagicMock(index=0, embedding=[0.1] * 1024),
             MagicMock(index=1, embedding=[0.2] * 1024),
         ]
-        mock_client.embeddings = MagicMock()
         mock_client.embeddings.create = AsyncMock(return_value=mock_response)
 
-        with patch("app.services.embeddings.get_client", return_value=mock_client):
+        with patch("app.services.embeddings._api_key", "test-key"), \
+             patch("app.services.embeddings.AsyncOpenAI", return_value=mock_client):
             vectors = await embed_texts(["text1", "text2"])
 
         assert len(vectors) == 2
         assert len(vectors[0]) == 1024
+        mock_client.close.assert_awaited_once()
 
 
 # ── Qdrant Service ────────────────────────────────────────────────────────────
@@ -318,13 +319,14 @@ class TestQdrantUpsert:
             {"chunk_id": str(chunk_ids[1]), "content": "test2"},
         ]
 
-        with patch("app.services.qdrant.get_client", return_value=mock_client):
+        with patch("app.services.qdrant._make_client", return_value=mock_client):
             await upsert_chunks(chunk_ids, vectors, payloads)
 
         mock_client.upsert.assert_awaited_once()
         call_kwargs = mock_client.upsert.call_args.kwargs
         assert call_kwargs["collection_name"] == "curriculum"
         assert len(call_kwargs["points"]) == 2
+        mock_client.close.assert_awaited_once()
 
 
 # ── DB Chunk Insert ───────────────────────────────────────────────────────────
@@ -335,7 +337,7 @@ class TestDbInsertChunks:
     async def test_insert_chunks_calls_executemany(self):
         from app.services.db import insert_chunks
 
-        mock_pool = AsyncMock()
+        mock_conn = AsyncMock()
         chunks = [
             {
                 "id": uuid.uuid4(),
@@ -350,13 +352,14 @@ class TestDbInsertChunks:
             }
         ]
 
-        with patch("app.services.db.get_pool", return_value=mock_pool):
+        with patch("app.services.db._connect", return_value=mock_conn):
             await insert_chunks(chunks)
 
-        mock_pool.executemany.assert_awaited_once()
+        mock_conn.executemany.assert_awaited_once()
+        mock_conn.close.assert_awaited_once()
 
     @pytest.mark.asyncio
     async def test_insert_chunks_empty_list(self):
         from app.services.db import insert_chunks
-        # Should return early without calling the pool
+        # Should return early without connecting
         await insert_chunks([])
