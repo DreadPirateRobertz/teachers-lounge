@@ -1,0 +1,21 @@
+# Development Dockerfile — hot reload via Next.js dev server
+# Used by docker-compose.dev.yml
+FROM node:22-alpine
+WORKDIR /app
+RUN apk add --no-cache libc6-compat
+COPY package.json package-lock.json* ./
+RUN npm ci
+# NEXT_PUBLIC_* vars must be ARGs here too — even in dev mode Next.js compiles
+# them into client bundles during `next dev` startup, so they must be present
+# at build/startup time, not just at runtime.
+ARG NEXT_PUBLIC_API_URL=http://localhost:8080
+ARG NEXT_PUBLIC_TUTORING_URL=http://localhost:8000
+ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
+ENV NEXT_PUBLIC_TUTORING_URL=$NEXT_PUBLIC_TUTORING_URL
+
+# Source is bind-mounted at runtime — no COPY needed
+EXPOSE 3000
+ENV PORT=3000
+ENV HOSTNAME="0.0.0.0"
+ENV NEXT_TELEMETRY_DISABLED=1
+CMD ["npm", "run", "dev"]

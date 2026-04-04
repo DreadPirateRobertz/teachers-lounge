@@ -16,11 +16,11 @@ import (
 )
 
 type UsersHandler struct {
-	store *store.Store
-	cache *cache.Client
+	store store.Storer
+	cache cache.Cacher
 }
 
-func NewUsersHandler(s *store.Store, c *cache.Client) *UsersHandler {
+func NewUsersHandler(s store.Storer, c cache.Cacher) *UsersHandler {
 	return &UsersHandler{store: s, cache: c}
 }
 

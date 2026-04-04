@@ -1,0 +1,34 @@
+## LiteLLM config.yaml mounted into the container.
+## Add or remove models here — restart of the pod picks up the change (ArgoCD handles that).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "ai-gateway.fullname" . }}-config
+  labels:
+    {{- include "ai-gateway.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    model_list:
+      # Primary model — Claude Sonnet
+      - model_name: claude-sonnet
+        litellm_params:
+          model: anthropic/claude-sonnet-4-6
+          api_key: os.environ/ANTHROPIC_API_KEY
+
+      # Fallback — GPT-4o
+      - model_name: gpt-4o
+        litellm_params:
+          model: openai/gpt-4o
+          api_key: os.environ/OPENAI_API_KEY
+
+    router_settings:
+      routing_strategy: latency-based-routing
+      num_retries: 3
+      timeout: 30
+
+    litellm_settings:
+      # Drop unsupported params rather than erroring
+      drop_params: true
+      # Request/response logging — outputs to stdout, picked up by Fluentbit
+      success_callback: []
+      failure_callback: []
