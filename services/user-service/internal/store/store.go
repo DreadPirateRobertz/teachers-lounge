@@ -268,3 +268,224 @@ func (s *Store) CreateExportJob(ctx context.Context, userID uuid.UUID) (uuid.UUI
 	).Scan(&id)
 	return id, err
 }
+
+// ============================================================
+// TEACHER PROFILES
+// ============================================================
+
+func (s *Store) CreateTeacherProfile(ctx context.Context, p CreateTeacherProfileParams) (*models.TeacherProfile, error) {
+	const q = `
+		INSERT INTO teacher_profiles (user_id, school_name, bio)
+		VALUES ($1, $2, $3)
+		RETURNING user_id, school_name, bio, created_at`
+	row := s.pool.QueryRow(ctx, q, p.UserID, p.SchoolName, p.Bio)
+	return scanTeacherProfile(row)
+}
+
+func (s *Store) GetTeacherProfile(ctx context.Context, userID uuid.UUID) (*models.TeacherProfile, error) {
+	const q = `
+		SELECT user_id, school_name, bio, created_at
+		FROM teacher_profiles WHERE user_id = $1`
+	row := s.pool.QueryRow(ctx, q, userID)
+	return scanTeacherProfile(row)
+}
+
+// ============================================================
+// TEACHER CLASSES
+// ============================================================
+
+func (s *Store) CreateClass(ctx context.Context, p CreateClassParams) (*models.TeacherClass, error) {
+	const q = `
+		INSERT INTO teacher_classes (teacher_id, name, subject, description)
+		VALUES ($1, $2, $3, $4)
+		RETURNING id, teacher_id, name, subject, description, created_at, updated_at`
+	row := s.pool.QueryRow(ctx, q, p.TeacherID, p.Name, p.Subject, p.Description)
+	return scanTeacherClass(row)
+}
+
+func (s *Store) GetClass(ctx context.Context, id uuid.UUID) (*models.TeacherClass, error) {
+	const q = `
+		SELECT id, teacher_id, name, subject, description, created_at, updated_at
+		FROM teacher_classes WHERE id = $1`
+	row := s.pool.QueryRow(ctx, q, id)
+	return scanTeacherClass(row)
+}
+
+func (s *Store) ListClasses(ctx context.Context, teacherID uuid.UUID) ([]*models.TeacherClass, error) {
+	const q = `
+		SELECT id, teacher_id, name, subject, description, created_at, updated_at
+		FROM teacher_classes WHERE teacher_id = $1
+		ORDER BY created_at DESC`
+	rows, err := s.pool.Query(ctx, q, teacherID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var classes []*models.TeacherClass
+	for rows.Next() {
+		c, err := scanTeacherClass(rows)
+		if err != nil {
+			return nil, err
+		}
+		classes = append(classes, c)
+	}
+	return classes, rows.Err()
+}
+
+func (s *Store) UpdateClass(ctx context.Context, id uuid.UUID, p UpdateClassParams) (*models.TeacherClass, error) {
+	const q = `
+		UPDATE teacher_classes SET
+			name        = COALESCE($2, name),
+			subject     = COALESCE($3, subject),
+			description = COALESCE($4, description),
+			updated_at  = NOW()
+		WHERE id = $1
+		RETURNING id, teacher_id, name, subject, description, created_at, updated_at`
+	row := s.pool.QueryRow(ctx, q, id, p.Name, p.Subject, p.Description)
+	return scanTeacherClass(row)
+}
+
+func (s *Store) DeleteClass(ctx context.Context, id uuid.UUID) error {
+	_, err := s.pool.Exec(ctx, `DELETE FROM teacher_classes WHERE id = $1`, id)
+	return err
+}
+
+// ============================================================
+// CLASS ENROLLMENT (ROSTER)
+// ============================================================
+
+func (s *Store) AddStudentToClass(ctx context.Context, classID, studentID uuid.UUID) error {
+	const q = `
+		INSERT INTO class_enrollments (class_id, student_id)
+		VALUES ($1, $2)
+		ON CONFLICT (class_id, student_id) DO NOTHING`
+	_, err := s.pool.Exec(ctx, q, classID, studentID)
+	return err
+}
+
+func (s *Store) RemoveStudentFromClass(ctx context.Context, classID, studentID uuid.UUID) error {
+	_, err := s.pool.Exec(ctx,
+		`DELETE FROM class_enrollments WHERE class_id = $1 AND student_id = $2`,
+		classID, studentID,
+	)
+	return err
+}
+
+func (s *Store) ListClassRoster(ctx context.Context, classID uuid.UUID) ([]*models.StudentSummary, error) {
+	const q = `
+		SELECT u.id, u.display_name, u.avatar_emoji, u.email, e.enrolled_at
+		FROM class_enrollments e
+		JOIN users u ON u.id = e.student_id
+		WHERE e.class_id = $1
+		ORDER BY e.enrolled_at ASC`
+	rows, err := s.pool.Query(ctx, q, classID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var roster []*models.StudentSummary
+	for rows.Next() {
+		s := &models.StudentSummary{}
+		if err := rows.Scan(&s.UserID, &s.DisplayName, &s.AvatarEmoji, &s.Email, &s.EnrolledAt); err != nil {
+			return nil, err
+		}
+		roster = append(roster, s)
+	}
+	return roster, rows.Err()
+}
+
+// ============================================================
+// STUDENT PROGRESS
+// ============================================================
+
+func (s *Store) GetStudentProgress(ctx context.Context, studentID uuid.UUID) (*models.StudentProgress, error) {
+	// Student summary
+	user, err := s.GetUserByID(ctx, studentID)
+	if err != nil {
+		return nil, err
+	}
+	progress := &models.StudentProgress{
+		Student: &models.StudentSummary{
+			UserID:      user.ID,
+			DisplayName: user.DisplayName,
+			AvatarEmoji: user.AvatarEmoji,
+			Email:       user.Email,
+		},
+	}
+
+	// Gaming profile
+	var g models.GamingProfileSummary
+	err = s.pool.QueryRow(ctx, `
+		SELECT level, xp, current_streak, longest_streak, bosses_defeated
+		FROM gaming_profiles WHERE user_id = $1`, studentID,
+	).Scan(&g.Level, &g.XP, &g.CurrentStreak, &g.LongestStreak, &g.BossesDefeated)
+	if err == nil {
+		progress.Gaming = &g
+	}
+
+	// Learning profile
+	learning, err := s.GetLearningProfile(ctx, studentID)
+	if err == nil {
+		progress.Learning = learning
+	}
+
+	// Quiz stats
+	var qs models.QuizStats
+	err = s.pool.QueryRow(ctx, `
+		SELECT COUNT(*), COALESCE(SUM(CASE WHEN is_correct THEN 1 ELSE 0 END), 0)
+		FROM quiz_results WHERE user_id = $1`, studentID,
+	).Scan(&qs.TotalQuestions, &qs.CorrectAnswers)
+	if err == nil && qs.TotalQuestions > 0 {
+		qs.AccuracyPct = float64(qs.CorrectAnswers) / float64(qs.TotalQuestions) * 100
+		progress.Quiz = &qs
+	}
+
+	return progress, nil
+}
+
+// ============================================================
+// CLASS MATERIAL ASSIGNMENTS
+// ============================================================
+
+func (s *Store) AssignMaterialToClass(ctx context.Context, p AssignMaterialParams) error {
+	const q = `
+		INSERT INTO class_material_assignments (class_id, material_id, due_date)
+		VALUES ($1, $2, $3)
+		ON CONFLICT (class_id, material_id) DO UPDATE SET due_date = EXCLUDED.due_date`
+	_, err := s.pool.Exec(ctx, q, p.ClassID, p.MaterialID, p.DueDate)
+	return err
+}
+
+func (s *Store) UnassignMaterialFromClass(ctx context.Context, classID, materialID uuid.UUID) error {
+	_, err := s.pool.Exec(ctx,
+		`DELETE FROM class_material_assignments WHERE class_id = $1 AND material_id = $2`,
+		classID, materialID,
+	)
+	return err
+}
+
+func (s *Store) ListClassMaterials(ctx context.Context, classID uuid.UUID) ([]*models.ClassMaterialAssignment, error) {
+	const q = `
+		SELECT a.class_id, a.material_id, m.filename, a.assigned_at, a.due_date
+		FROM class_material_assignments a
+		JOIN materials m ON m.id = a.material_id
+		WHERE a.class_id = $1
+		ORDER BY a.assigned_at DESC`
+	rows, err := s.pool.Query(ctx, q, classID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var assignments []*models.ClassMaterialAssignment
+	for rows.Next() {
+		a := &models.ClassMaterialAssignment{}
+		if err := rows.Scan(&a.ClassID, &a.MaterialID, &a.Filename, &a.AssignedAt, &a.DueDate); err != nil {
+			return nil, err
+		}
+		assignments = append(assignments, a)
+	}
+	return assignments, rows.Err()
+}
