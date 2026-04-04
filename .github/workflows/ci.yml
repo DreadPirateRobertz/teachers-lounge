@@ -12,9 +12,60 @@ on:
 permissions:
   contents: read
 
+# Cancel in-progress runs for the same branch/PR — prevents dependabot bursts
+# from stacking up and burning minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # ── Change detection ─────────────────────────────────────────────────────────
+  # Determines which paths changed so downstream jobs only run when relevant.
+  # On push to main, schedule, or workflow_dispatch every filter is forced true.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      frontend:        ${{ steps.filter.outputs.frontend }}
+      go-services:     ${{ steps.filter.outputs.go-services }}
+      python-services: ${{ steps.filter.outputs.python-services }}
+      docker:          ${{ steps.filter.outputs.docker }}
+      helm:            ${{ steps.filter.outputs.helm }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/ci.yml'
+            go-services:
+              - 'services/user-service/**'
+              - 'services/gaming-service/**'
+              - 'services/notification-service/**'
+              - '.github/workflows/ci.yml'
+            python-services:
+              - 'services/tutoring-service/**'
+              - 'services/ingestion/**'
+              - 'services/search/**'
+              - 'services/analytics-service/**'
+              - '.github/workflows/ci.yml'
+            docker:
+              - 'frontend/Dockerfile'
+              - 'services/*/Dockerfile'
+              - '.github/workflows/ci.yml'
+            helm:
+              - 'infra/helm/**'
+              - '.github/workflows/ci.yml'
+
   # ── Frontend (Next.js) ───────────────────────────────────────────────────────
   frontend:
+    needs: changes
+    if: |
+      needs.changes.outputs.frontend == 'true' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
@@ -43,6 +94,11 @@ jobs:
 
   # ── Go services ─────────────────────────────────────────────────────────────
   go-services:
+    needs: changes
+    if: |
+      needs.changes.outputs.go-services == 'true' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -61,7 +117,7 @@ jobs:
       - uses: actions/setup-go@v5
         if: steps.check.outputs.exists == 'true'
         with:
-          go-version: '1.23'
+          go-version: '1.25'
           cache-dependency-path: services/${{ matrix.service }}/go.sum
       - run: go mod download
         if: steps.check.outputs.exists == 'true'
@@ -76,6 +132,11 @@ jobs:
 
   # ── Python services ──────────────────────────────────────────────────────────
   python-services:
+    needs: changes
+    if: |
+      needs.changes.outputs.python-services == 'true' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -114,7 +175,13 @@ jobs:
         if: steps.check.outputs.exists == 'true'
 
   # ── Docker build check ───────────────────────────────────────────────────────
+  # Only fires when a Dockerfile actually changes — not on every dep bump.
   docker-build:
+    needs: changes
+    if: |
+      needs.changes.outputs.docker == 'true' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
@@ -153,18 +220,26 @@ jobs:
             echo "exists=false" >> "$GITHUB_OUTPUT"
             echo "No Dockerfile yet for ${SVC_NAME} -- skipping"
           fi
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.exists == 'true'
+        uses: docker/setup-buildx-action@v3
       - name: Build Docker image
         if: steps.check.outputs.exists == 'true'
-        env:
-          SVC_PATH: ${{ matrix.svc_path }}
-          SVC_NAME: ${{ matrix.service }}
-        run: |
-          docker build "${SVC_PATH}" \
-            --tag "tl-${SVC_NAME}:ci" \
-            --no-cache
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.svc_path }}
+          push: false
+          tags: tl-${{ matrix.service }}:ci
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
   # ── Helm lint ────────────────────────────────────────────────────────────────
   helm-lint:
+    needs: changes
+    if: |
+      needs.changes.outputs.helm == 'true' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -182,6 +257,7 @@ jobs:
           exit $failed
 
   # ── Security scan ────────────────────────────────────────────────────────────
+  # Always runs on every PR — secrets can appear anywhere.
   security-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -201,6 +277,7 @@ jobs:
         continue-on-error: true
 
   # ── Conflict marker check ────────────────────────────────────────────────────
+  # Always runs — cheap and catches stray conflict markers anywhere.
   conflict-check:
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -230,7 +307,7 @@ jobs:
           node-version: 22
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.25'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'

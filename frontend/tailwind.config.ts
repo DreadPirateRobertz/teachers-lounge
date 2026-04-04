@@ -38,11 +38,18 @@ const config: Config = {
       },
       animation: {
         'pulse-slow': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'bounce-slow': 'bounce 2s infinite',
         'glow-pulse': 'glow-pulse 2s ease-in-out infinite',
         'fade-in': 'fade-in 0.2s ease-out',
         'slide-up': 'slide-up 0.3s ease-out',
+        'confetti': 'confetti 1.2s ease-out forwards',
       },
       keyframes: {
+        'confetti': {
+          '0%': { opacity: '0', transform: 'translate(0, 0) rotate(0deg) scale(0)' },
+          '40%': { opacity: '1', transform: 'translate(var(--tw-translate-x), var(--tw-translate-y)) rotate(180deg) scale(1.2)' },
+          '100%': { opacity: '0', transform: 'translate(var(--tw-translate-x), calc(var(--tw-translate-y) + 40px)) rotate(360deg) scale(0.8)' },
+        },
         'glow-pulse': {
           '0%, 100%': { opacity: '0.8' },
           '50%': { opacity: '1', filter: 'brightness(1.2)' },
