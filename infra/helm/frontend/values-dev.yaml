@@ -1,0 +1,19 @@
+replicaCount: 1
+
+image:
+  tag: dev
+
+ingress:
+  host: app.dev.teacherslounge.app
+
+env:
+  NEXT_PUBLIC_API_URL: "https://api.dev.teacherslounge.app"
+  NODE_ENV: "development"
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 128Mi
+  limits:
+    cpu: 250m
+    memory: 256Mi

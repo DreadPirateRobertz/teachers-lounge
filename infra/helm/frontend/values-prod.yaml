@@ -1,0 +1,7 @@
+replicaCount: 3
+
+image:
+  tag: stable
+
+ingress:
+  host: app.teacherslounge.app

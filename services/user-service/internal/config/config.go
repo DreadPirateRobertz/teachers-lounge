@@ -67,6 +67,10 @@ func Load() (*Config, error) {
 		return nil, fmt.Errorf("invalid TRIAL_DAYS: %w", err)
 	}
 
+	if len(cfg.JWTSecret) < 32 {
+		return nil, fmt.Errorf("JWT_SECRET must be at least 32 characters (got %d)", len(cfg.JWTSecret))
+	}
+
 	return cfg, nil
 }
 
