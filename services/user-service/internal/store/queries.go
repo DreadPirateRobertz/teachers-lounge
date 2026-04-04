@@ -149,3 +149,60 @@ func scanLearningProfile(row scanner) (*models.LearningProfile, error) {
 
 // ErrNotFound is returned when a query finds no rows.
 var ErrNotFound = pgx.ErrNoRows
+
+// ============================================================
+// TEACHER PARAM STRUCTS
+// ============================================================
+
+type CreateTeacherProfileParams struct {
+	UserID     uuid.UUID
+	SchoolName string
+	Bio        string
+}
+
+type CreateClassParams struct {
+	TeacherID   uuid.UUID
+	Name        string
+	Subject     string
+	Description string
+}
+
+type UpdateClassParams struct {
+	Name        *string
+	Subject     *string
+	Description *string
+}
+
+type AssignMaterialParams struct {
+	ClassID    uuid.UUID
+	MaterialID uuid.UUID
+	DueDate    *time.Time
+}
+
+// ============================================================
+// TEACHER SCAN HELPERS
+// ============================================================
+
+func scanTeacherProfile(row scanner) (*models.TeacherProfile, error) {
+	p := &models.TeacherProfile{}
+	err := row.Scan(&p.UserID, &p.SchoolName, &p.Bio, &p.CreatedAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return p, nil
+}
+
+func scanTeacherClass(row scanner) (*models.TeacherClass, error) {
+	c := &models.TeacherClass{}
+	err := row.Scan(&c.ID, &c.TeacherID, &c.Name, &c.Subject, &c.Description, &c.CreatedAt, &c.UpdatedAt)
+	if err != nil {
+		if err == pgx.ErrNoRows {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	return c, nil
+}
