@@ -17,6 +17,11 @@ class Settings(BaseSettings):
     embedding_model: str = "text-embedding-3-small"
     embedding_dim: int = 1536
 
+    # Re-ranking — Cohere rerank-english-v3.0 via AI Gateway (LiteLLM).
+    # Set to empty string to disable re-ranking (falls back to RRF order).
+    rerank_model: str = "rerank-english-v3.0"
+    rerank_top_n: int = 10
+
     default_search_limit: int = 10
     max_search_limit: int = 50
 

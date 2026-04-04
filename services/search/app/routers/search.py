@@ -21,6 +21,10 @@ async def search(
     # must enforce that the requesting user owns course_id before external exposure.
     # Tracked in tl-sui (auth integration milestone).
     course_id: Annotated[uuid.UUID, Query(description="Course to search within")],
+    chapter: Annotated[
+        str | None,
+        Query(max_length=200, description="Filter results to a specific chapter"),
+    ] = None,
     limit: Annotated[
         int,
         Query(ge=1, le=settings.max_search_limit, description="Max results to return"),
@@ -32,10 +36,10 @@ async def search(
     Runs dense (semantic) and sparse (BM25) searches in parallel, then fuses
     them with Reciprocal Rank Fusion (RRF) before returning ranked results.
     """
-    query_vector, dense_results, sparse_results = await _run_search(q, course_id, limit)
+    query_vector, dense_results, sparse_results = await _run_search(q, course_id, limit, chapter)
 
     fused = combine_dense_sparse(dense_results, sparse_results)
-    ranked = rerank(q, fused)
+    ranked = await rerank(q, fused)
 
     return SearchResponse(
         query=q,
@@ -50,6 +54,7 @@ async def _run_search(
     q: str,
     course_id: uuid.UUID,
     limit: int,
+    chapter: str | None = None,
 ) -> tuple[list[float], list, list]:
     """Run embedding, dense search, and sparse search concurrently."""
     import asyncio
@@ -57,10 +62,10 @@ async def _run_search(
     query_vector = await embed_query(q)
 
     dense_task = asyncio.create_task(
-        dense_search(query_vector=query_vector, course_id=course_id, limit=limit)
+        dense_search(query_vector=query_vector, course_id=course_id, limit=limit, chapter=chapter)
     )
     sparse_task = asyncio.create_task(
-        sparse_search(query=q, course_id=course_id, limit=limit)
+        sparse_search(query=q, course_id=course_id, limit=limit, chapter=chapter)
     )
 
     dense_results, sparse_results = await asyncio.gather(dense_task, sparse_task)

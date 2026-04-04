@@ -1,4 +1,4 @@
-"""Tests for hybrid RRF combiner, re-ranker, and full search pipeline."""
+"""Tests for hybrid RRF combiner and full search pipeline."""
 import uuid
 from unittest.mock import AsyncMock, patch
 
@@ -6,7 +6,6 @@ import pytest
 
 from app.models import ChunkResult
 from app.services.hybrid import combine_dense_sparse
-from app.services.reranker import rerank
 
 
 def _chunk(score: float, chunk_id: uuid.UUID | None = None) -> ChunkResult:
@@ -70,9 +69,10 @@ class TestRRFCombiner:
         course_id = uuid.uuid4()
 
         with (
-            patch("app.services.embedder.embed_query", new_callable=AsyncMock, return_value=fixed_vector),
+            patch("app.routers.search.embed_query", new_callable=AsyncMock, return_value=fixed_vector),
             patch("app.routers.search.dense_search", new_callable=AsyncMock, return_value=[]) as mock_dense,
             patch("app.routers.search.sparse_search", new_callable=AsyncMock, return_value=[]),
+            patch("app.routers.search.rerank", new_callable=AsyncMock, side_effect=lambda q, r: r),
         ):
             from fastapi.testclient import TestClient
             from app.main import app
@@ -86,10 +86,25 @@ class TestRRFCombiner:
             )
 
 
-class TestReranker:
-    def test_identity_returns_same_results(self):
-        results = [_chunk(0.9), _chunk(0.8), _chunk(0.7)]
-        assert rerank("entropy", results) == results
+class TestPipelineIntegration:
+    def test_embedding_vector_forwarded_with_chapter(self):
+        """Chapter param must be forwarded to both dense and sparse search."""
+        fixed_vector = [0.1] * 1536
+        course_id = uuid.uuid4()
 
-    def test_empty_input(self):
-        assert rerank("query", []) == []
+        with (
+            patch("app.routers.search.embed_query", new_callable=AsyncMock, return_value=fixed_vector),
+            patch("app.routers.search.dense_search", new_callable=AsyncMock, return_value=[]) as mock_dense,
+            patch("app.routers.search.sparse_search", new_callable=AsyncMock, return_value=[]) as mock_sparse,
+            patch("app.routers.search.rerank", new_callable=AsyncMock, side_effect=lambda q, r: r),
+        ):
+            from fastapi.testclient import TestClient
+            from app.main import app
+
+            with TestClient(app) as client:
+                client.get(f"/v1/search?q=entropy&course_id={course_id}&chapter=Chapter+5")
+
+            _, dense_kwargs = mock_dense.call_args
+            assert dense_kwargs["chapter"] == "Chapter 5"
+            _, sparse_kwargs = mock_sparse.call_args
+            assert sparse_kwargs["chapter"] == "Chapter 5"

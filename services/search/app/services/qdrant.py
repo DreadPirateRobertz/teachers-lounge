@@ -43,27 +43,33 @@ async def close_client() -> None:
         _client = None
 
 
+def _build_filter(course_id: UUID, chapter: str | None = None) -> Filter:
+    """Build a Qdrant filter with required course_id and optional chapter."""
+    conditions = [
+        FieldCondition(key="course_id", match=MatchValue(value=str(course_id))),
+    ]
+    if chapter is not None:
+        conditions.append(
+            FieldCondition(key="chapter", match=MatchValue(value=chapter)),
+        )
+    return Filter(must=conditions)
+
+
 async def dense_search(
     query_vector: list[float],
     course_id: UUID,
     limit: int,
+    chapter: str | None = None,
 ) -> list[ChunkResult]:
-    """Search curriculum collection with dense vector, filtered by course_id."""
+    """Search curriculum collection with dense vector, filtered by course_id and optional chapter."""
     client = get_client()
 
-    course_filter = Filter(
-        must=[
-            FieldCondition(
-                key="course_id",
-                match=MatchValue(value=str(course_id)),
-            )
-        ]
-    )
+    query_filter = _build_filter(course_id, chapter)
 
     hits = await client.search(
         collection_name=settings.curriculum_collection,
         query_vector=("dense", query_vector),
-        query_filter=course_filter,
+        query_filter=query_filter,
         limit=limit,
         with_payload=True,
         with_vectors=False,
@@ -121,8 +127,9 @@ async def sparse_search(
     query: str,
     course_id: UUID,
     limit: int,
+    chapter: str | None = None,
 ) -> list[ChunkResult]:
-    """Search curriculum collection with BM25 sparse vector, filtered by course_id."""
+    """Search curriculum collection with BM25 sparse vector, filtered by course_id and optional chapter."""
     client = get_client()
 
     sparse_tf = _tokenize(query)
@@ -133,14 +140,7 @@ async def sparse_search(
     indices = list(sparse_tf.keys())
     values = [sparse_tf[i] for i in indices]
 
-    course_filter = Filter(
-        must=[
-            FieldCondition(
-                key="course_id",
-                match=MatchValue(value=str(course_id)),
-            )
-        ]
-    )
+    query_filter = _build_filter(course_id, chapter)
 
     hits = await client.search(
         collection_name=settings.curriculum_collection,
@@ -148,7 +148,7 @@ async def sparse_search(
             name="sparse",
             vector=SparseVector(indices=indices, values=values),
         ),
-        query_filter=course_filter,
+        query_filter=query_filter,
         limit=limit,
         with_payload=True,
         with_vectors=False,
