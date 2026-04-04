@@ -41,6 +41,7 @@ async def search(
     fused = combine_dense_sparse(dense_results, sparse_results)
     ranked = await rerank(q, fused)
 
+    search_mode = "hybrid" if sparse_results else "dense"
     return SearchResponse(
         query=q,
         course_id=course_id,

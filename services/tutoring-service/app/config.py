@@ -33,5 +33,11 @@ class Settings(BaseSettings):
     max_history_messages: int = 20
     max_message_length: int = 8000     # chars per student message
 
+    # Search Service — called by the agentic RAG pipeline for curriculum retrieval
+    search_service_url: str = "http://search-service.teachers-lounge.svc.cluster.local:8080"
+
+    # RAG pipeline
+    rag_chunk_limit: int = 8   # max curriculum chunks retrieved per query
+
 
 settings = Settings()
