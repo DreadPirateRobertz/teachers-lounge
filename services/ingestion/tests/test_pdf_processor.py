@@ -1,15 +1,13 @@
 """Tests for PDF processing pipeline: chunking, embedding, Qdrant writes, DB inserts."""
 import uuid
-from unittest.mock import AsyncMock, MagicMock, patch, PropertyMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from app.models import IngestJobMessage, ProcessingStatus
 from app.processors.pdf_processor import (
     _build_hierarchical_chunks,
-    _classify_element,
     _flush_segments,
-    _is_digital_pdf,
     _make_chunk,
     process_pdf,
 )
@@ -54,8 +52,6 @@ class _FakeTable(_FakeElement):
 # Patch isinstance checks — we use duck typing in tests
 def _patch_isinstance():
     """We need to make our fakes pass isinstance checks in the processor."""
-    from app.processors import pdf_processor
-    from unstructured.documents.elements import Title, NarrativeText, Table
     return patch.multiple(
         "app.processors.pdf_processor",
         Title=_FakeTitle,

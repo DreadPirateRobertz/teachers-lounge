@@ -9,8 +9,6 @@ from pdfminer.high_level import extract_text as pdfminer_extract_text
 from unstructured.partition.pdf import partition_pdf
 from unstructured.documents.elements import (
     Title,
-    NarrativeText,
-    ListItem,
     Table,
     FigureCaption,
     Image,
