@@ -67,6 +67,12 @@ func main() {
 		r.Get("/gaming/leaderboard/friends", h.GetFriendLeaderboard)
 		r.Get("/gaming/leaderboard/course/{courseId}", h.GetCourseLeaderboard)
 		r.Get("/gaming/quotes/random", h.RandomQuote)
+
+		// Quiz system
+		r.Post("/gaming/quiz/start", h.StartQuiz)
+		r.Get("/gaming/quiz/sessions/{sessionId}", h.GetQuizSession)
+		r.Post("/gaming/quiz/sessions/{sessionId}/answer", h.SubmitAnswer)
+		r.Get("/gaming/quiz/sessions/{sessionId}/hint", h.GetHint)
 	})
 
 	srv := &http.Server{

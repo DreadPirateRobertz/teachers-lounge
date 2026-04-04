@@ -27,6 +27,15 @@ type Storer interface {
 	LeaderboardGetCourse(ctx context.Context, userID, courseID string) ([]model.LeaderboardEntry, *model.LeaderboardEntry, error)
 	LeaderboardGetFriends(ctx context.Context, userID string, friendIDs []string) ([]model.LeaderboardEntry, *model.LeaderboardEntry, error)
 	RandomQuote(ctx context.Context) (*model.Quote, error)
+
+	// Quiz system
+	GetRandomQuestions(ctx context.Context, topic string, n int) ([]*model.Question, error)
+	GetQuestion(ctx context.Context, questionID string) (*model.Question, error)
+	CreateQuizSession(ctx context.Context, userID string, topic, courseID *string, questionIDs []string) (*model.QuizSession, error)
+	GetQuizSession(ctx context.Context, sessionID string) (*model.QuizSession, error)
+	RecordAnswer(ctx context.Context, sessionID, userID, questionID, chosenKey string, isCorrect bool, hintsUsed, xpEarned int, timeMs *int) (*model.QuizSession, error)
+	GetHintIndex(ctx context.Context, sessionID, questionID string) (int, error)
+	IncrHintIndex(ctx context.Context, sessionID, questionID, userID string) (newIndex, gemsRemaining int, err error)
 }
 
 // Handler holds the store and logger.
