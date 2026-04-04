@@ -160,7 +160,7 @@ jobs:
         id: check
         run: |
           if [ -f requirements.txt ]; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; echo "No requirements.txt for ${{ matrix.service }} -- skipping"; fi
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         if: steps.check.outputs.exists == 'true'
         with:
           python-version: '3.13'
@@ -308,7 +308,7 @@ jobs:
       - uses: actions/setup-go@v5
         with:
           go-version: '1.25'
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.13'
       - name: Run all tests
