@@ -89,8 +89,16 @@ jobs:
         if: steps.check.outputs.exists == 'true'
       - run: npm run build
         if: steps.check.outputs.exists == 'true'
-      - run: npm test -- --passWithNoTests
+      - run: npm test -- --passWithNoTests --coverage --coverageReporters=lcov
         if: steps.check.outputs.exists == 'true'
+      - name: Upload coverage to Codecov
+        if: steps.check.outputs.exists == 'true'
+        uses: codecov/codecov-action@v5
+        with:
+          files: frontend/coverage/lcov.info
+          flags: frontend
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   # ── Go services ─────────────────────────────────────────────────────────────
   go-services:
@@ -127,8 +135,16 @@ jobs:
           if command -v golangci-lint &>/dev/null; then golangci-lint run ./...; fi
         if: steps.check.outputs.exists == 'true'
         continue-on-error: true
-      - run: go test ./... -race -timeout 60s
+      - run: go test ./... -race -timeout 60s -coverprofile=coverage.out -covermode=atomic
         if: steps.check.outputs.exists == 'true'
+      - name: Upload coverage to Codecov
+        if: steps.check.outputs.exists == 'true'
+        uses: codecov/codecov-action@v5
+        with:
+          files: services/${{ matrix.service }}/coverage.out
+          flags: ${{ matrix.service }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   # ── Python services ──────────────────────────────────────────────────────────
   python-services:
@@ -171,8 +187,18 @@ jobs:
         if: steps.check.outputs.exists == 'true'
       - run: ruff check . || true
         if: steps.check.outputs.exists == 'true'
-      - run: pytest --tb=short -q 2>/dev/null || echo "No tests yet"
+      - run: pip install pytest-cov --quiet
         if: steps.check.outputs.exists == 'true'
+      - run: pytest --tb=short -q --cov=app --cov-report=xml:coverage.xml 2>/dev/null || echo "No tests yet"
+        if: steps.check.outputs.exists == 'true'
+      - name: Upload coverage to Codecov
+        if: steps.check.outputs.exists == 'true'
+        uses: codecov/codecov-action@v5
+        with:
+          files: ${{ matrix.svc_path }}/coverage.xml
+          flags: ${{ matrix.service }}
+          token: ${{ secrets.CODECOV_TOKEN }}
+          fail_ci_if_error: false
 
   # ── Docker build check ───────────────────────────────────────────────────────
   # Only fires when a Dockerfile actually changes — not on every dep bump.

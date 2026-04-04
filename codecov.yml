@@ -1,0 +1,26 @@
+coverage:
+  status:
+    project:
+      default:
+        target: 90%
+        threshold: 2%   # allow 2% drop before failing
+        if_not_found: success
+    patch:
+      default:
+        target: 80%     # new code in a PR must be 80% covered
+        threshold: 5%
+        if_not_found: success
+
+comment:
+  layout: "reach,diff,flags,files"
+  behavior: default
+  require_changes: true
+
+ignore:
+  - "**/*_test.go"
+  - "**/test_*.py"
+  - "**/*.test.ts"
+  - "**/migrations/**"
+  - "**/Dockerfile*"
+  - "infra/**"
+  - "docs/**"
