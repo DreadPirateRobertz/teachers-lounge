@@ -45,6 +45,8 @@ class HistoryResponse(BaseModel):
 
 class SSEEvent(BaseModel):
     """Single token/chunk emitted over the SSE stream."""
-    type: str   # "delta" | "done" | "error"
+    type: str   # "delta" | "sources" | "done" | "error"
     content: str = ""
     message_id: str = ""
+    # Populated on "sources" events — list of curriculum chunks used for grounding
+    sources: list[dict] | None = None

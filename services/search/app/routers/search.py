@@ -1,13 +1,13 @@
 import uuid
 from typing import Annotated
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Query
 
 from app.config import settings
 from app.models import SearchResponse
 from app.services.embedder import embed_query
 from app.services.hybrid import combine_dense_sparse
-from app.services.qdrant import dense_search
+from app.services.qdrant import dense_search, sparse_search
 from app.services.reranker import rerank
 
 router = APIRouter(prefix="/v1", tags=["search"])
@@ -29,26 +29,43 @@ async def search(
     """
     Hybrid search over the curriculum collection for a given course.
 
-    Currently performs dense vector search only (random stub embeddings).
-    Phase 2 full implementation: real embeddings + BM25 sparse + RRF fusion + re-ranking.
+    Performs dense semantic search (OpenAI text-embedding-3-large) and, when
+    BM25 sparse vectors are indexed, adds keyword search with RRF fusion.
+    Falls back gracefully to dense-only when sparse vectors are not available.
     """
-    query_vector = await embed_query(q)
+    fetch_limit = max(limit, settings.sparse_rerank_limit)
+
+    query_vector, sparse_results = await _embed_and_sparse(q, course_id, fetch_limit)
 
     dense_results = await dense_search(
         query_vector=query_vector,
         course_id=course_id,
-        limit=limit,
+        limit=fetch_limit,
     )
 
-    # Sparse search not wired yet — pass empty list
-    fused = combine_dense_sparse(dense_results, sparse_results=[])
-
+    fused = combine_dense_sparse(dense_results, sparse_results)
     ranked = rerank(q, fused)
+    final = ranked[:limit]
 
+    search_mode = "hybrid" if sparse_results else "dense"
     return SearchResponse(
         query=q,
         course_id=course_id,
-        results=ranked[:limit],
-        total=len(ranked),
-        search_mode="dense",
+        results=final,
+        total=len(final),
+        search_mode=search_mode,
     )
+
+
+async def _embed_and_sparse(
+    query: str,
+    course_id: uuid.UUID,
+    limit: int,
+) -> tuple[list[float], list]:
+    """Run embedding and sparse search concurrently."""
+    import asyncio
+    query_vector, sparse_results = await asyncio.gather(
+        embed_query(query),
+        sparse_search(query=query, course_id=course_id, limit=limit),
+    )
+    return query_vector, sparse_results

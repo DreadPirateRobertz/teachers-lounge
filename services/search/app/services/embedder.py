@@ -1,23 +1,67 @@
 """
-Embedding stub — returns a random unit vector.
+Embedder — wraps OpenAI text-embedding-3-large API (Phase 2).
 
-Phase 2 full implementation will call the OpenAI text-embedding-3-large API
-(dimensions=1024) with Redis caching on the query text. See
-docs/embedding-model-decision.md for rationale.
+Phase 2: OpenAI API with in-process LRU cache for repeated queries.
+Phase 4+: migrate to self-hosted e5-large-v2. See docs/embedding-model-decision.md.
+
+When OPENAI_API_KEY is not set (dev/test without API access), falls back to a
+random 1024-d unit vector so the service still boots and existing tests pass.
 """
+import hashlib
+import logging
 import math
 import random
 
 from app.config import settings
 
+logger = logging.getLogger(__name__)
+
+_openai_client = None  # lazily initialised to avoid import-time cost
+_cache: dict[str, list[float]] = {}
+_CACHE_MAX = 2048
+
+
+def _get_openai_client():
+    global _openai_client
+    if _openai_client is None:
+        from openai import AsyncOpenAI  # import here so tests can run without the package
+        _openai_client = AsyncOpenAI(api_key=settings.openai_api_key)
+    return _openai_client
+
+
+def _random_unit_vector(dim: int) -> list[float]:
+    raw = [random.gauss(0, 1) for _ in range(dim)]
+    norm = math.sqrt(sum(x * x for x in raw))
+    return [x / norm for x in raw]
+
 
 async def embed_query(query: str) -> list[float]:
     """
-    Return a random 1024-dim unit vector. Stub only.
+    Embed query text into a 1024-d unit vector.
 
-    Async signature matches Phase 2 implementation (OpenAI API call with
-    Redis cache). Callers must await this function.
+    Uses OpenAI text-embedding-3-large when OPENAI_API_KEY is configured.
+    Falls back to a random unit vector for local dev / CI without API access.
+    Results are cached in-process (up to _CACHE_MAX entries) to avoid
+    redundant API calls for repeated questions.
     """
-    raw = [random.gauss(0, 1) for _ in range(settings.embedding_dim)]
-    norm = math.sqrt(sum(x * x for x in raw))
-    return [x / norm for x in raw]
+    if settings.openai_api_key is None:
+        logger.debug("No OPENAI_API_KEY — using random stub embedding for query")
+        return _random_unit_vector(settings.embedding_dim)
+
+    cache_key = hashlib.md5(query.encode()).hexdigest()
+    if cache_key in _cache:
+        return _cache[cache_key]
+
+    client = _get_openai_client()
+    response = await client.embeddings.create(
+        model=settings.openai_embedding_model,
+        input=[query],
+        dimensions=settings.embedding_dim,
+    )
+    vec = response.data[0].embedding
+
+    if len(_cache) >= _CACHE_MAX:
+        # Evict the oldest entry (insertion-ordered dict, Python 3.7+)
+        del _cache[next(iter(_cache))]
+    _cache[cache_key] = vec
+    return vec

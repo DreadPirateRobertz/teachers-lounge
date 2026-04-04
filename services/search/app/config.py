@@ -14,5 +14,12 @@ class Settings(BaseSettings):
     default_search_limit: int = 10
     max_search_limit: int = 50
 
+    # OpenAI embeddings (Phase 2). When None, falls back to random unit vector stub.
+    openai_api_key: str | None = None
+    openai_embedding_model: str = "text-embedding-3-large"
+
+    # Number of candidates fetched per signal before RRF fusion + final limit
+    sparse_rerank_limit: int = 20
+
 
 settings = Settings()

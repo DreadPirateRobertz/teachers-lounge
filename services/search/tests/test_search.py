@@ -1,5 +1,4 @@
-"""Tests for the search endpoint: query validation and result schema."""
-import math
+"""Tests for the search endpoint: query validation, result schema, and hybrid mode."""
 import uuid
 from unittest.mock import AsyncMock, patch
 
@@ -34,6 +33,10 @@ def _make_chunk(**kwargs) -> ChunkResult:
     return ChunkResult(**defaults)
 
 
+# Shared mock for sparse_search — returns empty by default (dense-only mode)
+_no_sparse = patch("app.routers.search.sparse_search", new_callable=AsyncMock, return_value=[])
+
+
 class TestQueryValidation:
     def test_empty_query_rejected(self, client):
         resp = client.get(f"/v1/search?q=&course_id={COURSE_ID}")
@@ -60,21 +63,18 @@ class TestQueryValidation:
         assert resp.status_code == 422
 
     @patch("app.routers.search.dense_search", new_callable=AsyncMock, return_value=[])
-    def test_valid_request_accepted(self, mock_search, client):
+    @_no_sparse
+    def test_valid_request_accepted(self, mock_sparse, mock_dense, client):
         resp = client.get(f"/v1/search?q=what+is+entropy&course_id={COURSE_ID}")
         assert resp.status_code == 200
 
     @patch("app.routers.search.dense_search", new_callable=AsyncMock, return_value=[])
-    def test_default_limit_applied(self, mock_search, client):
-        client.get(f"/v1/search?q=entropy&course_id={COURSE_ID}")
-        _, kwargs = mock_search.call_args
-        assert kwargs["limit"] == 10
-
-    @patch("app.routers.search.dense_search", new_callable=AsyncMock, return_value=[])
-    def test_custom_limit_passed_through(self, mock_search, client):
-        client.get(f"/v1/search?q=entropy&course_id={COURSE_ID}&limit=5")
-        _, kwargs = mock_search.call_args
-        assert kwargs["limit"] == 5
+    @_no_sparse
+    def test_course_id_forwarded_to_dense_search(self, mock_sparse, mock_dense, client):
+        cid = uuid.uuid4()
+        client.get(f"/v1/search?q=entropy&course_id={cid}")
+        _, kwargs = mock_dense.call_args
+        assert kwargs["course_id"] == cid
 
 
 class TestResultSchema:
@@ -86,7 +86,8 @@ class TestResultSchema:
             _make_chunk(score=0.80),
         ],
     )
-    def test_response_shape(self, mock_search, client):
+    @_no_sparse
+    def test_response_shape(self, mock_sparse, mock_dense, client):
         resp = client.get(f"/v1/search?q=entropy&course_id={COURSE_ID}")
         assert resp.status_code == 200
         body = resp.json()
@@ -94,6 +95,7 @@ class TestResultSchema:
         assert str(body["course_id"]) == str(COURSE_ID)
         assert body["total"] == 2
         assert len(body["results"]) == 2
+        # sparse is empty → dense-only mode
         assert body["search_mode"] == "dense"
 
     @patch(
@@ -101,7 +103,8 @@ class TestResultSchema:
         new_callable=AsyncMock,
         return_value=[_make_chunk(score=0.9)],
     )
-    def test_result_fields_present(self, mock_search, client):
+    @_no_sparse
+    def test_result_fields_present(self, mock_sparse, mock_dense, client):
         resp = client.get(f"/v1/search?q=entropy&course_id={COURSE_ID}")
         result = resp.json()["results"][0]
         assert "chunk_id" in result
@@ -112,7 +115,8 @@ class TestResultSchema:
         assert "content_type" in result
 
     @patch("app.routers.search.dense_search", new_callable=AsyncMock, return_value=[])
-    def test_empty_results_valid(self, mock_search, client):
+    @_no_sparse
+    def test_empty_results_valid(self, mock_sparse, mock_dense, client):
         resp = client.get(f"/v1/search?q=entropy&course_id={COURSE_ID}")
         body = resp.json()
         assert body["results"] == []
@@ -123,15 +127,39 @@ class TestResultSchema:
         new_callable=AsyncMock,
         return_value=[_make_chunk(score=s / 10) for s in range(20, 0, -1)],
     )
-    def test_limit_caps_results(self, mock_search, client):
+    @_no_sparse
+    def test_limit_caps_results(self, mock_sparse, mock_dense, client):
         resp = client.get(f"/v1/search?q=entropy&course_id={COURSE_ID}&limit=5")
         assert len(resp.json()["results"]) == 5
 
 
+class TestHybridSearchMode:
+    @patch("app.routers.search.dense_search", new_callable=AsyncMock)
+    @patch("app.routers.search.sparse_search", new_callable=AsyncMock)
+    def test_hybrid_mode_when_sparse_returns_results(
+        self, mock_sparse, mock_dense, client
+    ):
+        """search_mode is 'hybrid' when sparse search returns results."""
+        chunk = _make_chunk(score=0.9)
+        mock_dense.return_value = [chunk]
+        mock_sparse.return_value = [chunk]
+
+        resp = client.get(f"/v1/search?q=entropy&course_id={COURSE_ID}")
+        assert resp.json()["search_mode"] == "hybrid"
+
+    @patch("app.routers.search.dense_search", new_callable=AsyncMock, return_value=[])
+    @_no_sparse
+    def test_dense_mode_when_sparse_empty(self, mock_sparse, mock_dense, client):
+        """search_mode is 'dense' when sparse returns nothing (not yet indexed)."""
+        resp = client.get(f"/v1/search?q=entropy&course_id={COURSE_ID}")
+        assert resp.json()["search_mode"] == "dense"
+
+
 class TestCourseIdFiltering:
     @patch("app.routers.search.dense_search", new_callable=AsyncMock, return_value=[])
-    def test_course_id_forwarded_to_qdrant(self, mock_search, client):
+    @_no_sparse
+    def test_course_id_forwarded_to_qdrant(self, mock_sparse, mock_dense, client):
         cid = uuid.uuid4()
         client.get(f"/v1/search?q=entropy&course_id={cid}")
-        _, kwargs = mock_search.call_args
+        _, kwargs = mock_dense.call_args
         assert kwargs["course_id"] == cid
