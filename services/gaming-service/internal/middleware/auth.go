@@ -49,6 +49,12 @@ func UserIDFromContext(ctx context.Context) string {
 	return v
 }
 
+// WithUserID returns a copy of ctx with userID stored under the middleware's
+// user-ID key. Use only in tests to bypass JWT authentication.
+func WithUserID(ctx context.Context, userID string) context.Context {
+	return context.WithValue(ctx, ctxKeyUserID{}, userID)
+}
+
 func extractBearer(r *http.Request) string {
 	h := r.Header.Get("Authorization")
 	if h == "" {

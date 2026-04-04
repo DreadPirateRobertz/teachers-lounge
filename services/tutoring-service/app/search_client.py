@@ -1,5 +1,4 @@
-"""
-HTTP client for the Search Service.
+"""HTTP client for the Search Service.
 
 Calls GET /v1/search with the student's question and course_id, returning
 grounding chunks for the agentic RAG pipeline. All network errors are caught
@@ -18,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 class SearchResult(BaseModel):
+    """A single curriculum chunk returned by the Search Service."""
+
     chunk_id: str
     material_id: str
     course_id: str
@@ -34,11 +35,18 @@ async def fetch_curriculum_chunks(
     course_id: UUID,
     limit: int = 8,
 ) -> list[SearchResult]:
-    """
-    Retrieve curriculum chunks from the Search Service for the given query.
+    """Retrieve curriculum chunks from the Search Service for the given query.
 
     Returns an empty list on any error so the tutoring service degrades
     gracefully to non-grounded mode rather than failing outright.
+
+    Args:
+        query: The student's question.
+        course_id: Scopes results to the student's enrolled course.
+        limit: Maximum number of chunks to return.
+
+    Returns:
+        Ordered list of SearchResult objects, or [] on any error.
     """
     try:
         async with httpx.AsyncClient(timeout=5.0) as client:

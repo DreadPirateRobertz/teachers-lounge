@@ -28,7 +28,7 @@ import time
 import uuid
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from openai import APIConnectionError, APIStatusError, APITimeoutError
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -40,6 +40,8 @@ from .gateway import get_gateway_client
 from .history import append_message, get_history, get_session
 from .models import MessageRequest
 from .rag_agent import PROFESSOR_NOVA_SYSTEM_PROMPT, build_rag_context
+from .style_detector import DEFAULT_DIALS, build_style_prompt_section, detect_signals, update_dials
+from .user_client import UserServiceClient
 
 logger = logging.getLogger(__name__)
 
@@ -53,6 +55,14 @@ FALLBACK_MESSAGE = (
 
 
 def _history_to_messages(interactions) -> list[dict]:
+    """Convert ORM Interaction rows to OpenAI-style message dicts.
+
+    Args:
+        interactions: Ordered list of Interaction ORM objects.
+
+    Returns:
+        List of {"role": ..., "content": ...} dicts ready for the chat API.
+    """
     return [
         {"role": "user" if i.role == "student" else "assistant", "content": i.content}
         for i in interactions
@@ -60,6 +70,17 @@ def _history_to_messages(interactions) -> list[dict]:
 
 
 def _sse(event_type: str, content: str = "", message_id: str = "", sources=None) -> str:
+    """Serialise a single SSE frame.
+
+    Args:
+        event_type: One of ``"delta"``, ``"sources"``, ``"done"``, ``"error"``.
+        content: Token text for delta events; empty string for others.
+        message_id: UUID string of the tutor turn being streamed.
+        sources: List of source dicts; included only on ``"sources"`` events.
+
+    Returns:
+        SSE-formatted string ready to ``yield`` from the stream generator.
+    """
     payload: dict = {"type": event_type, "content": content, "message_id": message_id}
     if sources is not None:
         payload["sources"] = sources
@@ -70,6 +91,7 @@ def _sse(event_type: str, content: str = "", message_id: str = "", sources=None)
 async def send_message(
     session_id: UUID,
     body: MessageRequest,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: JWTClaims = Depends(require_auth),
 ):
@@ -84,12 +106,20 @@ async def send_message(
     history = await get_history(db, session_id, limit=settings.max_history_messages)
 
     # Persist student message before streaming — durable even if stream fails
-    await append_message(db, session_id, user.user_id, role="student", content=body.content)
+    student_message = body.content
+    await append_message(db, session_id, user.user_id, role="student", content=student_message)
 
-    # --- Build system prompt + retrieve grounding chunks ---
+    # --- Step 1: Fetch student's current learning-style dials (non-fatal) ---
+    raw_token = (request.headers.get("Authorization") or "").removeprefix("Bearer ").strip()
+    user_client = UserServiceClient(base_url=settings.user_service_url, bearer_token=raw_token)
+    current_dials = await user_client.get_felder_silverman_dials(user.user_id)
+    if not current_dials:
+        current_dials = dict(DEFAULT_DIALS)
+
+    # --- Step 2: Build system prompt + retrieve grounding chunks ---
     source_chunks = []
     if session.course_id is not None:
-        system_prompt, source_chunks = await build_rag_context(
+        base_prompt, source_chunks = await build_rag_context(
             student_id=user.user_id,
             session_id=session_id,
             question=body.content,
@@ -97,7 +127,10 @@ async def send_message(
             db=db,
         )
     else:
-        system_prompt = PROFESSOR_NOVA_SYSTEM_PROMPT
+        base_prompt = PROFESSOR_NOVA_SYSTEM_PROMPT
+
+    # Step 3: Append style guidance to the system prompt
+    system_prompt = base_prompt + build_style_prompt_section(current_dials)
 
     messages = [
         {"role": "system", "content": system_prompt},
@@ -124,6 +157,7 @@ async def send_message(
     async def stream_generator():
         full_response: list[str] = []
         start_ms = int(time.time() * 1000)
+        succeeded = False
 
         try:
             stream = await client.chat.completions.create(
@@ -150,11 +184,20 @@ async def send_message(
                 content=complete_text,
                 response_time_ms=elapsed_ms,
             )
+            succeeded = True
 
             if sources_payload:
                 yield _sse("sources", message_id=tutor_msg_id, sources=sources_payload)
 
             yield _sse("done", message_id=tutor_msg_id)
+
+            # --- Step 4: Update dials from this message's signals (post-stream) ---
+            signals = detect_signals(student_message)
+            if signals:
+                updated_dials = update_dials(current_dials, signals)
+                ok = await user_client.patch_felder_silverman_dials(user.user_id, updated_dials)
+                if not ok:
+                    logger.warning("Failed to persist learning-style dials for user %s", user.user_id)
 
         except (APIConnectionError, APITimeoutError) as exc:
             logger.warning("AI Gateway unreachable: %s", exc)
