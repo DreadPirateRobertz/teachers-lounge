@@ -186,6 +186,10 @@ func (m *mockStore) UpdateSubscription(_ context.Context, _ store.UpdateSubscrip
 	return nil
 }
 
+func (m *mockStore) UpdateSubscriptionByUserID(_ context.Context, _ uuid.UUID, _ store.UpdateSubscriptionParams) error {
+	return nil
+}
+
 func (m *mockStore) WriteAuditLog(_ context.Context, _ store.AuditLogParams) error { return nil }
 func (m *mockStore) CreateExportJob(_ context.Context, _ uuid.UUID) (uuid.UUID, error) {
 	return uuid.New(), nil
