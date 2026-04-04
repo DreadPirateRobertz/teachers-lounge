@@ -64,6 +64,8 @@ func main() {
 		r.Post("/gaming/streak/checkin", h.StreakCheckin)
 		r.Post("/gaming/leaderboard/update", h.LeaderboardUpdate)
 		r.Get("/gaming/leaderboard", h.GetLeaderboard)
+		r.Get("/gaming/leaderboard/friends", h.GetFriendLeaderboard)
+		r.Get("/gaming/leaderboard/course/{courseId}", h.GetCourseLeaderboard)
 		r.Get("/gaming/quotes/random", h.RandomQuote)
 	})
 

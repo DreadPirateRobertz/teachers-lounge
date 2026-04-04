@@ -44,10 +44,19 @@ type StreakCheckinResponse struct {
 	Reset         bool `json:"reset"`
 }
 
+// Leaderboard period constants for GET /gaming/leaderboard?period=
+const (
+	PeriodAllTime = "all_time"
+	PeriodWeekly  = "weekly"
+	PeriodMonthly = "monthly"
+)
+
 // LeaderboardUpdateRequest is the request body for POST /gaming/leaderboard/update.
+// CourseID is optional; when set the score is also recorded on the course-scoped board.
 type LeaderboardUpdateRequest struct {
-	UserID string `json:"user_id"`
-	XP     int64  `json:"xp"`
+	UserID   string `json:"user_id"`
+	XP       int64  `json:"xp"`
+	CourseID string `json:"course_id,omitempty"`
 }
 
 // LeaderboardEntry is one row in the leaderboard response.
@@ -57,9 +66,15 @@ type LeaderboardEntry struct {
 	Rank   int64   `json:"rank"`
 }
 
-// LeaderboardResponse is the response body for GET /gaming/leaderboard.
+// LeaderboardResponse is the response body for GET /gaming/leaderboard (all variants).
 type LeaderboardResponse struct {
 	Top10    []LeaderboardEntry `json:"top_10"`
+	UserRank *LeaderboardEntry  `json:"user_rank,omitempty"`
+}
+
+// FriendLeaderboardResponse is the response body for GET /gaming/leaderboard/friends.
+type FriendLeaderboardResponse struct {
+	Friends  []LeaderboardEntry `json:"friends"`
 	UserRank *LeaderboardEntry  `json:"user_rank,omitempty"`
 }
 
