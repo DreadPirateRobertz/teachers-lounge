@@ -66,6 +66,7 @@ func main() {
 	// ── Handlers ─────────────────────────────────────────────
 	authH := handlers.NewAuthHandler(db, redisClient, jwtManager, billingClient, cfg)
 	usersH := handlers.NewUsersHandler(db, redisClient)
+	subsH := handlers.NewSubscriptionsHandler(db, billingClient)
 	webhookH := handlers.NewWebhookHandler(billingClient)
 
 	// ── Router ───────────────────────────────────────────────
@@ -104,6 +105,10 @@ func main() {
 		r.Patch("/preferences", usersH.UpdatePreferences)
 		r.Post("/export", usersH.ExportData)
 		r.Delete("", usersH.DeleteAccount)
+
+		r.Get("/subscription", subsH.GetSubscription)
+		r.Post("/subscription/cancel", subsH.CancelSubscription)
+		r.Post("/subscription/reactivate", subsH.ReactivateSubscription)
 	})
 
 	// ── Server ───────────────────────────────────────────────
