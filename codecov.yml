@@ -16,6 +16,15 @@ comment:
   behavior: default
   require_changes: true
 
+notify:
+  # Disable all email notifications from Codecov
+  # Account-level notifications must also be disabled on codecov.io
+  after_n_builds: 1
+  wait_for_ci: true
+
+github_checks:
+  annotations: false
+
 ignore:
   - "**/*_test.go"
   - "**/test_*.py"
