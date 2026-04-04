@@ -105,29 +105,79 @@ export default function MaterialsSidebar() {
           </div>
         </div>
 
-        {/* Power-ups preview */}
+        {/* Power-ups inventory */}
         <div className="mt-5">
-          <div className="text-[10px] font-bold text-text-dim uppercase tracking-wider mb-3">
-            Power-ups
+          <div className="flex items-center justify-between mb-3">
+            <div className="text-[10px] font-bold text-text-dim uppercase tracking-wider">
+              Power-ups
+            </div>
+            <div className="flex items-center gap-1 text-[10px] text-neon-pink font-mono">
+              <span className="animate-gem-sparkle inline-block">💎</span>
+              <span>450</span>
+            </div>
           </div>
-          <div className="flex flex-col gap-1.5">
+          <div className="flex flex-col gap-2">
             {POWERUPS.map((p) => (
-              <div key={p.name} className="flex items-center gap-2 bg-bg-card border border-border-dim rounded p-2">
-                <span className="text-lg leading-none">{p.icon}</span>
-                <div className="flex-1 min-w-0">
-                  <div className="text-xs text-text-base font-medium">{p.name}</div>
-                  <div className="text-[10px] text-text-dim">{p.desc}</div>
-                </div>
-                <div className="flex flex-col items-end flex-shrink-0">
-                  <span className="font-mono text-[10px] text-neon-pink">💎{p.cost}</span>
-                  <span className="font-mono text-[10px] text-text-dim">×{p.owned}</span>
-                </div>
-              </div>
+              <PowerUpItem key={p.name} powerup={p} />
             ))}
           </div>
         </div>
       </div>
     </aside>
+  )
+}
+
+function PowerUpItem({ powerup }: { powerup: typeof POWERUPS[0] }) {
+  const hasOwned = powerup.owned > 0
+  return (
+    <div
+      className={`rounded-lg border p-2 transition-colors ${
+        hasOwned
+          ? 'bg-bg-card border-border-mid hover:border-neon-green/40'
+          : 'bg-bg-card border-border-dim opacity-70'
+      }`}
+      style={hasOwned ? { boxShadow: 'inset 0 0 12px #00ff8808' } : undefined}
+    >
+      <div className="flex items-start gap-2">
+        {/* Icon with owned indicator */}
+        <div className="relative flex-shrink-0">
+          <span className="text-xl leading-none">{powerup.icon}</span>
+          {hasOwned && (
+            <span
+              className="absolute -top-1 -right-1 w-3.5 h-3.5 rounded-full bg-neon-green text-bg-deep font-mono font-black text-[8px] flex items-center justify-center animate-owned-pulse"
+            >
+              {powerup.owned}
+            </span>
+          )}
+        </div>
+
+        {/* Name + desc */}
+        <div className="flex-1 min-w-0">
+          <div className={`text-xs font-medium ${hasOwned ? 'text-text-bright' : 'text-text-base'}`}>
+            {powerup.name}
+          </div>
+          <div className="text-[10px] text-text-dim leading-tight">{powerup.desc}</div>
+        </div>
+
+        {/* Cost / use button */}
+        <div className="flex-shrink-0 flex flex-col items-end gap-1">
+          {hasOwned ? (
+            <button
+              className="text-[10px] font-mono font-bold text-neon-green border border-neon-green/30 rounded px-1.5 py-0.5 hover:bg-neon-green/10 transition-colors"
+            >
+              USE
+            </button>
+          ) : (
+            <button
+              className="text-[10px] font-mono font-bold text-neon-pink border border-neon-pink/30 rounded px-1.5 py-0.5 hover:bg-neon-pink/10 transition-colors"
+            >
+              BUY
+            </button>
+          )}
+          <span className="font-mono text-[9px] text-text-dim">💎{powerup.cost}</span>
+        </div>
+      </div>
+    </div>
   )
 }
 
