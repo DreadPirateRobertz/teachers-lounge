@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Install system deps (minimal)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev \
+    libpq-dev gcc python3-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
