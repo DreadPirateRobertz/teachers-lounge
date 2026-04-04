@@ -17,6 +17,7 @@ import (
 
 	"github.com/teacherslounge/gaming-service/internal/handler"
 	"github.com/teacherslounge/gaming-service/internal/middleware"
+	"github.com/teacherslounge/gaming-service/internal/rival"
 	"github.com/teacherslounge/gaming-service/internal/store"
 )
 
@@ -46,6 +47,13 @@ func main() {
 
 	st := store.New(pool, rdb)
 	h := handler.New(st, logger)
+
+	// Seed simulated rivals into the leaderboard (idempotent — ZAddNX).
+	if err := st.SeedRivals(context.Background(), rival.Roster); err != nil {
+		logger.Warn("seed rivals", zap.Error(err))
+	}
+	// Tick rivals daily so they stay competitive over time.
+	go tickRivalsDaily(st, logger)
 
 	r := chi.NewRouter()
 	r.Use(chimw.RequestID)
@@ -147,4 +155,18 @@ func requireEnv(key string) string {
 		panic(fmt.Sprintf("required environment variable %q is not set", key))
 	}
 	return v
+}
+
+// tickRivalsDaily advances all rival XP scores once every 24 hours.
+// It runs as a background goroutine for the lifetime of the process.
+func tickRivalsDaily(st *store.Store, logger *zap.Logger) {
+	ticker := time.NewTicker(24 * time.Hour)
+	defer ticker.Stop()
+	for range ticker.C {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		if err := st.TickRivals(ctx, rival.Roster); err != nil {
+			logger.Warn("tick rivals", zap.Error(err))
+		}
+		cancel()
+	}
 }

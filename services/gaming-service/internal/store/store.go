@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"sort"
 	"time"
 
@@ -11,6 +12,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/teacherslounge/gaming-service/internal/model"
 	"github.com/teacherslounge/gaming-service/internal/quest"
+	"github.com/teacherslounge/gaming-service/internal/rival"
 	"github.com/teacherslounge/gaming-service/internal/xp"
 )
 
@@ -165,10 +167,12 @@ func (s *Store) leaderboardTopN(ctx context.Context, key, userID string, n int) 
 
 	entries := make([]model.LeaderboardEntry, len(members))
 	for i, m := range members {
+		uid := m.Member.(string)
 		entries[i] = model.LeaderboardEntry{
-			UserID: m.Member.(string),
-			XP:     m.Score,
-			Rank:   int64(i + 1),
+			UserID:  uid,
+			XP:      m.Score,
+			Rank:    int64(i + 1),
+			IsRival: rival.IsRival(uid),
 		}
 	}
 
@@ -178,9 +182,10 @@ func (s *Store) leaderboardTopN(ctx context.Context, key, userID string, n int) 
 		if err == nil {
 			score, _ := s.rdb.ZScore(ctx, key, userID).Result()
 			userEntry = &model.LeaderboardEntry{
-				UserID: userID,
-				XP:     score,
-				Rank:   rank + 1,
+				UserID:  userID,
+				XP:      score,
+				Rank:    rank + 1,
+				IsRival: rival.IsRival(userID),
 			}
 		}
 	}
@@ -403,6 +408,39 @@ func (s *Store) UpdateQuestProgress(ctx context.Context, userID string, action s
 		return nil, 0, 0, err
 	}
 	return states, totalXP, totalGems, nil
+}
+
+// SeedRivals inserts each rival into the global leaderboard at its BaseXP using
+// ZAddNX (add-if-not-exists), so existing scores accumulated since the last
+// restart are preserved across service restarts.
+func (s *Store) SeedRivals(ctx context.Context, rivals []rival.Rival) error {
+	if len(rivals) == 0 {
+		return nil
+	}
+	zs := make([]redis.Z, len(rivals))
+	for i, r := range rivals {
+		zs[i] = redis.Z{Score: float64(r.BaseXP), Member: r.ID}
+	}
+	if err := s.rdb.ZAddNX(ctx, leaderboardKey, zs...).Err(); err != nil {
+		return fmt.Errorf("seed rivals: %w", err)
+	}
+	return nil
+}
+
+// TickRivals advances each rival's global leaderboard score by a random amount
+// in [DailyGainMin, DailyGainMax], simulating a day of study activity.
+// It is safe to call multiple times; each call applies one independent increment.
+func (s *Store) TickRivals(ctx context.Context, rivals []rival.Rival) error {
+	pipe := s.rdb.Pipeline()
+	for _, r := range rivals {
+		spread := r.DailyGainMax - r.DailyGainMin
+		gain := r.DailyGainMin + rand.Intn(spread+1)
+		pipe.ZIncrBy(ctx, leaderboardKey, float64(gain), r.ID)
+	}
+	if _, err := pipe.Exec(ctx); err != nil {
+		return fmt.Errorf("tick rivals: %w", err)
+	}
+	return nil
 }
 
 // AwardQuestRewards adds xpDelta XP and gemsDelta gems to a user's profile,
