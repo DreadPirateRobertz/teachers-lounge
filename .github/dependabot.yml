@@ -1,9 +1,10 @@
 version: 2
 updates:
   - package-ecosystem: npm
-    directory: /services/frontend
+    directory: /frontend
     schedule:
       interval: weekly
+      day: monday
     open-pull-requests-limit: 5
     labels: [dependencies, frontend]
 
@@ -11,34 +12,46 @@ updates:
     directory: /services/user-service
     schedule:
       interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
     labels: [dependencies, user-service]
 
   - package-ecosystem: gomod
     directory: /services/gaming-service
     schedule:
       interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
     labels: [dependencies, gaming-service]
 
   - package-ecosystem: pip
     directory: /services/tutoring-service
     schedule:
       interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
     labels: [dependencies, tutoring-service]
 
   - package-ecosystem: pip
-    directory: /services/ingestion-service
+    directory: /services/ingestion
     schedule:
       interval: weekly
-    labels: [dependencies, ingestion-service]
+      day: monday
+    open-pull-requests-limit: 5
+    labels: [dependencies, ingestion]
 
   - package-ecosystem: pip
-    directory: /services/search-service
+    directory: /services/search
     schedule:
       interval: weekly
-    labels: [dependencies, search-service]
+      day: monday
+    open-pull-requests-limit: 5
+    labels: [dependencies, search]
 
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+      day: monday
+    open-pull-requests-limit: 5
     labels: [dependencies, ci]

@@ -1,0 +1,9 @@
+replicaCount: 3
+image:
+  tag: stable
+env:
+  AI_GATEWAY_URL: "http://ai-gateway.prod.svc.cluster.local:4000"
+  USER_SERVICE_URL: "http://user-service.prod.svc.cluster.local:8080"
+  DB_HOST: "postgres.prod.svc.cluster.local"
+  REDIS_HOST: "redis.prod.svc.cluster.local"
+  LOG_LEVEL: "warn"

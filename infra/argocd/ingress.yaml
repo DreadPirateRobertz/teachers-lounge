@@ -1,0 +1,51 @@
+## GKE Ingress for the ArgoCD UI
+## Uses GKE's native GCLB Ingress controller with Google-managed TLS certificate.
+##
+## Requires:
+##   - A static external IP reserved in GCP named "argocd-ip"
+##     gcloud compute addresses create argocd-ip --global
+##   - DNS: argocd.teacherslounge.app → that IP (before applying)
+##   - The ManagedCertificate controller (enabled by default on GKE)
+apiVersion: networking.gke.io/v1
+kind: ManagedCertificate
+metadata:
+  name: argocd-tls
+  namespace: argocd
+spec:
+  domains:
+    - argocd.teacherslounge.app
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: argocd-server-ingress
+  namespace: argocd
+  annotations:
+    kubernetes.io/ingress.global-static-ip-name: "argocd-ip"
+    networking.gke.io/managed-certificates: "argocd-tls"
+    # Redirect HTTP → HTTPS
+    networking.gke.io/v1beta1.FrontendConfig: "argocd-frontend-config"
+    # ArgoCD serves gRPC (for CLI) — keep-alives required
+    nginx.ingress.kubernetes.io/backend-protocol: "GRPCS"
+spec:
+  rules:
+    - host: argocd.teacherslounge.app
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: argocd-server
+                port:
+                  number: 443
+---
+apiVersion: networking.gke.io/v1beta1
+kind: FrontendConfig
+metadata:
+  name: argocd-frontend-config
+  namespace: argocd
+spec:
+  redirectToHttps:
+    enabled: true
+    responseCodeName: MOVED_PERMANENTLY_DEFAULT

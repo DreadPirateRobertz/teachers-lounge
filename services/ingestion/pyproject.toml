@@ -1,0 +1,8 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+
+[project]
+requires-python = ">=3.11,<3.14"
+# Note: Python 3.14 is not yet supported (asyncpg/pydantic-core wheels pending)
+# Local dev: use Python 3.11–3.13. Docker image uses python:3.13-slim.

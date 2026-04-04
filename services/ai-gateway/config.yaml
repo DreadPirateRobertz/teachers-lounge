@@ -1,0 +1,23 @@
+## LiteLLM config for local development
+## Real API keys are injected via environment variables (see docker-compose.yml)
+## Replace placeholder values in .env.local before running
+
+model_list:
+  - model_name: claude-sonnet
+    litellm_params:
+      model: anthropic/claude-sonnet-4-6
+      api_key: os.environ/ANTHROPIC_API_KEY
+
+  - model_name: gpt-4o
+    litellm_params:
+      model: openai/gpt-4o
+      api_key: os.environ/OPENAI_API_KEY
+
+router_settings:
+  routing_strategy: latency-based-routing
+  num_retries: 2
+  timeout: 30
+
+litellm_settings:
+  drop_params: true
+  telemetry: false

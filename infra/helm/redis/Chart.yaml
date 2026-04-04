@@ -1,0 +1,6 @@
+apiVersion: v2
+name: redis
+description: Redis for TeachersLounge (dev/CI only — prod uses Memorystore)
+type: application
+version: 0.1.0
+appVersion: "7.2"

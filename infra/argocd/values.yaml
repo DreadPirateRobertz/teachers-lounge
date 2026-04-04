@@ -1,0 +1,99 @@
+## ArgoCD Helm values for TeachersLounge
+## Chart: argo/argo-cd  (https://argoproj.github.io/argo-helm)
+
+global:
+  domain: argocd.teacherslounge.app
+
+configs:
+  params:
+    server.insecure: false  # TLS terminated at GKE Ingress — but ArgoCD still serves HTTPS internally
+
+  # RBAC policy — restrict manual sync/delete to infra & pm roles; everyone else read-only
+  rbac:
+    policy.default: role:readonly
+    policy.csv: |
+      # Infra engineers — full access
+      p, role:infra, applications, *, */*, allow
+      p, role:infra, clusters, get, *, allow
+      p, role:infra, repositories, *, *, allow
+      p, role:infra, projects, *, *, allow
+      p, role:infra, accounts, *, *, allow
+      p, role:infra, certificates, *, *, allow
+      p, role:infra, logs, get, */*, allow
+      p, role:infra, exec, create, */*, allow
+
+      # PM role — can view and trigger manual sync but not delete or exec
+      p, role:pm, applications, get, */*, allow
+      p, role:pm, applications, sync, */*, allow
+      p, role:pm, applications, action/*, */*, allow
+      p, role:pm, logs, get, */*, allow
+
+      # Read-only is default (policy.default above)
+
+    scopes: "[groups]"
+
+  # ArgoCD ConfigMap — OIDC and repository creds live here via Secrets (see install.sh)
+  cm:
+    url: https://argocd.teacherslounge.app
+    # Uncomment and fill in when Google OIDC is configured:
+    # oidc.config: |
+    #   name: Google
+    #   issuer: https://accounts.google.com
+    #   clientID: <client-id>
+    #   clientSecret: $oidc.google.clientSecret
+    #   requestedScopes: ["openid", "profile", "email"]
+    application.resourceTrackingMethod: annotation
+
+server:
+  replicas: 1
+  autoscaling:
+    enabled: false
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+  # Ingress is managed separately (infra/argocd/ingress.yaml) for GKE-native Ingress controller
+  ingress:
+    enabled: false
+
+applicationSet:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+
+controller:
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 512Mi
+
+repoServer:
+  replicas: 1
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+redis:
+  resources:
+    requests:
+      cpu: 50m
+      memory: 64Mi
+    limits:
+      cpu: 200m
+      memory: 128Mi
+
+notifications:
+  enabled: false  # Enable in Phase 2 for Slack deploy notifications

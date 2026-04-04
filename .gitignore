@@ -6,20 +6,41 @@ state.json
 CLAUDE.md
 CLAUDE.local.md
 
+# Local env files — never commit secrets
+.env.local
+.env.*.local
+
 # Python
 *.py[cod]
 .venv/
 *.egg-info/
 dist/
 .env
-.env.local
 
 # Secrets (never commit real values — use External Secrets Operator)
 **/k8s/secret.yaml
 
-# IDE
-.vscode/
-.idea/
+# Node / Next.js
+node_modules/
+.next/
+out/
+build/
 
-# OS
+# Go
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# OS / editor
 .DS_Store
+.idea/
+.vscode/
+*.swp
+
+# Docker
+.dockerignore

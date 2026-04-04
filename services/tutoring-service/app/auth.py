@@ -1,13 +1,11 @@
 """
-JWT validation middleware — validates access tokens issued by the User Service.
+JWT validation — validates access tokens issued by the User Service (tl-38s).
 
-The User Service (tl-38s) signs JWTs with a shared HS256 secret.
-
-Expected claims:
-  sub          — user UUID
-  account_type — "standard" | "minor"
-  exp          — expiry (15 min TTL from User Service)
-  iat          — issued-at
+User Service signs HS256 JWTs with the following custom claims:
+  uid        — user UUID string  (also mirrored in RegisteredClaims.sub)
+  email      — user email address
+  acct       — account type: "standard" | "minor"
+  sub_status — subscription status (optional): "active" | "trial" | "past_due" etc.
 
 Usage:
     @router.post("/sessions")
@@ -28,7 +26,9 @@ _bearer = HTTPBearer(auto_error=True)
 
 class JWTClaims(BaseModel):
     user_id: UUID
-    account_type: str  # "standard" | "minor"
+    email: str
+    account_type: str   # "standard" | "minor"
+    sub_status: str     # "active" | "trial" | "past_due" | "cancelled" | ""
 
 
 def require_auth(
@@ -41,6 +41,9 @@ def require_auth(
             token,
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
+            # verify_aud=False: User Service does not set an "aud" claim yet.
+            # Tracked in tl-eam — enable once User Service adds aud: "teacherslounge-services".
+            options={"verify_aud": False},
         )
     except ExpiredSignatureError:
         raise HTTPException(
@@ -55,11 +58,20 @@ def require_auth(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    sub = payload.get("sub")
-    if sub is None:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Missing sub claim")
+    # User Service sets "uid" custom claim AND mirrors it in RegisteredClaims.sub.
+    # We prefer "uid" and fall back to "sub" for forward compatibility while the
+    # User Service still emits both.  Once only "uid" is guaranteed, the "sub"
+    # fallback can be removed.  Tracked in tl-uid (User Service claim cleanup).
+    uid = payload.get("uid") or payload.get("sub")
+    if not uid:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Missing uid claim",
+        )
 
     return JWTClaims(
-        user_id=UUID(sub),
-        account_type=payload.get("account_type", "standard"),
+        user_id=UUID(uid),
+        email=payload.get("email", ""),
+        account_type=payload.get("acct", "standard"),
+        sub_status=payload.get("sub_status", ""),
     )
