@@ -3,12 +3,12 @@ package billing
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
 	"github.com/stripe/stripe-go/v79"
 	"github.com/stripe/stripe-go/v79/customer"
-	"github.com/stripe/stripe-go/v79/subscription"
 	"github.com/stripe/stripe-go/v79/webhook"
 	"github.com/teacherslounge/user-service/internal/models"
 	"github.com/teacherslounge/user-service/internal/store"
@@ -21,14 +21,20 @@ type PlanPrices struct {
 	Semesterly string
 }
 
-// Client wraps Stripe operations.
-type Client struct {
-	prices  PlanPrices
-	whSecret string
-	store   *store.Store
+// Storer is the subset of store.Store that billing needs.
+// Defined here to allow test doubles.
+type Storer interface {
+	UpdateSubscription(ctx context.Context, p store.UpdateSubscriptionParams) error
 }
 
-func NewClient(secretKey string, prices PlanPrices, whSecret string, s *store.Store) *Client {
+// Client wraps Stripe operations.
+type Client struct {
+	prices   PlanPrices
+	whSecret string
+	store    Storer
+}
+
+func NewClient(secretKey string, prices PlanPrices, whSecret string, s Storer) *Client {
 	stripe.Key = secretKey
 	return &Client{
 		prices:   prices,
@@ -68,12 +74,16 @@ func (c *Client) HandleWebhook(ctx context.Context, payload []byte, sigHeader st
 	if err != nil {
 		return fmt.Errorf("invalid webhook signature: %w", err)
 	}
+	return c.HandleWebhookEvent(ctx, event)
+}
 
+// HandleWebhookEvent dispatches a pre-parsed event. Exposed for testing.
+func (c *Client) HandleWebhookEvent(ctx context.Context, event stripe.Event) error {
 	switch event.Type {
 	case "customer.subscription.created":
-		return c.handleSubscriptionCreated(ctx, event)
+		return c.handleSubscriptionUpsert(ctx, event)
 	case "customer.subscription.updated":
-		return c.handleSubscriptionUpdated(ctx, event)
+		return c.handleSubscriptionUpsert(ctx, event)
 	case "customer.subscription.deleted":
 		return c.handleSubscriptionDeleted(ctx, event)
 	case "invoice.payment_failed":
@@ -81,18 +91,23 @@ func (c *Client) HandleWebhook(ctx context.Context, payload []byte, sigHeader st
 	case "invoice.payment_succeeded":
 		return c.handlePaymentSucceeded(ctx, event)
 	case "customer.subscription.trial_will_end":
-		// 3 days before trial ends — send notification (future: trigger Notification Service)
+		// 3 days before trial ends — future: trigger Notification Service
 		return nil
 	default:
-		// Unknown event — ignore silently
 		return nil
 	}
 }
 
-func (c *Client) handleSubscriptionCreated(ctx context.Context, event stripe.Event) error {
-	sub, err := parseSubscription(event)
+// handleSubscriptionUpsert handles subscription.created and subscription.updated.
+// Parses the subscription object directly from event.Data.Raw — no Stripe API call.
+func (c *Client) handleSubscriptionUpsert(ctx context.Context, event stripe.Event) error {
+	sub, err := parseSubscriptionFromEvent(event)
 	if err != nil {
 		return err
+	}
+
+	if len(sub.Items.Data) == 0 {
+		return fmt.Errorf("subscription %s has no items", sub.ID)
 	}
 	plan, err := c.planFromPriceID(sub.Items.Data[0].Price.ID)
 	if err != nil {
@@ -121,12 +136,8 @@ func (c *Client) handleSubscriptionCreated(ctx context.Context, event stripe.Eve
 	})
 }
 
-func (c *Client) handleSubscriptionUpdated(ctx context.Context, event stripe.Event) error {
-	return c.handleSubscriptionCreated(ctx, event) // same upsert logic
-}
-
 func (c *Client) handleSubscriptionDeleted(ctx context.Context, event stripe.Event) error {
-	sub, err := parseSubscription(event)
+	sub, err := parseSubscriptionFromEvent(event)
 	if err != nil {
 		return err
 	}
@@ -140,16 +151,9 @@ func (c *Client) handleSubscriptionDeleted(ctx context.Context, event stripe.Eve
 }
 
 func (c *Client) handlePaymentFailed(ctx context.Context, event stripe.Event) error {
-	// Stripe dunning handles retries (configured in Stripe dashboard: 3 attempts over 7 days).
-	// On final failure, subscription.deleted event fires — handled above.
-	// Here we update status to past_due immediately so the app can show a banner.
-	invoice, ok := event.Data.Object["subscription"]
-	if !ok {
-		return nil
-	}
-	subID, _ := invoice.(string)
-	if subID == "" {
-		return nil
+	subID, err := subscriptionIDFromInvoiceEvent(event)
+	if err != nil || subID == "" {
+		return nil // invoice may not have a subscription (one-time charge)
 	}
 	status := models.StatusPastDue
 	return c.store.UpdateSubscription(ctx, store.UpdateSubscriptionParams{
@@ -159,13 +163,8 @@ func (c *Client) handlePaymentFailed(ctx context.Context, event stripe.Event) er
 }
 
 func (c *Client) handlePaymentSucceeded(ctx context.Context, event stripe.Event) error {
-	// Payment recovered — restore active status.
-	invoice, ok := event.Data.Object["subscription"]
-	if !ok {
-		return nil
-	}
-	subID, _ := invoice.(string)
-	if subID == "" {
+	subID, err := subscriptionIDFromInvoiceEvent(event)
+	if err != nil || subID == "" {
 		return nil
 	}
 	status := models.StatusActive
@@ -179,17 +178,29 @@ func (c *Client) handlePaymentSucceeded(ctx context.Context, event stripe.Event)
 // HELPERS
 // ============================================================
 
-func parseSubscription(event stripe.Event) (*stripe.Subscription, error) {
-	sub, ok := event.Data.Object["id"]
-	if !ok {
-		return nil, fmt.Errorf("missing subscription id in event")
+// parseSubscriptionFromEvent decodes the subscription object embedded in the
+// event payload. This avoids a synchronous Stripe API call per webhook.
+func parseSubscriptionFromEvent(event stripe.Event) (*stripe.Subscription, error) {
+	var sub stripe.Subscription
+	if err := json.Unmarshal(event.Data.Raw, &sub); err != nil {
+		return nil, fmt.Errorf("decoding subscription from event %s: %w", event.ID, err)
 	}
-	subID := sub.(string)
-	s, err := subscription.Get(subID, nil)
-	if err != nil {
-		return nil, fmt.Errorf("fetching subscription %s: %w", subID, err)
+	if sub.ID == "" {
+		return nil, fmt.Errorf("subscription id missing in event %s", event.ID)
 	}
-	return s, nil
+	return &sub, nil
+}
+
+// subscriptionIDFromInvoiceEvent extracts the subscription ID from an invoice event.
+func subscriptionIDFromInvoiceEvent(event stripe.Event) (string, error) {
+	var invoice stripe.Invoice
+	if err := json.Unmarshal(event.Data.Raw, &invoice); err != nil {
+		return "", fmt.Errorf("decoding invoice from event %s: %w", event.ID, err)
+	}
+	if invoice.Subscription == nil {
+		return "", nil
+	}
+	return invoice.Subscription.ID, nil
 }
 
 func (c *Client) planFromPriceID(priceID string) (models.SubscriptionPlan, error) {

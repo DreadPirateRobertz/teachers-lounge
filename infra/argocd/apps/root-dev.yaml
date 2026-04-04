@@ -1,0 +1,28 @@
+## Root Application — dev environment (app-of-apps pattern)
+## This Application watches infra/argocd/apps/dev/ in the repo and creates
+## all child Applications automatically. Add a new file to apps/dev/ to
+## deploy a new service to the dev cluster.
+apiVersion: argoproj.io/v1alpha1
+kind: Application
+metadata:
+  name: root-dev
+  namespace: argocd
+  # Prevent ArgoCD from deleting child apps when this root app is deleted
+  finalizers:
+    - resources-finalizer.argocd.argoproj.io
+spec:
+  project: default
+  source:
+    repoURL: https://github.com/teachers-lounge/teachers-lounge.git
+    targetRevision: main
+    path: infra/argocd/apps/dev
+  destination:
+    server: https://kubernetes.default.svc
+    namespace: argocd
+  syncPolicy:
+    automated:
+      prune: true
+      selfHeal: true
+    syncOptions:
+      - CreateNamespace=true
+      - ServerSideApply=true

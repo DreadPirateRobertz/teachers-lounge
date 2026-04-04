@@ -1,0 +1,27 @@
+# Air configuration for hot-reload in Docker dev environment
+# https://github.com/air-verse/air
+
+root = "."
+tmp_dir = "/tmp/air"
+
+[build]
+  cmd = "go build -o /tmp/air/user-service ./cmd/server"
+  bin = "/tmp/air/user-service"
+  full_bin = "/tmp/air/user-service"
+  include_ext = ["go"]
+  exclude_dir = ["vendor", "testdata"]
+  delay = 500           # ms to wait after a change before rebuilding
+  kill_delay = "500ms"
+  rerun_delay = 500
+
+[log]
+  time = false
+
+[color]
+  main = "magenta"
+  watcher = "cyan"
+  build = "yellow"
+  runner = "green"
+
+[misc]
+  clean_on_exit = true

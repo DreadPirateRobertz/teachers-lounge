@@ -1,0 +1,48 @@
+## NOTE: This chart deploys a single-replica Postgres.
+## It is intended for the dev namespace ONLY.
+## Production uses Cloud SQL (managed) — do NOT deploy this to prod.
+
+image:
+  repository: postgres
+  tag: "16-alpine"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 5432
+
+persistence:
+  enabled: true
+  storageClass: "standard-rwo"   # GKE standard persistent disk
+  size: 10Gi
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+env:
+  POSTGRES_DB: "teacherslounge"
+  POSTGRES_USER: "tl_app"
+  # POSTGRES_PASSWORD injected from postgres-secrets
+
+livenessProbe:
+  exec:
+    command:
+      - pg_isready
+      - -U
+      - tl_app
+  initialDelaySeconds: 30
+  periodSeconds: 10
+
+readinessProbe:
+  exec:
+    command:
+      - pg_isready
+      - -U
+      - tl_app
+  initialDelaySeconds: 5
+  periodSeconds: 5

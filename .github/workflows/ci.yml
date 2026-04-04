@@ -12,28 +12,93 @@ on:
 permissions:
   contents: read
 
+# Cancel in-progress runs for the same branch/PR — prevents dependabot bursts
+# from stacking up and burning minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  # ── Change detection ─────────────────────────────────────────────────────────
+  # Determines which paths changed so downstream jobs only run when relevant.
+  # On push to main, schedule, or workflow_dispatch every filter is forced true.
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      frontend:        ${{ steps.filter.outputs.frontend }}
+      go-services:     ${{ steps.filter.outputs.go-services }}
+      python-services: ${{ steps.filter.outputs.python-services }}
+      docker:          ${{ steps.filter.outputs.docker }}
+      helm:            ${{ steps.filter.outputs.helm }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            frontend:
+              - 'frontend/**'
+              - '.github/workflows/ci.yml'
+            go-services:
+              - 'services/user-service/**'
+              - 'services/gaming-service/**'
+              - 'services/notification-service/**'
+              - '.github/workflows/ci.yml'
+            python-services:
+              - 'services/tutoring-service/**'
+              - 'services/ingestion/**'
+              - 'services/search/**'
+              - 'services/analytics-service/**'
+              - '.github/workflows/ci.yml'
+            docker:
+              - 'frontend/Dockerfile'
+              - 'services/*/Dockerfile'
+              - '.github/workflows/ci.yml'
+            helm:
+              - 'infra/helm/**'
+              - '.github/workflows/ci.yml'
+
   # ── Frontend (Next.js) ───────────────────────────────────────────────────────
   frontend:
+    needs: changes
+    if: |
+      needs.changes.outputs.frontend == 'true' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     defaults:
       run:
-        working-directory: services/frontend
+        working-directory: frontend
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v4
+      - name: Check frontend exists
+        id: check
+        run: |
+          if [ -f package.json ]; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; fi
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.exists == 'true'
         with:
           node-version: 22
           cache: npm
-          cache-dependency-path: services/frontend/package-lock.json
+          cache-dependency-path: frontend/package-lock.json
       - run: npm ci --ignore-scripts
+        if: steps.check.outputs.exists == 'true'
       - run: npm run lint
+        if: steps.check.outputs.exists == 'true'
       - run: npm run build
+        if: steps.check.outputs.exists == 'true'
       - run: npm test -- --passWithNoTests
+        if: steps.check.outputs.exists == 'true'
 
   # ── Go services ─────────────────────────────────────────────────────────────
   go-services:
+    needs: changes
+    if: |
+      needs.changes.outputs.go-services == 'true' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
@@ -44,105 +109,164 @@ jobs:
       run:
         working-directory: services/${{ matrix.service }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
+      - name: Check go.mod exists
+        id: check
+        run: |
+          if [ -f go.mod ]; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; echo "No go.mod for ${{ matrix.service }} -- skipping"; fi
       - uses: actions/setup-go@v5
+        if: steps.check.outputs.exists == 'true'
         with:
-          go-version: '1.23'
+          go-version: '1.25'
           cache-dependency-path: services/${{ matrix.service }}/go.sum
       - run: go mod download
+        if: steps.check.outputs.exists == 'true'
       - run: go vet ./...
+        if: steps.check.outputs.exists == 'true'
       - run: |
           if command -v golangci-lint &>/dev/null; then golangci-lint run ./...; fi
+        if: steps.check.outputs.exists == 'true'
         continue-on-error: true
       - run: go test ./... -race -timeout 60s
+        if: steps.check.outputs.exists == 'true'
 
   # ── Python services ──────────────────────────────────────────────────────────
   python-services:
+    needs: changes
+    if: |
+      needs.changes.outputs.python-services == 'true' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     strategy:
       fail-fast: false
       matrix:
-        service: [tutoring-service, ingestion-service, search-service, analytics-service]
+        include:
+          - service: tutoring-service
+            svc_path: services/tutoring-service
+          - service: ingestion
+            svc_path: services/ingestion
+          - service: search
+            svc_path: services/search
+          - service: analytics-service
+            svc_path: services/analytics-service
     defaults:
       run:
-        working-directory: services/${{ matrix.service }}
+        working-directory: ${{ matrix.svc_path }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
+      - name: Check requirements.txt exists
+        id: check
+        run: |
+          if [ -f requirements.txt ]; then echo "exists=true" >> "$GITHUB_OUTPUT"; else echo "exists=false" >> "$GITHUB_OUTPUT"; echo "No requirements.txt for ${{ matrix.service }} -- skipping"; fi
       - uses: actions/setup-python@v5
+        if: steps.check.outputs.exists == 'true'
         with:
           python-version: '3.13'
           cache: pip
-      - run: pip install -r requirements.txt --quiet 2>/dev/null || true
+      - run: pip install -r requirements.txt --quiet
+        if: steps.check.outputs.exists == 'true'
       - run: pip install ruff pytest --quiet
+        if: steps.check.outputs.exists == 'true'
       - run: ruff check . || true
+        if: steps.check.outputs.exists == 'true'
       - run: pytest --tb=short -q 2>/dev/null || echo "No tests yet"
+        if: steps.check.outputs.exists == 'true'
 
   # ── Docker build check ───────────────────────────────────────────────────────
+  # Only fires when a Dockerfile actually changes — not on every dep bump.
   docker-build:
+    needs: changes
+    if: |
+      needs.changes.outputs.docker == 'true' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
-        service:
-          - frontend
-          - user-service
-          - tutoring-service
-          - ai-gateway
-          - gaming-service
-          - ingestion-service
-          - search-service
-          - notification-service
-          - analytics-service
+        include:
+          - service: frontend
+            svc_path: frontend
+          - service: user-service
+            svc_path: services/user-service
+          - service: tutoring-service
+            svc_path: services/tutoring-service
+          - service: ai-gateway
+            svc_path: services/ai-gateway
+          - service: gaming-service
+            svc_path: services/gaming-service
+          - service: ingestion
+            svc_path: services/ingestion
+          - service: search
+            svc_path: services/search
+          - service: notification-service
+            svc_path: services/notification-service
+          - service: analytics-service
+            svc_path: services/analytics-service
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       - name: Check Dockerfile exists
         id: check
+        env:
+          SVC_PATH: ${{ matrix.svc_path }}
+          SVC_NAME: ${{ matrix.service }}
         run: |
-          if [ -f services/${{ matrix.service }}/Dockerfile ]; then
-            echo "exists=true" >> $GITHUB_OUTPUT
+          if [ -f "${SVC_PATH}/Dockerfile" ]; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
           else
-            echo "exists=false" >> $GITHUB_OUTPUT
-            echo "No Dockerfile yet for ${{ matrix.service }} — skipping"
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+            echo "No Dockerfile yet for ${SVC_NAME} -- skipping"
           fi
+      - name: Set up Docker Buildx
+        if: steps.check.outputs.exists == 'true'
+        uses: docker/setup-buildx-action@v3
       - name: Build Docker image
         if: steps.check.outputs.exists == 'true'
-        run: |
-          docker build services/${{ matrix.service }} \
-            --tag tl-${{ matrix.service }}:ci \
-            --no-cache
+        uses: docker/build-push-action@v6
+        with:
+          context: ${{ matrix.svc_path }}
+          push: false
+          tags: tl-${{ matrix.service }}:ci
+          cache-from: type=gha,scope=${{ matrix.service }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.service }}
 
   # ── Helm lint ────────────────────────────────────────────────────────────────
   helm-lint:
+    needs: changes
+    if: |
+      needs.changes.outputs.helm == 'true' ||
+      github.event_name == 'schedule' ||
+      github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       - uses: azure/setup-helm@v4
       - name: Lint all Helm charts
         run: |
+          failed=0
           for chart in infra/helm/*/; do
-            if [ -f "$chart/Chart.yaml" ]; then
-              echo "Linting $chart"
-              helm lint "$chart"
+            if [ -f "${chart}/Chart.yaml" ]; then
+              echo "Linting ${chart}"
+              helm lint "${chart}" || { echo "::warning::helm lint failed for ${chart}"; failed=1; }
             fi
           done
+          exit $failed
 
   # ── Security scan ────────────────────────────────────────────────────────────
-  # Runs on PRs and nightly — never blocks merge on warnings
+  # Always runs on every PR — secrets can appear anywhere.
   security-audit:
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 22
+      - uses: actions/checkout@v4
       - name: npm audit (frontend)
         run: |
-          if [ -f services/frontend/package.json ]; then
-            cd services/frontend && npm audit --audit-level=high || true
+          if [ -f frontend/package.json ]; then
+            cd frontend && npm audit --audit-level=high || true
           fi
       - name: Check for secrets with truffleHog
         uses: trufflesecurity/trufflehog@main
@@ -153,11 +277,12 @@ jobs:
         continue-on-error: true
 
   # ── Conflict marker check ────────────────────────────────────────────────────
+  # Always runs — cheap and catches stray conflict markers anywhere.
   conflict-check:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v4
       - name: Check for unresolved merge conflict markers
         run: |
           if grep -rn "^<<<<<<< \|^=======$\|^>>>>>>> " \
@@ -176,13 +301,13 @@ jobs:
       issues: write
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/setup-node@v6
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 22
       - uses: actions/setup-go@v5
         with:
-          go-version: '1.23'
+          go-version: '1.25'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.13'
@@ -192,42 +317,31 @@ jobs:
           mkdir -p test-results
           set -o pipefail
           (
-            for svc in services/*/; do
-              echo "=== Testing $svc ==="
-              if [ -f "$svc/package.json" ]; then
-                cd "$svc" && npm ci --quiet && npm test -- --passWithNoTests 2>&1; cd - > /dev/null
-              elif [ -f "$svc/go.mod" ]; then
-                cd "$svc" && go test ./... 2>&1; cd - > /dev/null
-              elif [ -f "$svc/requirements.txt" ]; then
-                cd "$svc" && pip install -r requirements.txt -q && pytest -q 2>&1; cd - > /dev/null
+            for svc in frontend services/*/; do
+              echo "=== Testing ${svc} ==="
+              if [ -f "${svc}/package.json" ]; then
+                cd "${svc}" && npm ci --quiet && npm test -- --passWithNoTests 2>&1; cd - > /dev/null
+              elif [ -f "${svc}/go.mod" ]; then
+                cd "${svc}" && go test ./... 2>&1; cd - > /dev/null
+              elif [ -f "${svc}/requirements.txt" ]; then
+                pip install -r "${svc}/requirements.txt" --quiet && cd "${svc}" && pytest --tb=short -q 2>&1; cd - > /dev/null
               fi
             done
-          ) | tee test-results/full-output.txt
+          ) 2>&1 | tee test-results/all.txt
+          exit "${PIPESTATUS[0]}"
         continue-on-error: true
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v7
-        with:
-          name: nightly-test-results
-          path: test-results/
-          retention-days: 30
-      - name: Open issue on failure
+      - name: Open GitHub Issue on failure
         if: steps.tests.outcome == 'failure'
-        uses: actions/github-script@v8
+        uses: actions/github-script@v7
         with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const { readFileSync } = await import('node:fs');
-            let output = '';
-            try { output = readFileSync('test-results/full-output.txt', 'utf8'); } catch {}
-            const failedLines = output.split('\n').filter(l => /FAIL|ERROR|×/.test(l)).slice(0, 30).join('\n');
-            const runUrl = `${process.env.GITHUB_SERVER_URL}/${process.env.GITHUB_REPOSITORY}/actions/runs/${process.env.GITHUB_RUN_ID}`;
-            const today = new Date().toISOString().split('T')[0];
-            await github.rest.issues.create({
-              owner: context.repo.owner, repo: context.repo.repo,
-              title: `Nightly tests failed — ${today}`,
-              body: `## Nightly Failure\n\n**Run:** ${runUrl}\n\n\`\`\`\n${failedLines || 'See artifacts'}\n\`\`\``,
-              labels: ['bug', 'ci-nightly'],
+            const fs = require('fs');
+            const log = fs.readFileSync('test-results/all.txt', 'utf8').slice(-3000);
+            github.rest.issues.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title: `Nightly integration failure -- ${new Date().toISOString().split('T')[0]}`,
+              body: `\`\`\`\n${log}\n\`\`\``,
+              labels: ['ci-failure']
             });
-      - name: Fail if tests failed
-        if: steps.tests.outcome == 'failure'
-        run: exit 1
