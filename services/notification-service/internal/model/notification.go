@@ -33,3 +33,18 @@ type InAppRequest struct {
 	Type    string `json:"type"`
 	Message string `json:"message"`
 }
+
+// PushToken records a device push token registered by a user for FCM delivery.
+type PushToken struct {
+	UserID    string    `json:"user_id"`
+	Token     string    `json:"token"`
+	Platform  string    `json:"platform"`  // "android", "ios", or "web"
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+// RegisterTokenRequest is the payload for POST /notify/push/token.
+type RegisterTokenRequest struct {
+	UserID   string `json:"user_id"`
+	Token    string `json:"token"`
+	Platform string `json:"platform,omitempty"` // defaults to "web" if empty
+}
