@@ -149,13 +149,8 @@ services:
 
   frontend:
     build:
-      context: ./services/frontend
+      context: ./frontend
       dockerfile: Dockerfile
-      # NEXT_PUBLIC_* vars must be passed as build args — they are baked into
-      # the JS bundle at compile time and cannot be overridden at runtime.
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
-        NEXT_PUBLIC_TUTORING_URL: ${NEXT_PUBLIC_TUTORING_URL:-http://localhost:8000}
     restart: unless-stopped
     depends_on:
       user-service:
@@ -165,8 +160,8 @@ services:
     environment:
       NODE_ENV: production
       # Server-side (SSR) URLs use Docker internal hostnames — not exposed to browser
-      API_URL: http://user-service:8080
-      TUTORING_URL: http://tutoring-service:8000
+      USER_SERVICE_URL: http://user-service:8080
+      TUTORING_SERVICE_URL: http://tutoring-service:8000
     ports:
       - "127.0.0.1:3000:3000"
     healthcheck:
