@@ -157,7 +157,6 @@ async def send_message(
     async def stream_generator():
         full_response: list[str] = []
         start_ms = int(time.time() * 1000)
-        succeeded = False
 
         try:
             stream = await client.chat.completions.create(
@@ -184,7 +183,6 @@ async def send_message(
                 content=complete_text,
                 response_time_ms=elapsed_ms,
             )
-            succeeded = True
 
             if sources_payload:
                 yield _sse("sources", message_id=tutor_msg_id, sources=sources_payload)
