@@ -1,0 +1,45 @@
+replicaCount: 2
+
+image:
+  repository: us-docker.pkg.dev/teachers-lounge/services/user-service
+  tag: latest
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 500m
+    memory: 256Mi
+
+env:
+  PORT: "8080"
+  LOG_LEVEL: "info"
+  DB_HOST: "postgres.dev.svc.cluster.local"   # overridden per env
+  DB_PORT: "5432"
+  DB_NAME: "users"
+  REDIS_HOST: "redis.dev.svc.cluster.local"
+  JWT_EXPIRY_MINUTES: "15"
+  REFRESH_TOKEN_EXPIRY_DAYS: "30"
+
+# Secrets are injected from Kubernetes Secrets — not stored in values
+# DB_PASSWORD, JWT_SECRET, STRIPE_SECRET_KEY, STRIPE_WEBHOOK_SECRET
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: 8080
+  initialDelaySeconds: 10
+  periodSeconds: 15
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8080
+  initialDelaySeconds: 5
+  periodSeconds: 10

@@ -1,0 +1,47 @@
+## NOTE: Single-replica Redis for dev namespace ONLY.
+## Production uses Google Memorystore (managed Redis) — do NOT deploy this to prod.
+
+image:
+  repository: redis
+  tag: "7.2-alpine"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  port: 6379
+
+persistence:
+  enabled: true
+  storageClass: "standard-rwo"
+  size: 2Gi
+
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+
+# Redis password injected from redis-secrets (key: redis-password)
+# Set requirepass via command below
+
+# Probes use sh -c so $REDIS_PASSWORD env var is expanded from the container env.
+# Plain 'redis-cli ping' fails when requirepass is set — server returns NOAUTH.
+livenessProbe:
+  exec:
+    command:
+      - sh
+      - -c
+      - redis-cli -a "$REDIS_PASSWORD" ping
+  initialDelaySeconds: 15
+  periodSeconds: 10
+
+readinessProbe:
+  exec:
+    command:
+      - sh
+      - -c
+      - redis-cli -a "$REDIS_PASSWORD" ping
+  initialDelaySeconds: 5
+  periodSeconds: 5
