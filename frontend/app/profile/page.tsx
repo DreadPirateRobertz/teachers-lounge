@@ -65,8 +65,22 @@ export default function ProfilePage() {
 
         {sub && !loading && <SubCard sub={sub} />}
 
-        <div className="mt-4">
-          <Link href="/" className="text-xs text-neon-blue hover:text-glow-blue transition-colors">
+        <div className="mt-4 space-y-2">
+          <Link
+            href="/assessment"
+            className="flex items-center justify-between w-full px-4 py-3 bg-bg-card border border-border-mid rounded-xl hover:border-neon-blue/40 transition-colors group"
+          >
+            <div className="flex items-center gap-2">
+              <span className="text-base">🧠</span>
+              <div>
+                <div className="text-xs font-medium text-text-bright">Learning Style Assessment</div>
+                <div className="text-[10px] text-text-dim">Help Nova adapt to how you learn</div>
+              </div>
+            </div>
+            <span className="text-text-dim text-xs group-hover:text-neon-blue transition-colors">→</span>
+          </Link>
+
+          <Link href="/" className="block text-xs text-neon-blue hover:text-glow-blue transition-colors text-center py-1">
             ← Back to tutor
           </Link>
         </div>
