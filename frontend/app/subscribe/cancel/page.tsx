@@ -9,7 +9,7 @@ export default function SubscribeCancelPage() {
         No worries.
       </h1>
       <p className="text-sm text-text-dim mb-8 max-w-xs">
-        You can subscribe whenever you're ready. Your account is waiting.
+        You can subscribe whenever you&apos;re ready. Your account is waiting.
       </p>
 
       <div className="flex flex-col gap-3 w-full max-w-xs">

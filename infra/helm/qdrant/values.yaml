@@ -1,0 +1,88 @@
+## Qdrant distributed cluster — 3-replica default.
+## Dev overrides in values-dev.yaml (1 replica, smaller resources).
+## Prod overrides in values-prod.yaml (Workload Identity, larger disks).
+
+replicaCount: 3
+
+image:
+  repository: qdrant/qdrant
+  tag: "v1.9.2"
+  pullPolicy: IfNotPresent
+
+service:
+  type: ClusterIP
+  httpPort: 6333
+  grpcPort: 6334
+
+persistence:
+  enabled: true
+  storageClass: "standard-rwo"
+  size: 10Gi
+
+resources:
+  requests:
+    cpu: 500m
+    memory: 512Mi
+  limits:
+    cpu: 2000m
+    memory: 2Gi
+
+## HNSW index defaults — applied to all collections at creation time.
+## m: number of bi-directional links per node (higher = better recall, more memory)
+## efConstruct: size of the dynamic list during index construction (higher = better recall, slower build)
+## fullScanThreshold: collection size below which HNSW index is skipped and brute-force is used
+hnsw:
+  m: 16
+  efConstruct: 100
+  fullScanThreshold: 10000
+
+## Scalar quantization compresses float32 vectors to int8, reducing memory ~4x with minimal recall loss.
+## Applied as the default quantization config when collections are initialised by the ingestion service.
+quantization:
+  scalarType: int8
+  quantileRatio: 0.99
+  alwaysRam: true
+
+## Nightly GCS snapshot CronJob
+snapshot:
+  enabled: true
+  ## 2:00 AM UTC daily
+  schedule: "0 2 * * *"
+  ## Target GCS path — override per environment in values-prod.yaml / values-dev.yaml
+  gcsBucket: "teachers-lounge-qdrant-snapshots"
+  gcsPathPrefix: "snapshots"
+  ## Container with gsutil + curl + jq
+  image: "google/cloud-sdk:slim"
+  imagePullPolicy: IfNotPresent
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 256Mi
+
+## Service account for Workload Identity (GCS snapshot upload).
+## In prod, annotate with the GCP service account email.
+serviceAccount:
+  create: true
+  name: "qdrant"
+  annotations: {}
+
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: 6333
+  initialDelaySeconds: 60
+  periodSeconds: 10
+  timeoutSeconds: 5
+  failureThreshold: 3
+
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: 6333
+  initialDelaySeconds: 15
+  periodSeconds: 5
+  timeoutSeconds: 3
+  failureThreshold: 3
