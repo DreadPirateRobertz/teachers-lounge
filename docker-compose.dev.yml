@@ -8,6 +8,15 @@
 
 services:
 
+  analytics-service:
+    build:
+      context: ./services/analytics-service
+      dockerfile: Dockerfile.dev
+    volumes:
+      - ./services/analytics-service:/service
+    environment:
+      LOG_LEVEL: debug
+
   frontend:
     build:
       context: ./frontend
@@ -21,6 +30,7 @@ services:
       WATCHPACK_POLLING: "true"   # needed for some Docker/macOS setups
       USER_SERVICE_URL: http://user-service:8080
       TUTORING_SERVICE_URL: http://tutoring-service:8000
+      ANALYTICS_SERVICE_URL: http://analytics-service:8085
 
   user-service:
     build:
