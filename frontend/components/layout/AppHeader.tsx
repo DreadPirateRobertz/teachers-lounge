@@ -20,9 +20,9 @@ export default function AppHeader() {
 
       {/* Stats */}
       <div className="flex items-center gap-3">
-        <StatBadge icon="🔥" value="7" label="streak" color="text-orange-400" />
+        <StreakBadge value="7" />
         <StatBadge icon="⚡" value="2.3k" label="xp" color="text-neon-blue" glow />
-        <StatBadge icon="💎" value="450" label="gems" color="text-neon-pink" />
+        <GemBadge value="450" />
 
         {/* Avatar */}
         <button className="flex items-center gap-1.5 bg-bg-card border border-border-mid rounded-full px-2.5 py-1 hover:border-neon-blue/50 transition-colors">
@@ -34,16 +34,33 @@ export default function AppHeader() {
   )
 }
 
+function StreakBadge({ value }: { value: string }) {
+  return (
+    <div className="hidden sm:flex items-center gap-1">
+      <span className="text-sm leading-none animate-streak-flame">🔥</span>
+      <span className="font-mono text-xs font-bold text-orange-400">{value}</span>
+    </div>
+  )
+}
+
+function GemBadge({ value }: { value: string }) {
+  return (
+    <div className="hidden sm:flex items-center gap-1">
+      <span className="text-sm leading-none animate-gem-sparkle">💎</span>
+      <span className="font-mono text-xs font-bold text-neon-pink">{value}</span>
+    </div>
+  )
+}
+
 function StatBadge({
   icon,
   value,
-  label,
   color,
   glow = false,
 }: {
   icon: string
   value: string
-  label: string
+  label?: string
   color: string
   glow?: boolean
 }) {

@@ -16,6 +16,7 @@ from .chat import router as chat_router
 from .chat_simple import router as chat_simple_router
 from .config import settings
 from .database import Base, engine
+from .reviews import router as reviews_router
 from .sessions import router as sessions_router
 
 logging.basicConfig(level=settings.log_level.upper())
@@ -37,6 +38,7 @@ app.add_middleware(
 app.include_router(sessions_router, prefix="/v1")
 app.include_router(chat_router, prefix="/v1")
 app.include_router(chat_simple_router, prefix="/v1")
+app.include_router(reviews_router, prefix="/v1")
 
 
 @app.on_event("startup")
