@@ -43,3 +43,17 @@ readinessProbe:
     port: 8000
   initialDelaySeconds: 5
   periodSeconds: 10
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 60
+  targetMemoryUtilizationPercentage: 75
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      maxPodsPerMinute: 3
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      maxPodsPerMinute: 1

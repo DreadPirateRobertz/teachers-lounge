@@ -76,10 +76,12 @@ func main() {
 		r.Get("/gaming/quests/daily", h.GetDailyQuests)
 		r.Post("/gaming/quests/progress", h.UpdateQuestProgress)
 
-		// Boss battle system
-		r.Post("/gaming/boss/start", h.StartBoss)
-		r.Get("/gaming/boss/sessions/{sessionId}", h.GetBossSession)
-		r.Post("/gaming/boss/sessions/{sessionId}/answer", h.SubmitBossAnswer)
+		// Boss battle routes
+		r.Post("/gaming/boss/start", h.StartBattle)
+		r.Get("/gaming/boss/session/{sessionId}", h.GetBattleSession)
+		r.Post("/gaming/boss/attack", h.Attack)
+		r.Post("/gaming/boss/powerup", h.ActivatePowerUp)
+		r.Post("/gaming/boss/forfeit", h.ForfeitBattle)
 
 		// Learning style assessment
 		r.Post("/gaming/assessment/start", h.StartAssessment)
