@@ -1,0 +1,6 @@
+apiVersion: v2
+name: qdrant
+description: Qdrant vector database — 3-replica distributed cluster with HNSW and scalar quantization
+type: application
+version: 0.1.0
+appVersion: "v1.9.2"

@@ -2,11 +2,13 @@ package middleware
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/google/uuid"
 	"github.com/teacherslounge/user-service/internal/auth"
+	"github.com/teacherslounge/user-service/internal/store"
 )
 
 type ctxKeyUserID struct{}
@@ -62,6 +64,30 @@ func RequireSelf(getUserID func(r *http.Request) string) func(http.Handler) http
 			claims := ClaimsFromCtx(r.Context())
 			if claims == nil || claims.UserID != resourceUserID {
 				http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// RequireTeacherProfile verifies that the authenticated user has a teacher profile.
+// Must be used after Authenticate (and typically after RequireSelf).
+func RequireTeacherProfile(s store.Storer) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			userID, ok := UserIDFromCtx(r.Context())
+			if !ok {
+				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+				return
+			}
+			_, err := s.GetTeacherProfile(r.Context(), userID)
+			if err != nil {
+				if errors.Is(err, store.ErrNotFound) {
+					http.Error(w, `{"error":"teacher profile required"}`, http.StatusForbidden)
+				} else {
+					http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+				}
 				return
 			}
 			next.ServeHTTP(w, r)
