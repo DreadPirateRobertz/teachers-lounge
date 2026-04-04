@@ -68,6 +68,7 @@ func main() {
 	usersH := handlers.NewUsersHandler(db, redisClient)
 	subsH := handlers.NewSubscriptionsHandler(db, billingClient)
 	webhookH := handlers.NewWebhookHandler(billingClient)
+	teachersH := handlers.NewTeachersHandler(db)
 
 	// ── Router ───────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -109,6 +110,39 @@ func main() {
 		r.Get("/subscription", subsH.GetSubscription)
 		r.Post("/subscription/cancel", subsH.CancelSubscription)
 		r.Post("/subscription/reactivate", subsH.ReactivateSubscription)
+
+		// Teacher profile (self-only; no teacher profile required to create one)
+		r.Post("/teacher-profile", teachersH.CreateTeacherProfile)
+		r.Get("/teacher-profile", teachersH.GetTeacherProfile)
+	})
+
+	// Teacher routes (JWT + self + teacher profile required)
+	r.Route("/teachers/{id}", func(r chi.Router) {
+		r.Use(middleware.Authenticate(jwtManager))
+		r.Use(middleware.RequireSelf(func(req *http.Request) string {
+			return chi.URLParam(req, "id")
+		}))
+		r.Use(middleware.RequireTeacherProfile(db))
+
+		// Classes
+		r.Post("/classes", teachersH.CreateClass)
+		r.Get("/classes", teachersH.ListClasses)
+		r.Get("/classes/{class_id}", teachersH.GetClass)
+		r.Patch("/classes/{class_id}", teachersH.UpdateClass)
+		r.Delete("/classes/{class_id}", teachersH.DeleteClass)
+
+		// Roster
+		r.Post("/classes/{class_id}/students", teachersH.AddStudent)
+		r.Delete("/classes/{class_id}/students/{student_id}", teachersH.RemoveStudent)
+		r.Get("/classes/{class_id}/students", teachersH.ListRoster)
+
+		// Progress
+		r.Get("/classes/{class_id}/students/{student_id}/progress", teachersH.GetStudentProgress)
+
+		// Material assignments
+		r.Post("/classes/{class_id}/materials", teachersH.AssignMaterial)
+		r.Delete("/classes/{class_id}/materials/{material_id}", teachersH.UnassignMaterial)
+		r.Get("/classes/{class_id}/materials", teachersH.ListAssignedMaterials)
 	})
 
 	// ── Server ───────────────────────────────────────────────
