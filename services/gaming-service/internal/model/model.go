@@ -60,10 +60,13 @@ type LeaderboardUpdateRequest struct {
 }
 
 // LeaderboardEntry is one row in the leaderboard response.
+// IsRival is true when the entry represents a simulated competitor rather than
+// a real user; the frontend uses this flag to render the "rival" badge.
 type LeaderboardEntry struct {
-	UserID string  `json:"user_id"`
-	XP     float64 `json:"xp"`
-	Rank   int64   `json:"rank"`
+	UserID  string  `json:"user_id"`
+	XP      float64 `json:"xp"`
+	Rank    int64   `json:"rank"`
+	IsRival bool    `json:"is_rival,omitempty"`
 }
 
 // LeaderboardResponse is the response body for GET /gaming/leaderboard (all variants).
