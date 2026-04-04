@@ -93,3 +93,63 @@ class SSEEvent(BaseModel):
     type: str   # "delta" | "done" | "error"
     content: str = ""
     message_id: str = ""
+
+
+# ── Concept Dependency Graph DTOs ────────────────────────────────────────────
+
+
+class ConceptResponse(BaseModel):
+    id: UUID
+    course_id: UUID
+    name: str
+    description: str
+    path: str
+    prerequisite_ids: list[UUID] = []
+
+
+class ConceptCreate(BaseModel):
+    name: str = Field(..., max_length=255)
+    description: str = ""
+    path: str = Field(..., max_length=1000)
+    prerequisite_ids: list[UUID] = []
+
+
+class PrerequisiteEdge(BaseModel):
+    concept_id: UUID
+    prerequisite_id: UUID
+    weight: float = Field(1.0, ge=0.0, le=1.0)
+
+
+class MasteryEntry(BaseModel):
+    concept_id: UUID
+    concept_name: str
+    mastery_score: float
+    last_reviewed_at: datetime | None = None
+    next_review_at: datetime | None = None
+
+
+class GapInfo(BaseModel):
+    concept_id: UUID
+    concept_name: str
+    mastery_score: float
+    required_by: list[UUID]
+
+
+class GapDetectionResponse(BaseModel):
+    target_concept_id: UUID
+    target_concept_name: str
+    gaps: list[GapInfo]
+
+
+class RemediationStep(BaseModel):
+    order: int
+    concept_id: UUID
+    concept_name: str
+    mastery_score: float
+    reason: str
+
+
+class RemediationPathResponse(BaseModel):
+    target_concept_id: UUID
+    target_concept_name: str
+    steps: list[RemediationStep]
