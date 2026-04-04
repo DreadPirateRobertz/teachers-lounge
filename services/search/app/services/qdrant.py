@@ -5,8 +5,8 @@ from uuid import UUID
 
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
-    Filter,
     FieldCondition,
+    Filter,
     MatchValue,
     NamedSparseVector,
     SparseVector,
@@ -43,27 +43,33 @@ async def close_client() -> None:
         _client = None
 
 
+def _build_filter(course_id: UUID, chapter: str | None = None) -> Filter:
+    """Build a Qdrant filter with required course_id and optional chapter."""
+    conditions = [
+        FieldCondition(key="course_id", match=MatchValue(value=str(course_id))),
+    ]
+    if chapter is not None:
+        conditions.append(
+            FieldCondition(key="chapter", match=MatchValue(value=chapter)),
+        )
+    return Filter(must=conditions)
+
+
 async def dense_search(
     query_vector: list[float],
     course_id: UUID,
     limit: int,
+    chapter: str | None = None,
 ) -> list[ChunkResult]:
-    """Search curriculum collection with dense vector, filtered by course_id."""
+    """Search curriculum collection with dense vector, filtered by course_id and optional chapter."""
     client = get_client()
 
-    course_filter = Filter(
-        must=[
-            FieldCondition(
-                key="course_id",
-                match=MatchValue(value=str(course_id)),
-            )
-        ]
-    )
+    query_filter = _build_filter(course_id, chapter)
 
     hits = await client.search(
         collection_name=settings.curriculum_collection,
         query_vector=("dense", query_vector),
-        query_filter=course_filter,
+        query_filter=query_filter,
         limit=limit,
         with_payload=True,
         with_vectors=False,
@@ -92,71 +98,61 @@ async def dense_search(
     return results
 
 
-# ---------------------------------------------------------------------------
-# Sparse / BM25 search
-# ---------------------------------------------------------------------------
-# Vocabulary size must match what the ingestion service uses when building BM25
-# sparse vectors at index time. Both sides use the same simple hash mapping
-# until Phase 4 standardises on fastembed BM25 (tracked in tl-zxk).
-_SPARSE_VOCAB_SIZE = 30522  # BERT vocab size — default for fastembed BM25
-
-
-def _bm25_query_vector(query: str) -> tuple[list[int], list[float]]:
+def _tokenize(text: str) -> dict[int, float]:
     """
-    Compute a lightweight BM25-style sparse query vector.
+    Produce a sparse term-frequency vector from *text*.
 
-    Tokenises query → term frequencies → hash-based vocab indices.
-    Phase 4 will replace this with fastembed SparseTextEmbedding so that
-    query and ingestion vocabularies are guaranteed identical.
+    Each unique lowercase token is mapped to a deterministic integer index via
+    hash(token) % VOCAB_SIZE.  Values are normalized term frequencies (TF),
+    matching the format Qdrant's BM25/BM42 sparse fields expect at query time.
+
+    VOCAB_SIZE=30000 is intentionally larger than typical BM25 vocabularies to
+    reduce hash collisions while staying within Qdrant's sparse vector limits.
     """
-    tokens = re.findall(r"\b[a-z0-9]+\b", query.lower())
+    _VOCAB_SIZE = 30_000
+    tokens = re.findall(r"[a-z0-9]+", text.lower())
     if not tokens:
-        return [], []
+        return {}
     counts = Counter(tokens)
-    indices = [abs(hash(t)) % _SPARSE_VOCAB_SIZE for t in counts]
-    values = [float(v) for v in counts.values()]
-    return indices, values
+    total = sum(counts.values())
+    # Collapse collisions by summing TF — benign for retrieval quality
+    sparse: dict[int, float] = {}
+    for token, count in counts.items():
+        idx = hash(token) % _VOCAB_SIZE
+        sparse[idx] = sparse.get(idx, 0.0) + count / total
+    return sparse
 
 
 async def sparse_search(
     query: str,
     course_id: UUID,
     limit: int,
+    chapter: str | None = None,
 ) -> list[ChunkResult]:
-    """
-    BM25 keyword search over the curriculum collection using sparse vectors.
-
-    Returns an empty list if the collection has no sparse vector field yet
-    (i.e. ingestion has not stored BM25 vectors) rather than raising an error.
-    The hybrid combiner degrades gracefully to dense-only in that case.
-    """
-    indices, values = _bm25_query_vector(query)
-    if not indices:
-        return []
-
+    """Search curriculum collection with BM25 sparse vector, filtered by course_id and optional chapter."""
     client = get_client()
-    course_filter = Filter(
-        must=[
-            FieldCondition(key="course_id", match=MatchValue(value=str(course_id)))
-        ]
-    )
 
-    try:
-        hits = await client.search(
-            collection_name=settings.curriculum_collection,
-            query_vector=NamedSparseVector(
-                name="sparse",
-                vector=SparseVector(indices=indices, values=values),
-            ),
-            query_filter=course_filter,
-            limit=limit,
-            with_payload=True,
-            with_vectors=False,
-        )
-    except Exception as exc:
-        # Collection may not have sparse vectors indexed yet (pre-ingestion).
-        logger.debug("sparse_search skipped (no sparse index?): %s", exc)
+    sparse_tf = _tokenize(query)
+    if not sparse_tf:
+        logger.info("sparse_search: empty query after tokenization — returning []")
         return []
+
+    indices = list(sparse_tf.keys())
+    values = [sparse_tf[i] for i in indices]
+
+    query_filter = _build_filter(course_id, chapter)
+
+    hits = await client.search(
+        collection_name=settings.curriculum_collection,
+        query_vector=NamedSparseVector(
+            name="sparse",
+            vector=SparseVector(indices=indices, values=values),
+        ),
+        query_filter=query_filter,
+        limit=limit,
+        with_payload=True,
+        with_vectors=False,
+    )
 
     results = []
     for hit in hits:
@@ -176,6 +172,10 @@ async def sparse_search(
         )
 
     logger.info(
-        "sparse_search course_id=%s limit=%d → %d results", course_id, limit, len(results)
+        "sparse_search course_id=%s terms=%d limit=%d → %d results",
+        course_id,
+        len(indices),
+        limit,
+        len(results),
     )
     return results

@@ -21,6 +21,10 @@ async def search(
     # must enforce that the requesting user owns course_id before external exposure.
     # Tracked in tl-sui (auth integration milestone).
     course_id: Annotated[uuid.UUID, Query(description="Course to search within")],
+    chapter: Annotated[
+        str | None,
+        Query(max_length=200, description="Filter results to a specific chapter"),
+    ] = None,
     limit: Annotated[
         int,
         Query(ge=1, le=settings.max_search_limit, description="Max results to return"),
@@ -29,43 +33,41 @@ async def search(
     """
     Hybrid search over the curriculum collection for a given course.
 
-    Performs dense semantic search (OpenAI text-embedding-3-large) and, when
-    BM25 sparse vectors are indexed, adds keyword search with RRF fusion.
-    Falls back gracefully to dense-only when sparse vectors are not available.
+    Runs dense (semantic) and sparse (BM25) searches in parallel, then fuses
+    them with Reciprocal Rank Fusion (RRF) before returning ranked results.
     """
-    fetch_limit = max(limit, settings.sparse_rerank_limit)
-
-    query_vector, sparse_results = await _embed_and_sparse(q, course_id, fetch_limit)
-
-    dense_results = await dense_search(
-        query_vector=query_vector,
-        course_id=course_id,
-        limit=fetch_limit,
-    )
+    query_vector, dense_results, sparse_results = await _run_search(q, course_id, limit, chapter)
 
     fused = combine_dense_sparse(dense_results, sparse_results)
-    ranked = rerank(q, fused)
-    final = ranked[:limit]
+    ranked = await rerank(q, fused)
 
     search_mode = "hybrid" if sparse_results else "dense"
     return SearchResponse(
         query=q,
         course_id=course_id,
-        results=final,
-        total=len(final),
-        search_mode=search_mode,
+        results=ranked[:limit],
+        total=len(ranked),
+        search_mode="hybrid",
     )
 
 
-async def _embed_and_sparse(
-    query: str,
+async def _run_search(
+    q: str,
     course_id: uuid.UUID,
     limit: int,
-) -> tuple[list[float], list]:
-    """Run embedding and sparse search concurrently."""
+    chapter: str | None = None,
+) -> tuple[list[float], list, list]:
+    """Run embedding, dense search, and sparse search concurrently."""
     import asyncio
-    query_vector, sparse_results = await asyncio.gather(
-        embed_query(query),
-        sparse_search(query=query, course_id=course_id, limit=limit),
+
+    query_vector = await embed_query(q)
+
+    dense_task = asyncio.create_task(
+        dense_search(query_vector=query_vector, course_id=course_id, limit=limit, chapter=chapter)
     )
-    return query_vector, sparse_results
+    sparse_task = asyncio.create_task(
+        sparse_search(query=q, course_id=course_id, limit=limit, chapter=chapter)
+    )
+
+    dense_results, sparse_results = await asyncio.gather(dense_task, sparse_task)
+    return query_vector, dense_results, sparse_results
