@@ -9,10 +9,28 @@ class Settings(BaseSettings):
     qdrant_api_key: str | None = None
 
     curriculum_collection: str = "curriculum"
-    embedding_dim: int = 1024
+
+    # Embedding — OpenAI text-embedding-3-small via AI Gateway (LiteLLM)
+    # Dimension uses the model's native 1536-dim output (no truncation for small model).
+    # Phase 4+ migration to self-hosted uses same config; only gateway URL changes.
+    ai_gateway_url: str = "http://litellm-service.ai-gateway.svc.cluster.local:4000"
+    embedding_model: str = "text-embedding-3-small"
+    embedding_dim: int = 1536
+
+    # Re-ranking — Cohere rerank-english-v3.0 via AI Gateway (LiteLLM).
+    # Set to empty string to disable re-ranking (falls back to RRF order).
+    rerank_model: str = "rerank-english-v3.0"
+    rerank_top_n: int = 10
 
     default_search_limit: int = 10
     max_search_limit: int = 50
+
+    # OpenAI embeddings (Phase 2). When None, falls back to random unit vector stub.
+    openai_api_key: str | None = None
+    openai_embedding_model: str = "text-embedding-3-large"
+
+    # Number of candidates fetched per signal before RRF fusion + final limit
+    sparse_rerank_limit: int = 20
 
 
 settings = Settings()

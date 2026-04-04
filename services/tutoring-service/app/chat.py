@@ -5,15 +5,22 @@ Flow:
   1. Validate JWT → extract user_id
   2. Verify session exists and belongs to this user
   3. Load last 10 exchanges (20 messages) for context window
-  4. Build messages: system prompt + history + new student message
+  4. Build messages:
+       - If session.course_id is set: agentic RAG (retrieve chunks → enriched prompt)
+       - Otherwise: base Professor Nova prompt (no course materials)
   5. Stream from AI Gateway (LiteLLM) via OpenAI-compatible SDK
   6. Persist student message (pre-stream) + completed tutor reply (post-stream)
-  7. Emit SSE: delta chunks → done  (error event on failure with fallback text)
+  7. Emit SSE: delta chunks → sources → done  (error event on failure)
 
 SSE event format:
-  data: {"type": "delta",  "content": "<token>", "message_id": "<uuid>"}
-  data: {"type": "done",   "content": "",         "message_id": "<uuid>"}
-  data: {"type": "error",  "content": "<msg>",    "message_id": ""}
+  data: {"type": "delta",   "content": "<token>", "message_id": "<uuid>"}
+  data: {"type": "sources", "content": "",         "message_id": "<uuid>", "sources": [...]}
+  data: {"type": "done",    "content": "",         "message_id": "<uuid>"}
+  data: {"type": "error",   "content": "<msg>",    "message_id": ""}
+
+sources event is emitted only when the session has a course_id and chunks were
+retrieved. Each source object contains: chunk_id, chapter, section, page,
+content_type, score.
 """
 import json
 import logging
@@ -32,26 +39,11 @@ from .database import get_db
 from .gateway import get_gateway_client
 from .history import append_message, get_history, get_session
 from .models import MessageRequest
+from .rag_agent import PROFESSOR_NOVA_SYSTEM_PROMPT, build_rag_context
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sessions", tags=["chat"])
-
-PROFESSOR_NOVA_SYSTEM_PROMPT = """\
-You are Professor Nova, the AI tutor for TeachersLounge — a gamified learning \
-platform. You are brilliant, patient, encouraging, and a little bit nerdy. You \
-use vivid analogies, celebrate curiosity, and make hard concepts feel approachable.
-
-Guidelines:
-- Ask a clarifying question before a long explanation if the question is vague.
-- Use concrete examples. Always pair an abstraction with something tangible.
-- When a student is wrong, be gentle but clear — explain why, don't just give the answer.
-- Use LaTeX notation for math/formulas: $E = mc^2$ inline, $$...$$ for display.
-- Keep responses focused. If a topic is huge, offer to go deeper on a specific part.
-- You do not yet have access to the student's uploaded course materials (that's \
-  coming in Phase 2). For now, draw on your broad knowledge and be transparent \
-  when you're working from general knowledge rather than their specific textbook.
-"""
 
 FALLBACK_MESSAGE = (
     "I'm having a moment of technical difficulty — my connection to the knowledge "
@@ -67,9 +59,11 @@ def _history_to_messages(interactions) -> list[dict]:
     ]
 
 
-async def _sse(event_type: str, content: str = "", message_id: str = "") -> str:
-    payload = json.dumps({"type": event_type, "content": content, "message_id": message_id})
-    return f"data: {payload}\n\n"
+def _sse(event_type: str, content: str = "", message_id: str = "", sources=None) -> str:
+    payload: dict = {"type": event_type, "content": content, "message_id": message_id}
+    if sources is not None:
+        payload["sources"] = sources
+    return f"data: {json.dumps(payload)}\n\n"
 
 
 @router.post("/{session_id}/messages")
@@ -92,14 +86,40 @@ async def send_message(
     # Persist student message before streaming — durable even if stream fails
     await append_message(db, session_id, user.user_id, role="student", content=body.content)
 
+    # --- Build system prompt + retrieve grounding chunks ---
+    source_chunks = []
+    if session.course_id is not None:
+        system_prompt, source_chunks = await build_rag_context(
+            student_id=user.user_id,
+            session_id=session_id,
+            question=body.content,
+            course_id=session.course_id,
+            db=db,
+        )
+    else:
+        system_prompt = PROFESSOR_NOVA_SYSTEM_PROMPT
+
     messages = [
-        {"role": "system", "content": PROFESSOR_NOVA_SYSTEM_PROMPT},
+        {"role": "system", "content": system_prompt},
         *_history_to_messages(history),
         {"role": "user", "content": body.content},
     ]
 
     client = get_gateway_client()
     tutor_msg_id = str(uuid.uuid4())
+
+    # Build sources payload once — serialised into the done event
+    sources_payload = [
+        {
+            "chunk_id": c.chunk_id,
+            "chapter": c.chapter,
+            "section": c.section,
+            "page": c.page,
+            "content_type": c.content_type,
+            "score": round(c.score, 4),
+        }
+        for c in source_chunks
+    ]
 
     async def stream_generator():
         full_response: list[str] = []
@@ -117,7 +137,7 @@ async def send_message(
                 delta = chunk.choices[0].delta
                 if delta.content:
                     full_response.append(delta.content)
-                    yield await _sse("delta", content=delta.content, message_id=tutor_msg_id)
+                    yield _sse("delta", content=delta.content, message_id=tutor_msg_id)
 
             complete_text = "".join(full_response)
             elapsed_ms = int(time.time() * 1000) - start_ms
@@ -130,28 +150,31 @@ async def send_message(
                 content=complete_text,
                 response_time_ms=elapsed_ms,
             )
-            yield await _sse("done", message_id=tutor_msg_id)
+
+            if sources_payload:
+                yield _sse("sources", message_id=tutor_msg_id, sources=sources_payload)
+
+            yield _sse("done", message_id=tutor_msg_id)
 
         except (APIConnectionError, APITimeoutError) as exc:
             logger.warning("AI Gateway unreachable: %s", exc)
-            # Persist fallback so history stays coherent
             await append_message(
                 db, session_id, user.user_id, role="tutor", content=FALLBACK_MESSAGE
             )
-            yield await _sse("delta", content=FALLBACK_MESSAGE, message_id=tutor_msg_id)
-            yield await _sse("done", message_id=tutor_msg_id)
+            yield _sse("delta", content=FALLBACK_MESSAGE, message_id=tutor_msg_id)
+            yield _sse("done", message_id=tutor_msg_id)
 
         except APIStatusError as exc:
             logger.error("AI Gateway error %s: %s", exc.status_code, exc.message)
             await append_message(
                 db, session_id, user.user_id, role="tutor", content=FALLBACK_MESSAGE
             )
-            yield await _sse("delta", content=FALLBACK_MESSAGE, message_id=tutor_msg_id)
-            yield await _sse("done", message_id=tutor_msg_id)
+            yield _sse("delta", content=FALLBACK_MESSAGE, message_id=tutor_msg_id)
+            yield _sse("done", message_id=tutor_msg_id)
 
         except Exception as exc:
             logger.exception("Unexpected error in chat stream: %s", exc)
-            yield await _sse("error", content="An unexpected error occurred. Please try again.")
+            yield _sse("error", content="An unexpected error occurred. Please try again.")
 
     return StreamingResponse(
         stream_generator(),
