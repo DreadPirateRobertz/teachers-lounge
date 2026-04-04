@@ -1,7 +1,7 @@
 import type { NextConfig } from 'next'
 
 const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://user-service:8080'
-const TUTORING_SERVICE_URL = process.env.TUTORING_SERVICE_URL || 'http://tutoring-service:8080'
+const TUTORING_SERVICE_URL = process.env.TUTORING_SERVICE_URL || 'http://tutoring-service:8000'
 
 const config: NextConfig = {
   output: 'standalone',
