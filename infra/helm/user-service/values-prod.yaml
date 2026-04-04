@@ -5,3 +5,10 @@ env:
   DB_HOST: "postgres.prod.svc.cluster.local"
   REDIS_HOST: "redis.prod.svc.cluster.local"
   LOG_LEVEL: "warn"
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
