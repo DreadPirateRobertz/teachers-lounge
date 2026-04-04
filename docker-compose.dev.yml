@@ -10,19 +10,17 @@ services:
 
   frontend:
     build:
-      context: ./services/frontend
+      context: ./frontend
       dockerfile: Dockerfile.dev
-      # NEXT_PUBLIC_* must be build args even in dev mode
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8080}
-        NEXT_PUBLIC_TUTORING_URL: ${NEXT_PUBLIC_TUTORING_URL:-http://localhost:8000}
     volumes:
-      - ./services/frontend:/app
+      - ./frontend:/app
       - /app/node_modules      # preserve node_modules from image
       - /app/.next             # preserve Next.js build cache from image
     environment:
       NODE_ENV: development
       WATCHPACK_POLLING: "true"   # needed for some Docker/macOS setups
+      USER_SERVICE_URL: http://user-service:8080
+      TUTORING_SERVICE_URL: http://tutoring-service:8000
 
   user-service:
     build:
