@@ -41,6 +41,51 @@ class HistoryResponse(BaseModel):
     messages: list[MessageRecord]
 
 
+# ── Spaced-repetition review DTOs ────────────────────────────────────────────
+
+class ReviewQueueItem(BaseModel):
+    concept_id: UUID
+    concept_name: str
+    mastery_score: float
+    ease_factor: float
+    interval_days: int
+    repetitions: int
+    next_review_at: datetime | None
+    last_reviewed_at: datetime | None
+    is_overdue: bool
+
+
+class ReviewQueueResponse(BaseModel):
+    items: list[ReviewQueueItem]
+    total_due: int
+    total_upcoming: int
+
+
+class AnswerRequest(BaseModel):
+    quality: int = Field(..., ge=0, le=5, description="Review quality 0-5 (0=blackout, 5=perfect)")
+
+
+class AnswerResponse(BaseModel):
+    concept_id: UUID
+    quality: int
+    mastery_before: float
+    mastery_after: float
+    ease_factor: float
+    interval_days: int
+    repetitions: int
+    next_review_at: datetime
+
+
+class ReviewStatsResponse(BaseModel):
+    total_concepts_studied: int
+    total_reviews: int
+    due_now: int
+    due_today: int
+    due_this_week: int
+    average_mastery: float
+    average_ease_factor: float
+
+
 # ── SSE event shapes ──────────────────────────────────────────────────────────
 
 class SSEEvent(BaseModel):

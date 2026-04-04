@@ -39,12 +39,29 @@ export default function CharacterSidebar() {
       <div className="px-3 py-2 border-b border-border-dim">
         <div className="flex items-center justify-between">
           <span className="text-xs text-text-dim">Daily Streak</span>
-          <div className="flex items-center gap-1">
-            <span className="text-sm">🔥</span>
-            <span className="font-mono text-sm font-bold text-orange-400">7 days</span>
+          <div className="flex items-center gap-0.5">
+            {/* Three flames that stagger slightly */}
+            <span className="text-base leading-none animate-streak-flame" style={{ animationDelay: '0s' }}>🔥</span>
+            <span className="text-sm leading-none animate-streak-flame" style={{ animationDelay: '0.2s', opacity: 0.7 }}>🔥</span>
+            <span className="text-xs leading-none animate-streak-flame" style={{ animationDelay: '0.4s', opacity: 0.4 }}>🔥</span>
+            <span className="font-mono text-sm font-bold text-orange-400 ml-1">7</span>
           </div>
         </div>
-        <div className="text-[10px] text-text-dim mt-0.5">2× XP multiplier active</div>
+        <div className="flex items-center justify-between mt-1">
+          <div className="text-[10px] text-text-dim">2× XP multiplier active</div>
+          <div className="text-[10px] font-mono text-orange-400/70">days</div>
+        </div>
+        {/* Streak heat bar */}
+        <div className="mt-1.5 h-1 bg-border-dim rounded-full overflow-hidden">
+          <div
+            className="h-full rounded-full transition-all"
+            style={{
+              width: '70%',
+              background: 'linear-gradient(90deg, #ff6600, #ff4400)',
+              boxShadow: '0 0 4px #ff440099',
+            }}
+          />
+        </div>
       </div>
 
       {/* Daily Quests */}

@@ -64,7 +64,17 @@ func main() {
 		r.Post("/gaming/streak/checkin", h.StreakCheckin)
 		r.Post("/gaming/leaderboard/update", h.LeaderboardUpdate)
 		r.Get("/gaming/leaderboard", h.GetLeaderboard)
+		r.Get("/gaming/leaderboard/friends", h.GetFriendLeaderboard)
+		r.Get("/gaming/leaderboard/course/{courseId}", h.GetCourseLeaderboard)
 		r.Get("/gaming/quotes/random", h.RandomQuote)
+
+		// Quiz system
+		r.Post("/gaming/quiz/start", h.StartQuiz)
+		r.Get("/gaming/quiz/sessions/{sessionId}", h.GetQuizSession)
+		r.Post("/gaming/quiz/sessions/{sessionId}/answer", h.SubmitAnswer)
+		r.Get("/gaming/quiz/sessions/{sessionId}/hint", h.GetHint)
+		r.Get("/gaming/quests/daily", h.GetDailyQuests)
+		r.Post("/gaming/quests/progress", h.UpdateQuestProgress)
 	})
 
 	srv := &http.Server{

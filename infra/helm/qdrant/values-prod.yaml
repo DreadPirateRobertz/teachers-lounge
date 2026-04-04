@@ -1,0 +1,26 @@
+## Prod overrides — 3 replicas, SSD storage, Workload Identity for GCS access.
+
+replicaCount: 3
+
+persistence:
+  ## SSD-backed persistent disks for low-latency vector operations
+  storageClass: "premium-rwo"
+  size: 50Gi
+
+resources:
+  requests:
+    cpu: 1000m
+    memory: 2Gi
+  limits:
+    cpu: 4000m
+    memory: 8Gi
+
+snapshot:
+  enabled: true
+  gcsBucket: "teachers-lounge-qdrant-snapshots-prod"
+
+serviceAccount:
+  annotations:
+    ## Workload Identity binding — maps the K8s SA to the GCP SA that has
+    ## roles/storage.objectCreator on the snapshot bucket.
+    iam.gke.io/gcp-service-account: "qdrant-snapshots@teachers-lounge.iam.gserviceaccount.com"
