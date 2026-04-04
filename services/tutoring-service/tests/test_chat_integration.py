@@ -6,6 +6,7 @@ No real gateway or database required.
 
 Covers:
   POST /v1/sessions/{id}/messages — SSE stream (delta + done events)
+  POST /v1/sessions/{id}/messages — RAG path: sources event emitted
   POST /v1/chat                   — plain-text stream, happy path + 401
 """
 import json
@@ -77,25 +78,22 @@ async def client():
         yield ac
 
 
+# ── SSE stream — no course (base Professor Nova, no RAG) ────────────────────
+
 @pytest.mark.asyncio
 async def test_sse_stream_happy_path(client, auth_headers, user_id, session_id):
     """
     Full SSE round-trip: valid token → session ownership check → stream delta+done.
-    DB and gateway are fully mocked.
+    Session has no course_id so RAG is skipped. DB and gateway are fully mocked.
     """
-    # ── mock DB session lookup ─────────────────────────────────────────────────
     fake_session = MagicMock()
     fake_session.user_id = uuid.UUID(user_id)
+    fake_session.course_id = None  # no course → no RAG
 
-    # ── mock AI Gateway stream ─────────────────────────────────────────────────
     async def _fake_stream():
         for token in ["Hello", ", ", "student", "!"]:
             yield _make_chunk(token)
-        yield _make_chunk(None)   # final chunk with no content
-
-    fake_stream_cm = AsyncMock()
-    fake_stream_cm.__aenter__ = AsyncMock(return_value=_fake_stream())
-    fake_stream_cm.__aexit__ = AsyncMock(return_value=False)
+        yield _make_chunk(None)
 
     fake_completions = AsyncMock()
     fake_completions.create = AsyncMock(return_value=_fake_stream())
@@ -128,18 +126,128 @@ async def test_sse_stream_happy_path(client, auth_headers, user_id, session_id):
     assert "delta" in types
     assert types[-1] == "done"
     assert "error" not in types
+    assert "sources" not in types  # no course_id → no sources event
 
     delta_content = "".join(e["content"] for e in events if e["type"] == "delta")
     assert delta_content == "Hello, student!"
 
 
-# ── POST /v1/chat (stateless plain-text stream) ───────────────────────────────
+# ── SSE stream — with course_id → RAG path with sources event ───────────────
+
+@pytest.mark.asyncio
+async def test_sse_stream_rag_emits_sources_event(client, auth_headers, user_id, session_id):
+    """
+    Session has a course_id — agentic RAG runs and a 'sources' event is emitted
+    before 'done' when chunks are retrieved.
+    """
+    from app.search_client import SearchResult
+
+    fake_session = MagicMock()
+    fake_session.user_id = uuid.UUID(user_id)
+    fake_session.course_id = uuid.uuid4()  # triggers RAG
+
+    fake_chunk = SearchResult(
+        chunk_id=str(uuid.uuid4()),
+        material_id=str(uuid.uuid4()),
+        course_id=str(fake_session.course_id),
+        content="A chiral center is a carbon atom with four different substituents.",
+        score=0.91,
+        chapter="Chapter 5",
+        section="5.3",
+        page=87,
+    )
+
+    async def _fake_stream():
+        for token in ["Chiral", " centers", " are", "..."]:
+            yield _make_chunk(token)
+        yield _make_chunk(None)
+
+    fake_completions = AsyncMock()
+    fake_completions.create = AsyncMock(return_value=_fake_stream())
+
+    fake_openai = MagicMock()
+    fake_openai.chat.completions = fake_completions
+
+    with (
+        patch("app.history.get_session", AsyncMock(return_value=fake_session)),
+        patch("app.history.get_history", AsyncMock(return_value=[])),
+        patch("app.history.append_message", AsyncMock()),
+        patch("app.chat.get_gateway_client", return_value=fake_openai),
+        patch("app.chat.build_rag_context", AsyncMock(return_value=("system prompt", [fake_chunk]))),
+    ):
+        resp = await client.post(
+            f"/v1/sessions/{session_id}/messages",
+            json={"content": "What is a chiral center?"},
+            headers=auth_headers,
+        )
+
+    assert resp.status_code == 200
+    events = [
+        json.loads(line[len("data: "):])
+        for line in resp.text.splitlines()
+        if line.startswith("data: ")
+    ]
+
+    types = [e["type"] for e in events]
+    assert "delta" in types
+    assert "sources" in types
+    assert types[-1] == "done"
+
+    sources_event = next(e for e in events if e["type"] == "sources")
+    assert isinstance(sources_event["sources"], list)
+    assert len(sources_event["sources"]) == 1
+    src = sources_event["sources"][0]
+    assert src["chapter"] == "Chapter 5"
+    assert src["section"] == "5.3"
+    assert src["page"] == 87
+
+
+@pytest.mark.asyncio
+async def test_sse_stream_no_sources_event_when_chunks_empty(
+    client, auth_headers, user_id, session_id
+):
+    """When RAG returns no chunks (e.g. not yet indexed), no sources event is emitted."""
+    fake_session = MagicMock()
+    fake_session.user_id = uuid.UUID(user_id)
+    fake_session.course_id = uuid.uuid4()
+
+    async def _fake_stream():
+        yield _make_chunk("Answer from general knowledge.")
+        yield _make_chunk(None)
+
+    fake_completions = AsyncMock()
+    fake_completions.create = AsyncMock(return_value=_fake_stream())
+
+    fake_openai = MagicMock()
+    fake_openai.chat.completions = fake_completions
+
+    with (
+        patch("app.history.get_session", AsyncMock(return_value=fake_session)),
+        patch("app.history.get_history", AsyncMock(return_value=[])),
+        patch("app.history.append_message", AsyncMock()),
+        patch("app.chat.get_gateway_client", return_value=fake_openai),
+        patch("app.chat.build_rag_context", AsyncMock(return_value=("system prompt", []))),
+    ):
+        resp = await client.post(
+            f"/v1/sessions/{session_id}/messages",
+            json={"content": "What is osmosis?"},
+            headers=auth_headers,
+        )
+
+    events = [
+        json.loads(line[len("data: "):])
+        for line in resp.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert "sources" not in [e["type"] for e in events]
+    assert events[-1]["type"] == "done"
+
+
+# ── POST /v1/chat (stateless plain-text stream) ──────────────────────────────
 
 @pytest.mark.asyncio
 async def test_simple_chat_happy_path(client, auth_headers):
-    """
-    POST /v1/chat with valid JWT + messages array → plain-text chunked stream.
-    """
+    """POST /v1/chat with valid JWT + messages array → plain-text chunked stream."""
     async def _fake_stream():
         for token in ["Photosynthesis", " is", " the", " process"]:
             yield _make_chunk(token)
