@@ -10,6 +10,8 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/teacherslounge/gaming-service/internal/model"
+	"github.com/teacherslounge/gaming-service/internal/quest"
+	"github.com/teacherslounge/gaming-service/internal/xp"
 )
 
 const (
@@ -19,6 +21,9 @@ const (
 
 	weeklyTTL  = 14 * 24 * time.Hour
 	monthlyTTL = 62 * 24 * time.Hour
+
+	questKeyPrefix = "quests:daily:"
+	questTTL       = 24 * time.Hour
 )
 
 // Store holds Postgres and Redis clients.
@@ -302,4 +307,126 @@ func (s *Store) RandomQuote(ctx context.Context) (*model.Quote, error) {
 		return nil, fmt.Errorf("random quote: %w", err)
 	}
 	return quote, nil
+}
+
+// GetDailyQuests returns the current daily quest states for a user from Redis.
+// Quests without any recorded progress are returned with Progress=0.
+func (s *Store) GetDailyQuests(ctx context.Context, userID string) ([]model.QuestState, error) {
+	key := questKeyPrefix + userID
+
+	fields := make([]string, 0, len(quest.Daily)*2)
+	for _, def := range quest.Daily {
+		fields = append(fields, def.ID+":progress", def.ID+":completed")
+	}
+
+	vals, err := s.rdb.HMGet(ctx, key, fields...).Result()
+	if err != nil {
+		return nil, fmt.Errorf("get daily quests %s: %w", userID, err)
+	}
+
+	states := make([]model.QuestState, len(quest.Daily))
+	for i, def := range quest.Daily {
+		var progress int
+		completed := false
+
+		if vals[i*2] != nil {
+			fmt.Sscan(vals[i*2].(string), &progress)
+		}
+		if vals[i*2+1] != nil {
+			completed = vals[i*2+1].(string) == "1"
+		}
+
+		states[i] = model.QuestState{
+			ID:          def.ID,
+			Title:       def.Title,
+			Description: def.Description,
+			Progress:    progress,
+			Target:      def.Target,
+			Completed:   completed,
+			XPReward:    def.XPReward,
+			GemsReward:  def.GemsReward,
+		}
+	}
+	return states, nil
+}
+
+// UpdateQuestProgress advances quest progress in Redis for the given action,
+// detects completions, and returns the updated quest states plus total XP and
+// gems earned from newly completed quests.
+func (s *Store) UpdateQuestProgress(ctx context.Context, userID string, action string) ([]model.QuestState, int, int, error) {
+	questIDs := quest.ForAction(action)
+	key := questKeyPrefix + userID
+
+	var totalXP, totalGems int
+
+	for _, questID := range questIDs {
+		def := quest.ByID(questID)
+		if def == nil {
+			continue
+		}
+
+		vals, err := s.rdb.HMGet(ctx, key, questID+":progress", questID+":completed").Result()
+		if err != nil {
+			return nil, 0, 0, fmt.Errorf("hmget quest %s for %s: %w", questID, userID, err)
+		}
+
+		// Skip quests already completed to prevent double-rewarding.
+		if vals[1] != nil && vals[1].(string) == "1" {
+			continue
+		}
+
+		var progress int
+		if vals[0] != nil {
+			fmt.Sscan(vals[0].(string), &progress)
+		}
+		progress++
+
+		updates := map[string]any{
+			questID + ":progress": progress,
+		}
+		if progress >= def.Target {
+			updates[questID+":completed"] = "1"
+			totalXP += def.XPReward
+			totalGems += def.GemsReward
+		}
+
+		pipe := s.rdb.Pipeline()
+		pipe.HMSet(ctx, key, updates)
+		pipe.Expire(ctx, key, questTTL)
+		if _, err := pipe.Exec(ctx); err != nil {
+			return nil, 0, 0, fmt.Errorf("update quest %s for %s: %w", questID, userID, err)
+		}
+	}
+
+	states, err := s.GetDailyQuests(ctx, userID)
+	if err != nil {
+		return nil, 0, 0, err
+	}
+	return states, totalXP, totalGems, nil
+}
+
+// AwardQuestRewards adds xpDelta XP and gemsDelta gems to a user's profile,
+// recomputes the level, and returns the updated totals.
+func (s *Store) AwardQuestRewards(ctx context.Context, userID string, xpDelta, gemsDelta int) (newXP int64, newLevel int, leveledUp bool, newGems int, err error) {
+	currentXP, currentLevel, err := s.GetXPAndLevel(ctx, userID)
+	if err != nil {
+		return 0, 0, false, 0, fmt.Errorf("get xp for reward %s: %w", userID, err)
+	}
+
+	newXP, newLevel, leveledUp = xp.Apply(currentXP, currentLevel, int64(xpDelta))
+
+	const q = `
+		INSERT INTO gaming_profiles (user_id, xp, level, gems)
+		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (user_id) DO UPDATE
+		SET xp    = EXCLUDED.xp,
+		    level = EXCLUDED.level,
+		    gems  = gaming_profiles.gems + $4
+		RETURNING gems`
+
+	err = s.db.QueryRow(ctx, q, userID, newXP, newLevel, gemsDelta).Scan(&newGems)
+	if err != nil {
+		return 0, 0, false, 0, fmt.Errorf("award quest rewards %s: %w", userID, err)
+	}
+	return newXP, newLevel, leveledUp, newGems, nil
 }

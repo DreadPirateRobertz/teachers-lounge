@@ -73,6 +73,8 @@ func main() {
 		r.Get("/gaming/quiz/sessions/{sessionId}", h.GetQuizSession)
 		r.Post("/gaming/quiz/sessions/{sessionId}/answer", h.SubmitAnswer)
 		r.Get("/gaming/quiz/sessions/{sessionId}/hint", h.GetHint)
+		r.Get("/gaming/quests/daily", h.GetDailyQuests)
+		r.Post("/gaming/quests/progress", h.UpdateQuestProgress)
 	})
 
 	srv := &http.Server{

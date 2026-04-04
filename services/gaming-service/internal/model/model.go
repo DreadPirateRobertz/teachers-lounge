@@ -85,3 +85,36 @@ type Quote struct {
 	Attribution string `json:"attribution"`
 	Context     string `json:"context"`
 }
+
+// QuestState is the live state of a single daily quest for a user.
+type QuestState struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Description string `json:"description"`
+	Progress    int    `json:"progress"`
+	Target      int    `json:"target"`
+	Completed   bool   `json:"completed"`
+	XPReward    int    `json:"xp_reward"`
+	GemsReward  int    `json:"gems_reward"`
+}
+
+// DailyQuestsResponse is the response body for GET /gaming/quests/daily.
+type DailyQuestsResponse struct {
+	Quests []QuestState `json:"quests"`
+}
+
+// QuestProgressRequest is the request body for POST /gaming/quests/progress.
+type QuestProgressRequest struct {
+	UserID string `json:"user_id"`
+	Action string `json:"action"`
+}
+
+// QuestProgressResponse is the response body for POST /gaming/quests/progress.
+type QuestProgressResponse struct {
+	Quests      []QuestState `json:"quests"`
+	XPAwarded   int          `json:"xp_awarded"`
+	GemsAwarded int          `json:"gems_awarded"`
+	NewXP       int64        `json:"new_xp,omitempty"`
+	NewLevel    int          `json:"new_level,omitempty"`
+	LevelUp     bool         `json:"level_up,omitempty"`
+}

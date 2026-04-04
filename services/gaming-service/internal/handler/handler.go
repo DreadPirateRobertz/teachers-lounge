@@ -36,6 +36,9 @@ type Storer interface {
 	RecordAnswer(ctx context.Context, sessionID, userID, questionID, chosenKey string, isCorrect bool, hintsUsed, xpEarned int, timeMs *int) (*model.QuizSession, error)
 	GetHintIndex(ctx context.Context, sessionID, questionID string) (int, error)
 	IncrHintIndex(ctx context.Context, sessionID, questionID, userID string) (newIndex, gemsRemaining int, err error)
+	GetDailyQuests(ctx context.Context, userID string) ([]model.QuestState, error)
+	UpdateQuestProgress(ctx context.Context, userID string, action string) ([]model.QuestState, int, int, error)
+	AwardQuestRewards(ctx context.Context, userID string, xpDelta, gemsDelta int) (newXP int64, newLevel int, leveledUp bool, newGems int, err error)
 }
 
 // Handler holds the store and logger.
@@ -257,6 +260,70 @@ func (h *Handler) RandomQuote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, quote)
+}
+
+// GetDailyQuests handles GET /gaming/quests/daily
+func (h *Handler) GetDailyQuests(w http.ResponseWriter, r *http.Request) {
+	callerID := middleware.UserIDFromContext(r.Context())
+	if callerID == "" {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		return
+	}
+
+	quests, err := h.store.GetDailyQuests(r.Context(), callerID)
+	if err != nil {
+		h.logger.Error("get daily quests", zap.String("user_id", callerID), zap.Error(err))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, model.DailyQuestsResponse{Quests: quests})
+}
+
+// UpdateQuestProgress handles POST /gaming/quests/progress
+func (h *Handler) UpdateQuestProgress(w http.ResponseWriter, r *http.Request) {
+	var req model.QuestProgressRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+	if req.UserID == "" || req.Action == "" {
+		writeError(w, http.StatusBadRequest, "user_id and action required")
+		return
+	}
+
+	callerID := middleware.UserIDFromContext(r.Context())
+	if callerID == "" || callerID != req.UserID {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		return
+	}
+
+	quests, xpEarned, gemsEarned, err := h.store.UpdateQuestProgress(r.Context(), req.UserID, req.Action)
+	if err != nil {
+		h.logger.Error("update quest progress", zap.String("user_id", req.UserID), zap.Error(err))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	resp := model.QuestProgressResponse{
+		Quests:      quests,
+		XPAwarded:   xpEarned,
+		GemsAwarded: gemsEarned,
+	}
+
+	if xpEarned > 0 || gemsEarned > 0 {
+		newXP, newLevel, leveledUp, _, err := h.store.AwardQuestRewards(r.Context(), req.UserID, xpEarned, gemsEarned)
+		if err != nil {
+			h.logger.Error("award quest rewards", zap.String("user_id", req.UserID), zap.Error(err))
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
+		}
+		resp.NewXP = newXP
+		resp.NewLevel = newLevel
+		resp.LevelUp = leveledUp
+	}
+
+	writeJSON(w, http.StatusOK, resp)
 }
 
 // Health handles GET /health
