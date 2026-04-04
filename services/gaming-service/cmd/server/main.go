@@ -75,6 +75,16 @@ func main() {
 		r.Get("/gaming/quiz/sessions/{sessionId}/hint", h.GetHint)
 		r.Get("/gaming/quests/daily", h.GetDailyQuests)
 		r.Post("/gaming/quests/progress", h.UpdateQuestProgress)
+
+		// Boss battle system
+		r.Post("/gaming/boss/start", h.StartBoss)
+		r.Get("/gaming/boss/sessions/{sessionId}", h.GetBossSession)
+		r.Post("/gaming/boss/sessions/{sessionId}/answer", h.SubmitBossAnswer)
+
+		// Learning style assessment
+		r.Post("/gaming/assessment/start", h.StartAssessment)
+		r.Get("/gaming/assessment/sessions/{sessionId}", h.GetAssessmentSession)
+		r.Post("/gaming/assessment/sessions/{sessionId}/answer", h.SubmitAssessmentAnswer)
 	})
 
 	srv := &http.Server{

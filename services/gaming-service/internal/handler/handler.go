@@ -39,6 +39,17 @@ type Storer interface {
 	GetDailyQuests(ctx context.Context, userID string) ([]model.QuestState, error)
 	UpdateQuestProgress(ctx context.Context, userID string, action string) ([]model.QuestState, int, int, error)
 	AwardQuestRewards(ctx context.Context, userID string, xpDelta, gemsDelta int) (newXP int64, newLevel int, leveledUp bool, newGems int, err error)
+
+	// Boss battle system
+	StartBossBattle(ctx context.Context, userID, bossID, bossName, topic string, maxRounds, bossHP int, questionIDs []string) (*model.BossSession, error)
+	GetBossSession(ctx context.Context, sessionID string) (*model.BossSession, error)
+	SaveBossSession(ctx context.Context, session *model.BossSession) error
+	CompleteBossBattle(ctx context.Context, session *model.BossSession, bonusXP int) (newXP int64, newLevel int, leveledUp bool, bossesDefeated int, err error)
+
+	// Learning style assessment
+	CreateAssessmentSession(ctx context.Context, userID string) (*model.AssessmentSession, error)
+	GetAssessmentSession(ctx context.Context, sessionID string) (*model.AssessmentSession, error)
+	RecordAssessmentAnswer(ctx context.Context, sessionID, userID, questionID, chosenKey string) (*model.AssessmentSession, error)
 }
 
 // Handler holds the store and logger.
