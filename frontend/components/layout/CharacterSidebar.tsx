@@ -1,13 +1,33 @@
-// Mock data — will be replaced by User Service / Gaming Service API calls
-const MOCK_QUESTS = [
-  { id: 1, label: 'Ask 5 questions', progress: 3, total: 5, xp: 25 },
-  { id: 2, label: 'Keep streak alive', progress: 1, total: 1, xp: 50, done: true },
-  { id: 3, label: 'Master 1 concept', progress: 0, total: 1, xp: 75 },
-]
+'use client'
+
+import Link from 'next/link'
+import { useEffect, useState } from 'react'
+
+interface QuestState {
+  id: string
+  title: string
+  description: string
+  progress: number
+  target: number
+  completed: boolean
+  xp_reward: number
+  gems_reward: number
+}
 
 const MOCK_ACHIEVEMENTS = ['🧪', '🔥', '⭐', '🏆', '💡', '🎯']
 
 export default function CharacterSidebar() {
+  const [quests, setQuests] = useState<QuestState[]>([])
+
+  useEffect(() => {
+    fetch('/api/gaming/quests', { cache: 'no-store' })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((data) => {
+        if (data?.quests) setQuests(data.quests)
+      })
+      .catch(() => undefined)
+  }, [])
+
   return (
     <aside className="w-[220px] flex-shrink-0 flex flex-col bg-bg-panel overflow-y-auto">
       {/* Avatar card */}
@@ -40,7 +60,6 @@ export default function CharacterSidebar() {
         <div className="flex items-center justify-between">
           <span className="text-xs text-text-dim">Daily Streak</span>
           <div className="flex items-center gap-0.5">
-            {/* Three flames that stagger slightly */}
             <span className="text-base leading-none animate-streak-flame" style={{ animationDelay: '0s' }}>🔥</span>
             <span className="text-sm leading-none animate-streak-flame" style={{ animationDelay: '0.2s', opacity: 0.7 }}>🔥</span>
             <span className="text-xs leading-none animate-streak-flame" style={{ animationDelay: '0.4s', opacity: 0.4 }}>🔥</span>
@@ -66,13 +85,21 @@ export default function CharacterSidebar() {
 
       {/* Daily Quests */}
       <div className="px-3 py-2 border-b border-border-dim">
-        <div className="text-[10px] font-bold text-text-dim uppercase tracking-wider mb-2">
-          Daily Quests
+        <div className="flex items-center justify-between mb-2">
+          <div className="text-[10px] font-bold text-text-dim uppercase tracking-wider">
+            Daily Quests
+          </div>
+          <Link
+            href="/quests"
+            className="text-[10px] text-neon-blue hover:text-glow-blue transition-colors"
+          >
+            View all →
+          </Link>
         </div>
         <div className="flex flex-col gap-1.5">
-          {MOCK_QUESTS.map((q) => (
-            <QuestItem key={q.id} quest={q} />
-          ))}
+          {quests.length > 0
+            ? quests.map((q) => <QuestItem key={q.id} quest={q} />)
+            : SIDEBAR_MOCK_QUESTS.map((q) => <QuestItem key={q.id} quest={q} />)}
         </div>
       </div>
 
@@ -111,16 +138,59 @@ export default function CharacterSidebar() {
   )
 }
 
-function QuestItem({ quest }: { quest: typeof MOCK_QUESTS[0] }) {
-  const pct = Math.round((quest.progress / quest.total) * 100)
-  const done = 'done' in quest && quest.done
+// ── Sidebar mock quests (shown while API loads) ───────────────────────────────
+
+const SIDEBAR_MOCK_QUESTS = [
+  {
+    id: 'questions_answered',
+    title: 'Question Seeker',
+    description: 'Answer 5 questions today',
+    progress: 3,
+    target: 5,
+    completed: false,
+    xp_reward: 25,
+    gems_reward: 5,
+  },
+  {
+    id: 'keep_streak_alive',
+    title: 'Streak Keeper',
+    description: 'Keep your learning streak alive',
+    progress: 1,
+    target: 1,
+    completed: true,
+    xp_reward: 35,
+    gems_reward: 10,
+  },
+  {
+    id: 'master_new_concept',
+    title: 'Concept Pioneer',
+    description: 'Master a new concept',
+    progress: 0,
+    target: 1,
+    completed: false,
+    xp_reward: 75,
+    gems_reward: 20,
+  },
+]
+
+// ── Quest item (compact sidebar display) ─────────────────────────────────────
+
+function QuestItem({ quest }: { quest: typeof SIDEBAR_MOCK_QUESTS[0] }) {
+  const pct = quest.target > 0 ? Math.round((quest.progress / quest.target) * 100) : 0
+
   return (
-    <div className={`rounded p-1.5 ${done ? 'bg-neon-green/10 border border-neon-green/20' : 'bg-bg-card border border-border-dim'}`}>
+    <div
+      className={`rounded p-1.5 ${
+        quest.completed
+          ? 'bg-neon-green/10 border border-neon-green/20'
+          : 'bg-bg-card border border-border-dim'
+      }`}
+    >
       <div className="flex items-start justify-between gap-1">
-        <span className="text-[11px] text-text-base leading-tight">{quest.label}</span>
-        <span className="font-mono text-[10px] text-neon-gold flex-shrink-0">+{quest.xp}xp</span>
+        <span className="text-[11px] text-text-base leading-tight">{quest.title}</span>
+        <span className="font-mono text-[10px] text-neon-gold flex-shrink-0">+{quest.xp_reward}xp</span>
       </div>
-      {!done && (
+      {!quest.completed && (
         <div className="mt-1">
           <div className="h-0.5 bg-border-dim rounded-full overflow-hidden">
             <div
@@ -129,11 +199,11 @@ function QuestItem({ quest }: { quest: typeof MOCK_QUESTS[0] }) {
             />
           </div>
           <div className="text-[10px] text-text-dim mt-0.5 font-mono">
-            {quest.progress}/{quest.total}
+            {quest.progress}/{quest.target}
           </div>
         </div>
       )}
-      {done && <div className="text-[10px] text-neon-green mt-0.5">✓ Complete</div>}
+      {quest.completed && <div className="text-[10px] text-neon-green mt-0.5">✓ Complete</div>}
     </div>
   )
 }
