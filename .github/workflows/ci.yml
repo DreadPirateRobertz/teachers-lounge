@@ -183,7 +183,9 @@ jobs:
           cache: pip
       - run: pip install -r requirements.txt --quiet
         if: steps.check.outputs.exists == 'true'
-      - run: pip install ruff pytest --quiet
+      - run: pip install ruff pytest pytest-asyncio --quiet
+        if: steps.check.outputs.exists == 'true'
+      - run: if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt --quiet; fi
         if: steps.check.outputs.exists == 'true'
       - run: ruff check . || true
         if: steps.check.outputs.exists == 'true'

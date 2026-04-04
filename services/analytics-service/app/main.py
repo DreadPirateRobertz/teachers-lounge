@@ -1,7 +1,9 @@
-"""Analytics Service
+"""Analytics Service entry point.
 
-HTTP API for student learning analytics.
-Reads from Postgres (gaming_profiles, quiz_results, interactions).
+FastAPI application serving student learning analytics.  Reads from Postgres
+tables: ``gaming_profiles``, ``quiz_results``, and ``interactions``.
+
+All endpoints require a valid JWT (Bearer token) issued by the user-service.
 """
 import logging
 
@@ -31,5 +33,10 @@ app.include_router(student_router)
 
 
 @app.get("/health", tags=["ops"])
-async def health():
+async def health() -> dict[str, str]:
+    """Liveness probe endpoint.
+
+    Returns:
+        A dict ``{"status": "ok"}`` when the service is running.
+    """
     return {"status": "ok"}

@@ -69,6 +69,13 @@ func (h *SubscriptionsHandler) CancelSubscription(w http.ResponseWriter, r *http
 		return
 	}
 
+	if err := h.store.UpdateSubscriptionByUserID(r.Context(), userID, store.UpdateSubscriptionParams{
+		Status: &updated.Status,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to persist subscription update")
+		return
+	}
+
 	writeJSON(w, http.StatusOK, toSubscriptionResponse(updated))
 }
 
@@ -93,6 +100,13 @@ func (h *SubscriptionsHandler) ReactivateSubscription(w http.ResponseWriter, r *
 	updated, err := h.billing.ReactivateSubscription(r.Context(), sub)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to reactivate subscription")
+		return
+	}
+
+	if err := h.store.UpdateSubscriptionByUserID(r.Context(), userID, store.UpdateSubscriptionParams{
+		Status: &updated.Status,
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to persist subscription update")
 		return
 	}
 

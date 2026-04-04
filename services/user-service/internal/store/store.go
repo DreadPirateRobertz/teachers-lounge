@@ -245,6 +245,29 @@ func (s *Store) UpdateSubscription(ctx context.Context, p UpdateSubscriptionPara
 	return err
 }
 
+// UpdateSubscriptionByUserID updates the subscription row identified by user_id.
+// Used for handler-initiated operations (cancel, reactivate) where the caller
+// already holds the user ID from the auth context but the subscription may not
+// yet have a stripe_subscription_id (e.g. trial plans).
+func (s *Store) UpdateSubscriptionByUserID(ctx context.Context, userID uuid.UUID, p UpdateSubscriptionParams) error {
+	const q = `
+		UPDATE subscriptions SET
+			stripe_subscription_id = COALESCE($2, stripe_subscription_id),
+			plan                   = COALESCE($3, plan),
+			status                 = COALESCE($4, status),
+			current_period_start   = COALESCE($5, current_period_start),
+			current_period_end     = COALESCE($6, current_period_end),
+			trial_end              = COALESCE($7, trial_end),
+			cancelled_at           = COALESCE($8, cancelled_at),
+			updated_at             = NOW()
+		WHERE user_id = $1`
+	_, err := s.pool.Exec(ctx, q,
+		userID, p.NewStripeSubscriptionID, p.Plan, p.Status,
+		p.CurrentPeriodStart, p.CurrentPeriodEnd, p.TrialEnd, p.CancelledAt,
+	)
+	return err
+}
+
 // ============================================================
 // AUDIT LOG
 // ============================================================
