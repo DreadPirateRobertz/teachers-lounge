@@ -38,3 +38,17 @@ readinessProbe:
     port: 8083
   initialDelaySeconds: 5
   periodSeconds: 10
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 6
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      maxPodsPerMinute: 2
+    scaleDown:
+      stabilizationWindowSeconds: 300
+      maxPodsPerMinute: 1

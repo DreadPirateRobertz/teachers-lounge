@@ -163,3 +163,100 @@ type UpdatePreferencesRequest struct {
 	FelderSilvermanDials   map[string]float64 `json:"felder_silverman_dials,omitempty"`
 	ExplanationPreferences map[string]string  `json:"explanation_preferences,omitempty"`
 }
+
+// ============================================================
+// TEACHER ACCOUNTS
+// ============================================================
+
+// TeacherProfile marks a user as a teacher and holds teacher metadata.
+type TeacherProfile struct {
+	UserID     uuid.UUID `json:"user_id"`
+	SchoolName string    `json:"school_name"`
+	Bio        string    `json:"bio"`
+	CreatedAt  time.Time `json:"created_at"`
+}
+
+// TeacherClass represents a class managed by a teacher.
+type TeacherClass struct {
+	ID          uuid.UUID `json:"id"`
+	TeacherID   uuid.UUID `json:"teacher_id"`
+	Name        string    `json:"name"`
+	Subject     string    `json:"subject"`
+	Description string    `json:"description"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+// StudentSummary is the roster entry view of a student.
+type StudentSummary struct {
+	UserID      uuid.UUID `json:"user_id"`
+	DisplayName string    `json:"display_name"`
+	AvatarEmoji string    `json:"avatar_emoji"`
+	Email       string    `json:"email"`
+	EnrolledAt  time.Time `json:"enrolled_at"`
+}
+
+// GamingProfileSummary is a teacher-visible snapshot of a student's gaming progress.
+type GamingProfileSummary struct {
+	Level          int   `json:"level"`
+	XP             int64 `json:"xp"`
+	CurrentStreak  int   `json:"current_streak"`
+	LongestStreak  int   `json:"longest_streak"`
+	BossesDefeated int   `json:"bosses_defeated"`
+}
+
+// QuizStats aggregates quiz performance for a student.
+type QuizStats struct {
+	TotalQuestions int     `json:"total_questions"`
+	CorrectAnswers int     `json:"correct_answers"`
+	AccuracyPct    float64 `json:"accuracy_pct"`
+}
+
+// StudentProgress is the full progress view a teacher sees for a student.
+type StudentProgress struct {
+	Student  *StudentSummary       `json:"student"`
+	Gaming   *GamingProfileSummary `json:"gaming_profile,omitempty"`
+	Learning *LearningProfile      `json:"learning_profile,omitempty"`
+	Quiz     *QuizStats            `json:"quiz_stats,omitempty"`
+}
+
+// ClassMaterialAssignment is a material assigned to a class.
+type ClassMaterialAssignment struct {
+	ClassID    uuid.UUID  `json:"class_id"`
+	MaterialID uuid.UUID  `json:"material_id"`
+	Filename   string     `json:"filename"`
+	AssignedAt time.Time  `json:"assigned_at"`
+	DueDate    *time.Time `json:"due_date,omitempty"`
+}
+
+// ============================================================
+// TEACHER REQUEST / RESPONSE DTOs
+// ============================================================
+
+type CreateTeacherProfileRequest struct {
+	SchoolName string `json:"school_name"`
+	Bio        string `json:"bio"`
+}
+
+type CreateClassRequest struct {
+	Name        string `json:"name"`
+	Subject     string `json:"subject"`
+	Description string `json:"description"`
+}
+
+type UpdateClassRequest struct {
+	Name        *string `json:"name,omitempty"`
+	Subject     *string `json:"subject,omitempty"`
+	Description *string `json:"description,omitempty"`
+}
+
+type AddStudentRequest struct {
+	// StudentID or Email — at least one must be provided
+	StudentID *string `json:"student_id,omitempty"`
+	Email     *string `json:"email,omitempty"`
+}
+
+type AssignMaterialRequest struct {
+	MaterialID string     `json:"material_id"`
+	DueDate    *time.Time `json:"due_date,omitempty"`
+}

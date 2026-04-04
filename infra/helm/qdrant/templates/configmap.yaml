@@ -1,0 +1,41 @@
+## Qdrant server configuration — mounted at /qdrant/config/production.yaml.
+## Controls HNSW index defaults and cluster settings.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "qdrant.fullname" . }}-config
+  labels:
+    {{- include "qdrant.labels" . | nindent 4 }}
+data:
+  production.yaml: |
+    storage:
+      ## HNSW index defaults applied when a new collection is created without
+      ## explicit index parameters. Tuned for the curriculum collection (1024-dim).
+      hnsw_index:
+        ## m: bi-directional links per node. 16 is a balanced default.
+        m: {{ .Values.hnsw.m }}
+        ## ef_construct: dynamic candidate list size during build. Higher = better
+        ## recall at the cost of slower indexing. 100 is the Qdrant default.
+        ef_construct: {{ .Values.hnsw.efConstruct }}
+        ## full_scan_threshold: use brute-force below this number of vectors.
+        full_scan_threshold: {{ .Values.hnsw.fullScanThreshold }}
+        ## Use all available CPU threads for parallel index builds.
+        max_indexing_threads: 0
+      ## Scalar quantization compresses float32 → int8 (~4x memory reduction).
+      ## Collections that explicitly set quantization will override this.
+      quantization:
+        scalar:
+          type: {{ .Values.quantization.scalarType }}
+          ## quantile controls clipping: 0.99 keeps the top 1% of outliers unclipped.
+          quantile: {{ .Values.quantization.quantileRatio }}
+          ## always_ram: keep quantized vectors in RAM for fast search even under
+          ## memory pressure (avoids disk I/O on every query).
+          always_ram: {{ .Values.quantization.alwaysRam }}
+    cluster:
+      enabled: true
+      p2p:
+        ## Intra-cluster Raft communication port (not exposed externally).
+        port: 6335
+      consensus:
+        ## Raft tick period in milliseconds. 100ms is the recommended default.
+        tick_period_ms: 100

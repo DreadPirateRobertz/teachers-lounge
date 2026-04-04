@@ -1,0 +1,19 @@
+## Dev overrides — single replica, minimal resources, snapshots disabled.
+## Not suitable for distributed Qdrant features (no peer replication).
+
+replicaCount: 1
+
+persistence:
+  storageClass: "standard-rwo"
+  size: 5Gi
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+snapshot:
+  enabled: false
