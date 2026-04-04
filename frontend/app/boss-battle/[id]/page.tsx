@@ -1,3 +1,5 @@
+import Link from 'next/link'
+
 // Phase 4 stub — WebGL/Three.js boss battles are built in Phase 4
 // This page is the future home of the animated boss fight experience.
 //
@@ -42,12 +44,12 @@ export default async function BossBattlePage({
         &ldquo;Do. Or do not. There is no try.&rdquo; — Yoda
       </div>
 
-      <a
+      <Link
         href="/"
         className="mt-8 text-xs text-neon-blue border border-neon-blue/30 px-4 py-2 rounded-lg hover:bg-neon-blue/10 transition-colors"
       >
         ← Back to Tutor
-      </a>
+      </Link>
     </div>
   )
 }

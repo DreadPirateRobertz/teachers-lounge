@@ -32,6 +32,30 @@ type Storer interface {
 
 	WriteAuditLog(ctx context.Context, p AuditLogParams) error
 	CreateExportJob(ctx context.Context, userID uuid.UUID) (uuid.UUID, error)
+
+	// Teacher profiles
+	CreateTeacherProfile(ctx context.Context, p CreateTeacherProfileParams) (*models.TeacherProfile, error)
+	GetTeacherProfile(ctx context.Context, userID uuid.UUID) (*models.TeacherProfile, error)
+
+	// Teacher classes
+	CreateClass(ctx context.Context, p CreateClassParams) (*models.TeacherClass, error)
+	GetClass(ctx context.Context, id uuid.UUID) (*models.TeacherClass, error)
+	ListClasses(ctx context.Context, teacherID uuid.UUID) ([]*models.TeacherClass, error)
+	UpdateClass(ctx context.Context, id uuid.UUID, p UpdateClassParams) (*models.TeacherClass, error)
+	DeleteClass(ctx context.Context, id uuid.UUID) error
+
+	// Class enrollment (roster)
+	AddStudentToClass(ctx context.Context, classID, studentID uuid.UUID) error
+	RemoveStudentFromClass(ctx context.Context, classID, studentID uuid.UUID) error
+	ListClassRoster(ctx context.Context, classID uuid.UUID) ([]*models.StudentSummary, error)
+
+	// Student progress (teacher-visible view)
+	GetStudentProgress(ctx context.Context, studentID uuid.UUID) (*models.StudentProgress, error)
+
+	// Class material assignments
+	AssignMaterialToClass(ctx context.Context, p AssignMaterialParams) error
+	UnassignMaterialFromClass(ctx context.Context, classID, materialID uuid.UUID) error
+	ListClassMaterials(ctx context.Context, classID uuid.UUID) ([]*models.ClassMaterialAssignment, error)
 }
 
 // Ensure *Store satisfies Storer at compile time.
