@@ -1,0 +1,98 @@
+{{- if .Values.snapshot.enabled }}
+## Nightly GCS snapshot CronJob.
+##
+## For each Qdrant collection:
+##   1. POST /collections/{name}/snapshots  → creates snapshot on the server
+##   2. GET  /collections/{name}/snapshots/{file} → streams snapshot data
+##   3. gsutil cp -                          → uploads stream directly to GCS
+##
+## The pod uses Workload Identity (via the qdrant ServiceAccount) to authenticate
+## to GCS — no static credentials required. Requires:
+##   - GCP SA: qdrant-snapshots@<project>.iam.gserviceaccount.com
+##   - roles/storage.objectCreator on the snapshot bucket
+##   - Workload Identity binding: K8s SA → GCP SA (annotation on ServiceAccount)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "qdrant.fullname" . }}-snapshot
+  labels:
+    {{- include "qdrant.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.snapshot.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      ## Allow up to 2 hours for a full snapshot cycle across all collections.
+      activeDeadlineSeconds: 7200
+      template:
+        metadata:
+          labels:
+            {{- include "qdrant.selectorLabels" . | nindent 12 }}
+            app.kubernetes.io/component: snapshot
+        spec:
+          serviceAccountName: {{ include "qdrant.serviceAccountName" . }}
+          restartPolicy: OnFailure
+          containers:
+            - name: snapshot
+              image: {{ .Values.snapshot.image | quote }}
+              imagePullPolicy: {{ .Values.snapshot.imagePullPolicy }}
+              resources:
+                {{- toYaml .Values.snapshot.resources | nindent 16 }}
+              env:
+                - name: QDRANT_URL
+                  value: "http://{{ include "qdrant.fullname" . }}:{{ .Values.service.httpPort }}"
+                - name: GCS_BUCKET
+                  value: {{ .Values.snapshot.gcsBucket | quote }}
+                - name: GCS_PATH_PREFIX
+                  value: {{ .Values.snapshot.gcsPathPrefix | quote }}
+              command: ["sh", "-c"]
+              args:
+                - |
+                  set -euo pipefail
+
+                  DATE=$(date -u +%Y%m%d-%H%M%S)
+                  echo "[snapshot] starting at $DATE — target: gs://${GCS_BUCKET}/${GCS_PATH_PREFIX}/${DATE}/"
+
+                  ## List all collections; exit cleanly if none exist yet.
+                  COLLECTIONS=$(curl -sf "${QDRANT_URL}/collections" \
+                    | jq -r '.result.collections[].name // empty')
+
+                  if [ -z "$COLLECTIONS" ]; then
+                    echo "[snapshot] no collections found — nothing to snapshot"
+                    exit 0
+                  fi
+
+                  FAILED=0
+                  for COLLECTION in $COLLECTIONS; do
+                    echo "[snapshot] snapshotting collection: ${COLLECTION}"
+
+                    ## Trigger snapshot creation on the Qdrant server.
+                    SNAPSHOT_NAME=$(curl -sf -X POST \
+                      "${QDRANT_URL}/collections/${COLLECTION}/snapshots" \
+                      | jq -r '.result.name')
+
+                    if [ -z "$SNAPSHOT_NAME" ]; then
+                      echo "[snapshot] ERROR: failed to create snapshot for ${COLLECTION}"
+                      FAILED=$((FAILED + 1))
+                      continue
+                    fi
+
+                    echo "[snapshot] uploading ${SNAPSHOT_NAME} → gs://${GCS_BUCKET}/${GCS_PATH_PREFIX}/${DATE}/${COLLECTION}/${SNAPSHOT_NAME}"
+
+                    ## Stream snapshot directly from Qdrant HTTP API to GCS.
+                    ## Avoids writing to local disk (no ephemeral storage needed).
+                    curl -sf "${QDRANT_URL}/collections/${COLLECTION}/snapshots/${SNAPSHOT_NAME}" \
+                      | gsutil cp - "gs://${GCS_BUCKET}/${GCS_PATH_PREFIX}/${DATE}/${COLLECTION}/${SNAPSHOT_NAME}"
+
+                    echo "[snapshot] ${COLLECTION} done"
+                  done
+
+                  if [ "$FAILED" -gt 0 ]; then
+                    echo "[snapshot] ERROR: ${FAILED} collection(s) failed"
+                    exit 1
+                  fi
+
+                  echo "[snapshot] all collections complete — $(echo "$COLLECTIONS" | wc -w | tr -d ' ') snapshot(s) uploaded"
+{{- end }}

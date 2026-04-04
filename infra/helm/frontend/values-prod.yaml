@@ -5,3 +5,10 @@ image:
 
 ingress:
   host: app.teacherslounge.app
+
+autoscaling:
+  enabled: true
+  minReplicas: 3
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+  targetMemoryUtilizationPercentage: 80
