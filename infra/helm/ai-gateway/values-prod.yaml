@@ -3,3 +3,10 @@ image:
   tag: main-stable
 env:
   LITELLM_LOG: "WARNING"
+
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 8
+  targetCPUUtilizationPercentage: 65
+  targetMemoryUtilizationPercentage: 80
