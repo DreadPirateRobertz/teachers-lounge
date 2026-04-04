@@ -1,4 +1,10 @@
-"""Student analytics endpoints."""
+"""Student analytics endpoints.
+
+Provides three read-only endpoints that aggregate a student's learning data
+from the gaming_profiles, quiz_results, and interactions tables.  All
+endpoints require a valid JWT and enforce that callers may only read their own
+data (self-access only).
+"""
 from datetime import date, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -15,6 +21,23 @@ router = APIRouter(prefix="/v1/analytics/student", tags=["analytics"])
 # ── Response models ──────────────────────────────────────────────────────────
 
 class Overview(BaseModel):
+    """Aggregate snapshot of a student's progress and gaming state.
+
+    Attributes:
+        user_id: UUID of the student.
+        level: Current gamification level.
+        xp: Total experience points earned.
+        current_streak: Active daily study streak in days.
+        longest_streak: All-time best streak in days.
+        total_questions: Lifetime questions attempted.
+        correct_answers: Lifetime correct answers.
+        accuracy_pct: Correct / total * 100, rounded to one decimal.
+        bosses_defeated: Number of boss battles won.
+        gems: Current gem balance.
+        total_sessions: Distinct study sessions from the interactions table.
+        total_messages: Student messages sent across all sessions.
+    """
+
     user_id: str
     level: int
     xp: int
@@ -30,6 +53,15 @@ class Overview(BaseModel):
 
 
 class TopicStat(BaseModel):
+    """Per-topic quiz performance summary.
+
+    Attributes:
+        topic: Topic label as stored in quiz_results.
+        total: Total questions attempted for this topic.
+        correct: Correct answers for this topic.
+        accuracy_pct: Correct / total * 100, rounded to one decimal.
+    """
+
     topic: str
     total: int
     correct: int
@@ -37,22 +69,50 @@ class TopicStat(BaseModel):
 
 
 class QuizBreakdown(BaseModel):
+    """Collection of per-topic quiz stats, ordered by attempt volume desc.
+
+    Attributes:
+        topics: Up to 20 topics with accuracy metrics.
+    """
+
     topics: list[TopicStat]
 
 
 class DayActivity(BaseModel):
-    date: str   # ISO date string
+    """Student message count for a single calendar day.
+
+    Attributes:
+        date: ISO-8601 date string (YYYY-MM-DD).
+        messages: Number of student-role messages sent that day.
+    """
+
+    date: str
     messages: int
 
 
 class ActivityHistory(BaseModel):
+    """30-day rolling activity history.
+
+    Attributes:
+        days: Exactly 30 entries, one per day, newest entry last.
+            Days with no activity have messages=0.
+    """
+
     days: list[DayActivity]
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
 
 def _check_self_or_raise(requesting_user_id: str, target_user_id: str) -> None:
-    """Users may only access their own analytics."""
+    """Raise HTTP 403 if the caller is not the resource owner.
+
+    Args:
+        requesting_user_id: Subject claim from the validated JWT.
+        target_user_id: Path parameter identifying the requested student.
+
+    Raises:
+        HTTPException: 403 Forbidden when IDs do not match.
+    """
     if requesting_user_id != target_user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
@@ -65,6 +125,24 @@ async def get_overview(
     caller: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ) -> Overview:
+    """Return a student's aggregate progress snapshot.
+
+    Combines gaming_profiles (XP, level, streaks) with interaction counts
+    (sessions, messages).  If no gaming profile exists yet a zeroed default
+    is returned so the dashboard renders cleanly for brand-new accounts.
+
+    Args:
+        user_id: Target student UUID (path parameter).
+        caller: Authenticated user ID from JWT (injected by require_auth).
+        db: Async SQLAlchemy session (injected by get_db).
+
+    Returns:
+        Overview with current level, XP, streaks, accuracy, and session counts.
+
+    Raises:
+        HTTPException: 401 if the JWT is missing or invalid.
+        HTTPException: 403 if caller != user_id.
+    """
     _check_self_or_raise(caller, user_id)
 
     gaming_row = await db.execute(
@@ -124,6 +202,24 @@ async def get_quiz_breakdown(
     caller: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ) -> QuizBreakdown:
+    """Return per-topic quiz accuracy for a student.
+
+    Aggregates quiz_results grouped by topic, ordered by attempt volume
+    descending, capped at 20 topics.
+
+    Args:
+        user_id: Target student UUID (path parameter).
+        caller: Authenticated user ID from JWT (injected by require_auth).
+        db: Async SQLAlchemy session (injected by get_db).
+
+    Returns:
+        QuizBreakdown with a list of TopicStat entries.  Empty list when the
+        student has no quiz_results rows yet.
+
+    Raises:
+        HTTPException: 401 if the JWT is missing or invalid.
+        HTTPException: 403 if caller != user_id.
+    """
     _check_self_or_raise(caller, user_id)
 
     result = await db.execute(
@@ -160,6 +256,25 @@ async def get_activity(
     caller: str = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ) -> ActivityHistory:
+    """Return a 30-day rolling activity history for a student.
+
+    Counts student-role messages per calendar day for the past 30 days.
+    Days with no activity are included with messages=0 so the frontend
+    heatmap always receives exactly 30 data points.
+
+    Args:
+        user_id: Target student UUID (path parameter).
+        caller: Authenticated user ID from JWT (injected by require_auth).
+        db: Async SQLAlchemy session (injected by get_db).
+
+    Returns:
+        ActivityHistory with exactly 30 DayActivity entries ordered oldest
+        to newest.
+
+    Raises:
+        HTTPException: 401 if the JWT is missing or invalid.
+        HTTPException: 403 if caller != user_id.
+    """
     _check_self_or_raise(caller, user_id)
 
     since = date.today() - timedelta(days=29)
