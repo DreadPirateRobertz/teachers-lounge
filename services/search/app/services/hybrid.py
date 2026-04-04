@@ -17,6 +17,8 @@ from uuid import UUID
 
 from app.models import ChunkResult
 
+_RRF_K = 60
+
 
 def combine_dense_sparse(
     dense_results: list[ChunkResult],

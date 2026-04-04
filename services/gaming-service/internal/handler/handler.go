@@ -46,6 +46,11 @@ type Storer interface {
 	DeleteBattleSession(ctx context.Context, sessionID string) error
 	RecordBattleResult(ctx context.Context, result *model.BattleResult) error
 	DeductGems(ctx context.Context, userID string, amount int) (int, error)
+
+	// Learning style assessment
+	CreateAssessmentSession(ctx context.Context, userID string) (*model.AssessmentSession, error)
+	GetAssessmentSession(ctx context.Context, sessionID string) (*model.AssessmentSession, error)
+	RecordAssessmentAnswer(ctx context.Context, sessionID, userID, questionID, chosenKey string) (*model.AssessmentSession, error)
 }
 
 // Handler holds the store and logger.

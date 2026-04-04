@@ -170,6 +170,28 @@ class TestResultSchema:
             assert len(resp.json()["results"]) == 5
 
 
+class TestHybridSearchMode:
+    @patch("app.routers.search.dense_search", new_callable=AsyncMock)
+    @patch("app.routers.search.sparse_search", new_callable=AsyncMock)
+    def test_hybrid_mode_when_sparse_returns_results(
+        self, mock_sparse, mock_dense, client
+    ):
+        """search_mode is 'hybrid' when sparse search returns results."""
+        chunk = _make_chunk(score=0.9)
+        mock_dense.return_value = [chunk]
+        mock_sparse.return_value = [chunk]
+
+        resp = client.get(f"/v1/search?q=entropy&course_id={COURSE_ID}")
+        assert resp.json()["search_mode"] == "hybrid"
+
+    @patch("app.routers.search.dense_search", new_callable=AsyncMock, return_value=[])
+    @_no_sparse
+    def test_dense_mode_when_sparse_empty(self, mock_sparse, mock_dense, client):
+        """search_mode is 'dense' when sparse returns nothing (not yet indexed)."""
+        resp = client.get(f"/v1/search?q=entropy&course_id={COURSE_ID}")
+        assert resp.json()["search_mode"] == "dense"
+
+
 class TestCourseIdFiltering:
     def test_course_id_forwarded_to_qdrant(self, client):
         cid = uuid.uuid4()
