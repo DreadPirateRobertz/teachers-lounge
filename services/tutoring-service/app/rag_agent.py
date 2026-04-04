@@ -1,12 +1,11 @@
-"""
-Agentic RAG pipeline — Phase 2 implementation of the 6-step loop.
+"""Agentic RAG pipeline — Phase 2 implementation of the 6-step loop.
 
 Phase 2 scope:
   Step 1 — Student context: recent interaction history (full SKM in Phase 5)
   Step 2 — Concept graph prerequisite check: deferred to Phase 5
   Step 3 — Hybrid curriculum retrieval via Search Service (IMPLEMENTED)
   Step 4 — Cross-student insights from BigQuery: deferred to Phase 7
-  Step 5 — Enriched system prompt + AI Gateway call (IMPLEMENTED)
+  Step 5 — Enriched system prompt with chapter/section/page citations (IMPLEMENTED)
   Step 6 — Interaction log + spaced rep: log only (spaced rep in Phase 5)
 
 Exit criteria (tl-dkm): student uploads PDF, asks a question, receives
@@ -43,17 +42,26 @@ async def build_rag_context(
     course_id: UUID,
     db: AsyncSession,
 ) -> tuple[str, list[SearchResult]]:
-    """
-    Run the agentic RAG loop and return (enriched_system_prompt, source_chunks).
+    """Run the agentic RAG loop and return an enriched system prompt + source chunks.
 
     The system prompt is injected into the messages list sent to the AI Gateway.
     source_chunks are returned to the chat layer for source attribution in the
-    SSE done event.
+    SSE sources event.
 
     Degrades gracefully: if the Search Service is unavailable, returns a prompt
     that directs Professor Nova to answer from general knowledge.
+
+    Args:
+        student_id: UUID of the authenticated student.
+        session_id: UUID of the current chat session.
+        question: The student's raw question text.
+        course_id: UUID of the student's enrolled course (search scope).
+        db: Async SQLAlchemy session for history retrieval.
+
+    Returns:
+        Tuple of (system_prompt, source_chunks).
     """
-    # Step 1: Student context — use interaction count as a simple engagement signal.
+    # Step 1: Student context — interaction count as simple engagement signal.
     # Full SKM (learning style, mastery graph, misconception log) is Phase 5.
     recent_history = await get_history(db, session_id, limit=20)
     student_turns = sum(1 for i in recent_history if i.role == "student")
@@ -78,6 +86,15 @@ async def build_rag_context(
 
 
 def _build_system_prompt(chunks: list[SearchResult], student_turns: int) -> str:
+    """Build the enriched system prompt from retrieved chunks and student context.
+
+    Args:
+        chunks: Curriculum chunks returned by the Search Service.
+        student_turns: Number of student messages in the current session.
+
+    Returns:
+        Full system prompt string for the AI Gateway.
+    """
     if not chunks:
         return (
             PROFESSOR_NOVA_SYSTEM_PROMPT
@@ -107,6 +124,14 @@ Student context: {experience_note}"""
 
 
 def _format_chunks(chunks: list[SearchResult]) -> str:
+    """Format retrieved chunks as a numbered, location-annotated context block.
+
+    Args:
+        chunks: Ordered list of curriculum chunks from the Search Service.
+
+    Returns:
+        Multi-line string with each chunk numbered and its location annotated.
+    """
     if not chunks:
         return ""
     parts = []

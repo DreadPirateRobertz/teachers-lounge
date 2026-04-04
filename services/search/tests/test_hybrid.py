@@ -1,4 +1,5 @@
-"""Tests for hybrid RRF combiner and full search pipeline."""
+"""Tests for hybrid RRF combiner, re-ranker stub, and embedder."""
+import math
 import uuid
 from unittest.mock import AsyncMock, patch
 
@@ -17,6 +18,29 @@ def _chunk(score: float, chunk_id: uuid.UUID | None = None) -> ChunkResult:
         score=score,
     )
 
+
+# ---------------------------------------------------------------------------
+# Embedder — stub path (no API key configured)
+# ---------------------------------------------------------------------------
+
+class TestEmbedderStub:
+    @pytest.mark.asyncio
+    async def test_returns_correct_dimension(self):
+        from app.services.embedder import embed_query
+        vec = await embed_query("what is entropy?")
+        assert len(vec) == 1024
+
+    @pytest.mark.asyncio
+    async def test_returns_unit_vector(self):
+        from app.services.embedder import embed_query
+        vec = await embed_query("test query")
+        norm = math.sqrt(sum(x * x for x in vec))
+        assert abs(norm - 1.0) < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# RRF combiner
+# ---------------------------------------------------------------------------
 
 class TestRRFCombiner:
     def test_empty_inputs_return_empty(self):
@@ -62,6 +86,28 @@ class TestRRFCombiner:
         results = combine_dense_sparse(chunks, [])
         scores = [r.score for r in results]
         assert scores == sorted(scores, reverse=True)
+
+    def test_sparse_only_chunk_included_in_results(self):
+        """Chunks appearing only in sparse are still returned."""
+        sparse_chunk = _chunk(0.7)
+        dense = [_chunk(0.9)]
+        result = combine_dense_sparse(dense, [sparse_chunk])
+        ids = {str(r.chunk_id) for r in result}
+        assert str(sparse_chunk.chunk_id) in ids
+
+    def test_result_length_is_union_of_both_lists(self):
+        dense = [_chunk(0.9), _chunk(0.8)]
+        sparse = [_chunk(0.7), _chunk(0.6)]
+        result = combine_dense_sparse(dense, sparse)
+        assert len(result) == 4
+
+    def test_overlapping_lists_deduplicated(self):
+        """Same chunk in both lists counts once in output."""
+        shared_id = uuid.uuid4()
+        shared = _chunk(0.9, chunk_id=shared_id)
+        result = combine_dense_sparse([shared], [shared])
+        matching = [r for r in result if r.chunk_id == shared_id]
+        assert len(matching) == 1
 
     def test_embedding_vector_is_passed_to_qdrant(self):
         """The vector returned by embed_query must be forwarded to dense_search unchanged."""

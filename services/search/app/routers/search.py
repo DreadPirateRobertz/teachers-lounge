@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 from typing import Annotated
 
@@ -34,20 +35,25 @@ async def search(
     Hybrid search over the curriculum collection for a given course.
 
     Runs dense (semantic) and sparse (BM25) searches in parallel, then fuses
-    them with Reciprocal Rank Fusion (RRF) before returning ranked results.
+    them with Reciprocal Rank Fusion (RRF) before re-ranking and returning results.
+
+    Falls back gracefully to dense-only when sparse vectors are not available.
     """
-    query_vector, dense_results, sparse_results = await _run_search(q, course_id, limit, chapter)
+    fetch_limit = max(limit, settings.sparse_rerank_limit)
+
+    query_vector, dense_results, sparse_results = await _run_search(q, course_id, fetch_limit, chapter)
 
     fused = combine_dense_sparse(dense_results, sparse_results)
     ranked = await rerank(q, fused)
+    final = ranked[:limit]
 
     search_mode = "hybrid" if sparse_results else "dense"
     return SearchResponse(
         query=q,
         course_id=course_id,
-        results=ranked[:limit],
-        total=len(ranked),
-        search_mode="hybrid",
+        results=final,
+        total=len(final),
+        search_mode=search_mode,
     )
 
 
@@ -58,8 +64,6 @@ async def _run_search(
     chapter: str | None = None,
 ) -> tuple[list[float], list, list]:
     """Run embedding, dense search, and sparse search concurrently."""
-    import asyncio
-
     query_vector = await embed_query(q)
 
     dense_task = asyncio.create_task(

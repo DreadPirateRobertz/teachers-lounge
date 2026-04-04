@@ -129,7 +129,12 @@ async def sparse_search(
     limit: int,
     chapter: str | None = None,
 ) -> list[ChunkResult]:
-    """Search curriculum collection with BM25 sparse vector, filtered by course_id and optional chapter."""
+    """Search curriculum collection with BM25 sparse vector, filtered by course_id and optional chapter.
+
+    Returns an empty list if the collection has no sparse vector field yet
+    (i.e. ingestion has not stored BM25 vectors) rather than raising an error.
+    The hybrid combiner degrades gracefully to dense-only in that case.
+    """
     client = get_client()
 
     sparse_tf = _tokenize(query)
@@ -142,17 +147,22 @@ async def sparse_search(
 
     query_filter = _build_filter(course_id, chapter)
 
-    hits = await client.search(
-        collection_name=settings.curriculum_collection,
-        query_vector=NamedSparseVector(
-            name="sparse",
-            vector=SparseVector(indices=indices, values=values),
-        ),
-        query_filter=query_filter,
-        limit=limit,
-        with_payload=True,
-        with_vectors=False,
-    )
+    try:
+        hits = await client.search(
+            collection_name=settings.curriculum_collection,
+            query_vector=NamedSparseVector(
+                name="sparse",
+                vector=SparseVector(indices=indices, values=values),
+            ),
+            query_filter=query_filter,
+            limit=limit,
+            with_payload=True,
+            with_vectors=False,
+        )
+    except Exception as exc:
+        # Collection may not have sparse vectors indexed yet (pre-ingestion).
+        logger.debug("sparse_search skipped (no sparse index?): %s", exc)
+        return []
 
     results = []
     for hit in hits:
