@@ -1,14 +1,25 @@
+import Link from 'next/link'
+
 export default function AppHeader() {
   return (
     <header className="flex items-center justify-between px-4 h-12 bg-bg-panel border-b border-border-dim flex-shrink-0">
       {/* Logo */}
-      <div className="flex items-center gap-2">
-        <span className="font-mono text-sm font-bold text-neon-blue text-glow-blue tracking-widest uppercase">
-          TV
-        </span>
-        <span className="text-xs text-text-dim font-mono tracking-wide hidden sm:block">
-          TeachersLounge
-        </span>
+      <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-sm font-bold text-neon-blue text-glow-blue tracking-widest uppercase">
+            TV
+          </span>
+          <span className="text-xs text-text-dim font-mono tracking-wide hidden sm:block">
+            TeachersLounge
+          </span>
+        </div>
+        <Link
+          href="/analytics"
+          className="hidden sm:flex items-center gap-1 text-[10px] font-mono text-text-dim hover:text-neon-blue transition-colors border border-border-dim rounded-full px-2 py-0.5 hover:border-neon-blue/40"
+        >
+          <span>📊</span>
+          <span>Analytics</span>
+        </Link>
       </div>
 
       {/* Prof Nova status */}
