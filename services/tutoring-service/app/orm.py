@@ -1,8 +1,8 @@
-"""SQLAlchemy ORM models (Phase 1 subset of the full schema)."""
+"""SQLAlchemy ORM models."""
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Enum as SAEnum, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -12,6 +12,97 @@ from .database import Base
 def _now() -> datetime:
     return datetime.now(timezone.utc)
 
+
+# ── Concept graph + mastery (shared with concept-dependency and SRS) ──────────
+
+class Concept(Base):
+    __tablename__ = "concepts"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    course_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    path: Mapped[str] = mapped_column(Text, nullable=False)
+
+    prerequisites: Mapped[list["ConceptPrerequisite"]] = relationship(
+        foreign_keys="ConceptPrerequisite.concept_id",
+        back_populates="concept",
+        lazy="selectin",
+    )
+    dependents: Mapped[list["ConceptPrerequisite"]] = relationship(
+        foreign_keys="ConceptPrerequisite.prerequisite_id",
+        back_populates="prerequisite",
+        lazy="selectin",
+    )
+
+
+class ConceptPrerequisite(Base):
+    __tablename__ = "concept_prerequisites"
+
+    concept_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("concepts.id", ondelete="CASCADE"), primary_key=True
+    )
+    prerequisite_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("concepts.id", ondelete="CASCADE"), primary_key=True
+    )
+    weight: Mapped[float] = mapped_column(Float, default=1.0)
+
+    concept: Mapped["Concept"] = relationship(foreign_keys=[concept_id], back_populates="prerequisites")
+    prerequisite: Mapped["Concept"] = relationship(foreign_keys=[prerequisite_id], back_populates="dependents")
+
+
+class StudentConceptMastery(Base):
+    """Per-student, per-concept mastery state including SM-2 scheduling fields."""
+    __tablename__ = "student_concept_mastery"
+
+    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    concept_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("concepts.id", ondelete="CASCADE"), primary_key=True
+    )
+    mastery_score: Mapped[float] = mapped_column(Float, default=0.0)
+    last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    next_review_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    decay_rate: Mapped[float] = mapped_column(Float, default=0.1)
+
+    # SM-2 scheduling state
+    ease_factor: Mapped[float] = mapped_column(Float, default=2.5)
+    interval_days: Mapped[int] = mapped_column(Integer, default=1)
+    repetitions: Mapped[int] = mapped_column(Integer, default=0)
+
+    concept: Mapped["Concept"] = relationship(lazy="selectin")
+    review_records: Mapped[list["ReviewRecord"]] = relationship(
+        back_populates="mastery",
+        order_by="ReviewRecord.reviewed_at",
+        lazy="select",
+    )
+
+
+class ReviewRecord(Base):
+    """Audit log of individual review responses for a student + concept."""
+    __tablename__ = "review_records"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    concept_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("concepts.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    quality: Mapped[int] = mapped_column(Integer, nullable=False)          # 0-5
+    mastery_before: Mapped[float] = mapped_column(Float, nullable=False)
+    mastery_after: Mapped[float] = mapped_column(Float, nullable=False)
+    interval_after: Mapped[int] = mapped_column(Integer, nullable=False)   # days
+    ease_after: Mapped[float] = mapped_column(Float, nullable=False)
+    reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    mastery: Mapped["StudentConceptMastery"] = relationship(
+        foreign_keys=[user_id, concept_id],
+        primaryjoin="and_(ReviewRecord.user_id == StudentConceptMastery.user_id, "
+                    "ReviewRecord.concept_id == StudentConceptMastery.concept_id)",
+        back_populates="review_records",
+        overlaps="review_records",
+    )
+
+
+# ── Chat sessions + interactions ──────────────────────────────────────────────
 
 class Session(Base):
     __tablename__ = "chat_sessions"
