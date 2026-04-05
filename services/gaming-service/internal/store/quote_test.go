@@ -68,6 +68,14 @@ func (d *seqDB) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, 
 	return pgconn.CommandTag{}, nil
 }
 
+func (d *seqDB) Query(_ context.Context, _ string, _ ...any) (pgx.Rows, error) {
+	return nil, nil
+}
+
+func (d *seqDB) Begin(_ context.Context) (pgx.Tx, error) {
+	return nil, nil
+}
+
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func newQuoteStore(t *testing.T, db store.DB) (*store.Store, *miniredis.Miniredis) {
@@ -255,10 +263,7 @@ func TestRandomQuoteForUser_SeenKeyHas25HourTTL(t *testing.T) {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	ttl, err := mr.TTL(seenKey(userID))
-	if err != nil {
-		t.Fatalf("miniredis TTL: %v", err)
-	}
+	ttl := mr.TTL(seenKey(userID))
 	const want = 25 * time.Hour
 	// Allow a 5-second window for test execution time.
 	if ttl < want-5*time.Second || ttl > want {

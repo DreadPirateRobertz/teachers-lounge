@@ -18,14 +18,6 @@ import (
 	"github.com/teacherslounge/gaming-service/internal/xp"
 )
 
-// DB is the subset of *pgxpool.Pool that the store uses.
-// Defined as an interface so tests can substitute a lightweight fake
-// without spinning up a real Postgres connection.
-type DB interface {
-	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
-	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
-}
-
 const (
 	streakKeyPrefix   = "streak:"
 	leaderboardKey    = "leaderboard:global"
@@ -37,6 +29,15 @@ const (
 	questKeyPrefix = "quests:daily:"
 	questTTL       = 24 * time.Hour
 )
+
+// DB is the subset of *pgxpool.Pool that the Store uses.
+// Defined as an interface so tests can substitute a lightweight fake.
+type DB interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+	Begin(ctx context.Context) (pgx.Tx, error)
+}
 
 // Store holds Postgres and Redis clients.
 type Store struct {
@@ -309,14 +310,6 @@ func (s *Store) LeaderboardGetFriends(ctx context.Context, userID string, friend
 	return entries, userRank, nil
 }
 
-// seenQuotesKey returns the Redis key for a user's set of seen quote IDs for today.
-// Key format: quotes:seen:{userID}:{YYYY-MM-DD} — expires after 25 hours.
-func seenQuotesKey(userID string) string {
-	return fmt.Sprintf("quotes:seen:%s:%s", userID, time.Now().UTC().Format("2006-01-02"))
-}
-
-const seenQuotesTTL = 25 * time.Hour // slightly more than a day for timezone safety
-
 // RandomQuote fetches a random row from scifi_quotes with no dedup or context filter.
 // Kept for unauthenticated or fallback callers.
 func (s *Store) RandomQuote(ctx context.Context) (*model.Quote, error) {
@@ -334,6 +327,14 @@ func (s *Store) RandomQuote(ctx context.Context) (*model.Quote, error) {
 	return quote, nil
 }
 
+// seenQuotesKey returns the Redis key for a user's set of seen quote IDs for today.
+// Key format: quotes:seen:{userID}:{YYYY-MM-DD} — expires after 25 hours.
+func seenQuotesKey(userID string) string {
+	return fmt.Sprintf("quotes:seen:%s:%s", userID, time.Now().UTC().Format("2006-01-02"))
+}
+
+const seenQuotesTTL = 25 * time.Hour // slightly more than a day for timezone safety
+
 // RandomQuoteForUser fetches a random quote for a specific user, applying a
 // context filter (empty string means any context) and excluding quote IDs the
 // user has already seen today, tracked in Redis with a 25-hour TTL.
@@ -345,7 +346,6 @@ func (s *Store) RandomQuoteForUser(ctx context.Context, userID, quotectx string)
 
 	seenIDs, err := s.rdb.SMembers(ctx, key).Result()
 	if err != nil {
-		// Non-fatal: proceed without exclusion if Redis is unavailable.
 		seenIDs = nil
 	}
 
@@ -354,7 +354,6 @@ func (s *Store) RandomQuoteForUser(ctx context.Context, userID, quotectx string)
 		return nil, err
 	}
 
-	// All quotes exhausted for today: clear dedup set and retry without exclusions.
 	if quote == nil {
 		if len(seenIDs) > 0 {
 			_ = s.rdb.Del(ctx, key)
@@ -369,7 +368,6 @@ func (s *Store) RandomQuoteForUser(ctx context.Context, userID, quotectx string)
 		return nil, fmt.Errorf("no quotes found for context %q", quotectx)
 	}
 
-	// Track this quote as seen today (best-effort: ignore Redis errors).
 	pipe := s.rdb.Pipeline()
 	pipe.SAdd(ctx, key, fmt.Sprintf("%d", quote.ID))
 	pipe.Expire(ctx, key, seenQuotesTTL)
@@ -402,20 +400,17 @@ func (s *Store) fetchQuoteExcluding(ctx context.Context, quotectx string, exclud
 
 	switch {
 	case len(excludeIDs) == 0 && quotectx == "":
-		// No filter, no exclusion — use plain RandomQuote path.
 		const q = `SELECT id, quote, attribution, context FROM scifi_quotes ORDER BY RANDOM() LIMIT 1`
 		scanErr = s.db.QueryRow(ctx, q).Scan(&quote.ID, &quote.Quote, &quote.Attribution, &quote.Context)
 	case len(excludeIDs) == 0:
-		// Context filter only.
 		scanErr = s.db.QueryRow(ctx, qFull, quotectx).Scan(&quote.ID, &quote.Quote, &quote.Attribution, &quote.Context)
 	default:
-		// Both context filter and exclusion list active.
 		scanErr = s.db.QueryRow(ctx, qWithContext, quotectx, excludeIDs).Scan(&quote.ID, &quote.Quote, &quote.Attribution, &quote.Context)
 	}
 
 	if scanErr != nil {
 		if errors.Is(scanErr, pgx.ErrNoRows) {
-			return nil, nil // exhausted — caller handles reset
+			return nil, nil
 		}
 		return nil, fmt.Errorf("fetch quote: %w", scanErr)
 	}
