@@ -1,21 +1,32 @@
-"""Agentic RAG pipeline — Phase 2 implementation of the 6-step loop.
+"""Agentic RAG pipeline — Phase 2 + Phase 5 (prerequisite-aware) implementation.
 
-Phase 2 scope:
-  Step 1 — Student context: recent interaction history (full SKM in Phase 5)
-  Step 2 — Concept graph prerequisite check: deferred to Phase 5
+Phase 2 scope (tl-dkm):
+  Step 1 — Student context: recent interaction history
+  Step 2 — Concept graph prerequisite check (IMPLEMENTED in tl-vki)
   Step 3 — Hybrid curriculum retrieval via Search Service (IMPLEMENTED)
   Step 4 — Cross-student insights from BigQuery: deferred to Phase 7
   Step 5 — Enriched system prompt with chapter/section/page citations (IMPLEMENTED)
   Step 6 — Interaction log + spaced rep: log only (spaced rep in Phase 5)
 
-Exit criteria (tl-dkm): student uploads PDF, asks a question, receives
-a grounded answer with chapter/section/page citations from their material.
+Phase 5 additions (tl-vki):
+  Step 2 — Load course concepts + student mastery; keyword-match the question
+  to a target concept; detect prerequisite gaps below MASTERY_THRESHOLD;
+  inject a gap-redirect block into the system prompt when gaps are found.
+
+Exit criteria (tl-vki): when a student asks about a concept they lack
+prerequisites for, Professor Nova redirects to the gaps before answering.
 """
 import logging
 from uuid import UUID
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .graph import (
+    detect_gaps,
+    get_course_concepts,
+    get_student_mastery,
+)
+from .orm import Concept
 from .history import get_history
 from .search_client import SearchResult, fetch_curriculum_chunks
 
@@ -49,7 +60,9 @@ async def build_rag_context(
     SSE sources event.
 
     Degrades gracefully: if the Search Service is unavailable, returns a prompt
-    that directs Professor Nova to answer from general knowledge.
+    that directs Professor Nova to answer from general knowledge. If the concept
+    graph is unavailable or the question cannot be mapped to a concept, step 2
+    is silently skipped and the chat continues without gap detection.
 
     Args:
         student_id: UUID of the authenticated student.
@@ -62,55 +75,107 @@ async def build_rag_context(
         Tuple of (system_prompt, source_chunks).
     """
     # Step 1: Student context — interaction count as simple engagement signal.
-    # Full SKM (learning style, mastery graph, misconception log) is Phase 5.
     recent_history = await get_history(db, session_id, limit=20)
     student_turns = sum(1 for i in recent_history if i.role == "student")
 
-    # Step 2: Concept graph prerequisite check — Phase 5 (ltree / Neo4j)
+    # Step 2: Concept graph prerequisite check (tl-vki).
+    # Keyword-match the question to a course concept, then detect mastery gaps
+    # in its transitive prerequisites. Non-fatal: skip on any DB error.
+    gaps: list[dict] = []
+    try:
+        concepts = await get_course_concepts(db, course_id)
+        if concepts:
+            mastery = await get_student_mastery(db, student_id, course_id)
+            target = _find_concept_for_question(question, concepts)
+            if target is not None:
+                gaps = detect_gaps(target.id, concepts, mastery)
+                if gaps:
+                    logger.info(
+                        "prereq_gaps student_id=%s target_concept=%s gaps=%d",
+                        student_id, target.name, len(gaps),
+                    )
+    except Exception:
+        # Non-fatal: concept graph is best-effort; skip rather than break chat.
+        logger.exception("step2 concept graph check failed — skipping")
 
-    # Step 3: Retrieve curriculum chunks via hybrid vector search
+    # Step 3: Retrieve curriculum chunks via hybrid vector search.
     chunks = await fetch_curriculum_chunks(question, course_id, limit=8)
 
     # Step 4: Cross-student insights (72% struggle here, visual works better) — Phase 7
 
-    # Step 5: Build enriched system prompt including retrieved context
-    system_prompt = _build_system_prompt(chunks, student_turns)
+    # Step 5: Build enriched system prompt including retrieved context and gaps.
+    system_prompt = _build_system_prompt(chunks, student_turns, gaps=gaps)
 
     # Step 6: Interaction embedding + spaced-repetition scheduling — Phase 5
     logger.info(
-        "rag_context student_id=%s course_id=%s chunks=%d",
-        student_id, course_id, len(chunks),
+        "rag_context student_id=%s course_id=%s chunks=%d gaps=%d",
+        student_id, course_id, len(chunks), len(gaps),
     )
 
     return system_prompt, chunks
 
 
-def _build_system_prompt(chunks: list[SearchResult], student_turns: int) -> str:
-    """Build the enriched system prompt from retrieved chunks and student context.
+def _find_concept_for_question(question: str, concepts: list[Concept]) -> Concept | None:
+    """Find the most relevant concept for a question by keyword matching.
+
+    Scores each concept by counting how many of its name words appear in the
+    question text (case-insensitive). Returns the highest-scoring concept, or
+    None if no concept name words appear in the question at all.
+
+    Args:
+        question: The student's raw question text.
+        concepts: All concepts in the student's enrolled course.
+
+    Returns:
+        The best-matching Concept, or None if no keyword match found.
+    """
+    q_lower = question.lower()
+    best: Concept | None = None
+    best_score = 0
+    for concept in concepts:
+        words = concept.name.lower().split()
+        score = sum(1 for w in words if w in q_lower)
+        if score > best_score:
+            best_score = score
+            best = concept
+    return best if best_score > 0 else None
+
+
+def _build_system_prompt(
+    chunks: list[SearchResult],
+    student_turns: int,
+    gaps: list[dict] | None = None,
+) -> str:
+    """Build the enriched system prompt from retrieved chunks, student context, and gaps.
+
+    When prerequisite gaps are detected, appends a redirect block instructing
+    Professor Nova to gently steer toward foundational concepts before answering
+    the student's original question.
 
     Args:
         chunks: Curriculum chunks returned by the Search Service.
         student_turns: Number of student messages in the current session.
+        gaps: List of gap dicts from detect_gaps() — each has concept_name,
+            mastery_score, required_by. None or empty means no gaps detected.
 
     Returns:
         Full system prompt string for the AI Gateway.
     """
     if not chunks:
-        return (
+        base = (
             PROFESSOR_NOVA_SYSTEM_PROMPT
             + "\n\n[No curriculum content was retrieved for this query — the course "
             "materials may not yet be indexed. Draw on your broad knowledge and be "
             "transparent that you are not referencing their specific textbook right now.]"
         )
-
-    context_block = _format_chunks(chunks)
-    experience_note = (
-        "This is an early interaction — be patient, foundational, and check for prerequisite gaps."
-        if student_turns < 5
-        else "This student has prior conversation history — you may build on earlier exchanges."
-    )
-
-    return f"""{PROFESSOR_NOVA_SYSTEM_PROMPT}
+    else:
+        context_block = _format_chunks(chunks)
+        experience_note = (
+            "This is an early interaction — be patient, foundational, and check for prerequisite gaps."
+            if student_turns < 5
+            else "This student has prior conversation history — you may build on earlier exchanges."
+        )
+        base = f"""{PROFESSOR_NOVA_SYSTEM_PROMPT}
 
 --- RETRIEVED CURRICULUM CONTENT ---
 The following excerpts are from the student's enrolled course materials.
@@ -121,6 +186,29 @@ when you reference them.
 --- END CURRICULUM CONTENT ---
 
 Student context: {experience_note}"""
+
+    if not gaps:
+        return base
+
+    gap_lines = "\n".join(
+        f"  - {g['concept_name']} (mastery: {g['mastery_score']:.0%})"
+        for g in gaps
+    )
+    gap_block = f"""
+
+--- PREREQUISITE GAPS DETECTED ---
+Before the student can fully grasp the topic they asked about, they have unmastered \
+prerequisites:
+{gap_lines}
+
+Recommended approach:
+1. Warmly acknowledge their question — don't make them feel bad for asking.
+2. Explain that covering a foundational concept first will make the answer much clearer.
+3. Begin with the first unmastered prerequisite listed above.
+4. Keep it brief — return to their original question once the gap is addressed.
+--- END PREREQUISITE GAPS ---"""
+
+    return base + gap_block
 
 
 def _format_chunks(chunks: list[SearchResult]) -> str:
