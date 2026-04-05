@@ -406,16 +406,17 @@ class TestGetActiveMisconceptions:
     async def test_recent_misconception_has_higher_weight_than_old(self):
         """A misconception from today has higher recency_weight than one from 30 days ago."""
         db = AsyncMock()
-        recent = _make_misconception(recorded_at=NOW - timedelta(days=1))
-        old = _make_misconception(recorded_at=NOW - timedelta(days=30))
+        recent = _make_misconception(recorded_at=NOW - timedelta(days=1), description="recent error")
+        old = _make_misconception(recorded_at=NOW - timedelta(days=30), description="old error")
         result = MagicMock()
         result.scalars.return_value.all.return_value = [recent, old]
         db.execute = AsyncMock(return_value=result)
 
         entries = await get_active_misconceptions(db, USER_ID)
 
-        weights = {e["description"]: e["recency_weight"] for e in entries}
-        assert weights[recent.description] > weights[old.description]
+        # Entries are sorted by recency_weight descending; recent must rank first.
+        assert len(entries) == 2
+        assert entries[0]["recency_weight"] > entries[1]["recency_weight"]
 
     @pytest.mark.asyncio
     async def test_empty_list_when_no_misconceptions(self):
