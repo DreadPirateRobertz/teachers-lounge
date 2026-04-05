@@ -3,6 +3,7 @@ Unit tests for JWT validation in auth.py.
 
 All tests use a self-signed HS256 token — no real User Service needed.
 The User Service signs tokens with custom claims:
+  aud        — audience: "teacherslounge-services"
   uid        — user UUID
   acct       — account type ("standard" | "minor")
   sub_status — subscription status (optional)
@@ -19,6 +20,7 @@ from app.config import settings
 
 SECRET = "test-jwt-secret"
 ALGORITHM = "HS256"
+AUDIENCE = "teacherslounge-services"
 USER_ID = str(uuid.uuid4())
 
 
@@ -29,9 +31,11 @@ def _make_token(
     sub_status="active",
     exp_offset=3600,
     secret=SECRET,
+    audience=AUDIENCE,
     extra: dict | None = None,
 ) -> str:
     payload = {
+        "aud": audience,
         "uid": uid,
         "email": email,
         "acct": acct,
@@ -52,7 +56,7 @@ def _make_credentials(token: str):
 
 @pytest.fixture(autouse=True)
 def _patch_jwt_secret(patch_settings):
-    patch_settings(jwt_secret=SECRET, jwt_algorithm=ALGORITHM)
+    patch_settings(jwt_secret=SECRET, jwt_algorithm=ALGORITHM, jwt_audience=AUDIENCE)
 
 
 # ── happy path ────────────────────────────────────────────────────────────────
@@ -88,6 +92,7 @@ def test_uid_takes_precedence_over_sub():
 
 def test_sub_used_as_fallback_when_uid_missing():
     payload = {
+        "aud": AUDIENCE,
         "sub": USER_ID,
         "email": "fallback@test.com",
         "acct": "standard",
@@ -118,6 +123,7 @@ def test_wrong_secret_raises_401():
 
 def test_missing_uid_and_sub_raises_401():
     payload = {
+        "aud": AUDIENCE,
         "email": "ghost@test.com",
         "acct": "standard",
         "exp": int(time.time()) + 3600,
@@ -127,6 +133,27 @@ def test_missing_uid_and_sub_raises_401():
         require_auth(_make_credentials(token))
     assert exc_info.value.status_code == 401
     assert "uid" in exc_info.value.detail.lower()
+
+
+def test_wrong_audience_raises_401():
+    token = _make_token(audience="wrong-service")
+    with pytest.raises(HTTPException) as exc_info:
+        require_auth(_make_credentials(token))
+    assert exc_info.value.status_code == 401
+
+
+def test_missing_audience_raises_401():
+    payload = {
+        "uid": USER_ID,
+        "email": "nova@test.com",
+        "acct": "standard",
+        "sub_status": "active",
+        "exp": int(time.time()) + 3600,
+    }
+    token = jwt.encode(payload, SECRET, algorithm=ALGORITHM)
+    with pytest.raises(HTTPException) as exc_info:
+        require_auth(_make_credentials(token))
+    assert exc_info.value.status_code == 401
 
 
 def test_tampered_token_raises_401():
