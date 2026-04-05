@@ -1,5 +1,4 @@
-"""
-Async HTTP client for the User Service learning-profile API.
+"""Async HTTP client for the User Service learning-profile API.
 
 Fetches and persists the Felder-Silverman dials that live on each user's
 learning profile.  All failures are non-fatal: callers receive empty dicts

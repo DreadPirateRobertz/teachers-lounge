@@ -5,9 +5,9 @@ Uses fakeredis for in-process Redis emulation — no external service required.
 import json
 from uuid import UUID, uuid4
 
+import fakeredis.aioredis as fakeredis
 import pytest
 import pytest_asyncio
-import fakeredis.aioredis as fakeredis
 
 import app.cache as cache_module
 

@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 
 
 class Role(str, Enum):
+    """Message role within a tutoring session."""
+
     student = "student"
     tutor = "tutor"
 
@@ -13,10 +15,14 @@ class Role(str, Enum):
 # ── Request / Response DTOs ───────────────────────────────────────────────────
 
 class CreateSessionRequest(BaseModel):
+    """Request body for POST /v1/sessions."""
+
     course_id: UUID | None = None       # user_id comes from JWT, not request body
 
 
 class SessionResponse(BaseModel):
+    """Response body returned after creating or fetching a tutoring session."""
+
     session_id: UUID
     user_id: UUID
     course_id: UUID | None
@@ -25,10 +31,14 @@ class SessionResponse(BaseModel):
 
 
 class MessageRequest(BaseModel):
+    """Request body for sending a student message to a session."""
+
     content: str = Field(..., max_length=8000)
 
 
 class MessageRecord(BaseModel):
+    """A single message record returned in history responses."""
+
     id: UUID
     session_id: UUID
     role: Role
@@ -37,6 +47,8 @@ class MessageRecord(BaseModel):
 
 
 class HistoryResponse(BaseModel):
+    """Response body for GET /sessions/{id}/messages."""
+
     session_id: UUID
     messages: list[MessageRecord]
 
@@ -44,6 +56,8 @@ class HistoryResponse(BaseModel):
 # ── Spaced-repetition review DTOs ────────────────────────────────────────────
 
 class ReviewQueueItem(BaseModel):
+    """A single concept in the spaced-repetition review queue."""
+
     concept_id: UUID
     concept_name: str
     mastery_score: float
@@ -56,16 +70,22 @@ class ReviewQueueItem(BaseModel):
 
 
 class ReviewQueueResponse(BaseModel):
+    """Paginated response for GET /v1/reviews/due."""
+
     items: list[ReviewQueueItem]
     total_due: int
     total_upcoming: int
 
 
 class AnswerRequest(BaseModel):
+    """Request body for submitting a spaced-repetition review answer."""
+
     quality: int = Field(..., ge=0, le=5, description="Review quality 0-5 (0=blackout, 5=perfect)")
 
 
 class AnswerResponse(BaseModel):
+    """Result of recording a spaced-repetition answer, including updated SRS state."""
+
     concept_id: UUID
     quality: int
     mastery_before: float
@@ -77,6 +97,8 @@ class AnswerResponse(BaseModel):
 
 
 class ReviewStatsResponse(BaseModel):
+    """Aggregate spaced-repetition statistics for a student."""
+
     total_concepts_studied: int
     total_reviews: int
     due_now: int
@@ -135,6 +157,8 @@ class QuizAnswerResponse(BaseModel):
 
 
 class ConceptResponse(BaseModel):
+    """Response body for a single concept node in the dependency graph."""
+
     id: UUID
     course_id: UUID
     name: str
@@ -144,6 +168,8 @@ class ConceptResponse(BaseModel):
 
 
 class ConceptCreate(BaseModel):
+    """Request body for creating a new concept in the dependency graph."""
+
     name: str = Field(..., max_length=255)
     description: str = ""
     path: str = Field(..., max_length=1000)
@@ -151,12 +177,16 @@ class ConceptCreate(BaseModel):
 
 
 class PrerequisiteEdge(BaseModel):
+    """A directed prerequisite edge between two concepts."""
+
     concept_id: UUID
     prerequisite_id: UUID
     weight: float = Field(1.0, ge=0.0, le=1.0)
 
 
 class MasteryEntry(BaseModel):
+    """A student's mastery record for one concept, including SRS timing."""
+
     concept_id: UUID
     concept_name: str
     mastery_score: float
@@ -165,6 +195,8 @@ class MasteryEntry(BaseModel):
 
 
 class GapInfo(BaseModel):
+    """A prerequisite concept where the student's mastery is below threshold."""
+
     concept_id: UUID
     concept_name: str
     mastery_score: float
@@ -172,12 +204,16 @@ class GapInfo(BaseModel):
 
 
 class GapDetectionResponse(BaseModel):
+    """Response body for gap detection — lists unmastered prerequisite concepts."""
+
     target_concept_id: UUID
     target_concept_name: str
     gaps: list[GapInfo]
 
 
 class RemediationStep(BaseModel):
+    """One concept in a topologically-ordered remediation study plan."""
+
     order: int
     concept_id: UUID
     concept_name: str
@@ -186,6 +222,8 @@ class RemediationStep(BaseModel):
 
 
 class RemediationPathResponse(BaseModel):
+    """Ordered remediation study plan for reaching a target concept."""
+
     target_concept_id: UUID
     target_concept_name: str
     steps: list[RemediationStep]

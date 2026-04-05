@@ -10,7 +10,6 @@ from __future__ import annotations
 import math
 from datetime import datetime, timedelta, timezone
 
-
 # ── Constants ─────────────────────────────────────────────────────────────────
 
 MIN_EASE_FACTOR = 1.3

@@ -7,6 +7,7 @@ import pytest
 from app.models import IngestJobMessage, ProcessingStatus
 from app.processors.pdf_processor import (
     _build_hierarchical_chunks,
+    _classify_figure_type,
     _flush_segments,
     _make_chunk,
     process_pdf,
@@ -184,6 +185,62 @@ class TestMakeChunk:
         assert chunk["page"] == 5
         assert chunk["content_type"] == "text"
         assert chunk["id"] is not None
+
+
+# ── _classify_figure_type ────────────────────────────────────────────────────
+
+
+class TestClassifyFigureType:
+    """Tests for the _classify_figure_type caption-based classifier."""
+
+    def test_table_keyword(self):
+        """Caption containing 'table' must return 'table'."""
+        assert _classify_figure_type("Table 1. Summary of results") == "table"
+
+    def test_tbl_abbreviation(self):
+        """Caption containing 'tbl.' abbreviation must return 'table'."""
+        assert _classify_figure_type("Tbl. 3 — comparison") == "table"
+
+    def test_equation_keyword(self):
+        """Caption containing 'equation' must return 'equation_image'."""
+        assert _classify_figure_type("Equation 5: Navier-Stokes") == "equation_image"
+
+    def test_eq_abbreviation(self):
+        """Caption with 'eq.' abbreviation must return 'equation_image'."""
+        assert _classify_figure_type("See eq. 3 above") == "equation_image"
+
+    def test_formula_keyword(self):
+        """Caption containing 'formula' must return 'equation_image'."""
+        assert _classify_figure_type("The formula for kinetic energy") == "equation_image"
+
+    def test_chart_keyword(self):
+        """Caption containing 'chart' must return 'chart'."""
+        assert _classify_figure_type("Bar chart of survey results") == "chart"
+
+    def test_graph_keyword(self):
+        """Caption containing 'graph' must return 'chart'."""
+        assert _classify_figure_type("Graph showing CO2 levels") == "chart"
+
+    def test_plot_keyword(self):
+        """Caption containing 'plot' must return 'chart'."""
+        assert _classify_figure_type("Scatter plot of test scores") == "chart"
+
+    def test_unrecognised_caption_defaults_to_diagram(self):
+        """Caption with no recognised keywords must return 'diagram'."""
+        assert _classify_figure_type("Figure 2. Overview of the system") == "diagram"
+
+    def test_empty_caption_defaults_to_diagram(self):
+        """Empty caption must return 'diagram'."""
+        assert _classify_figure_type("") == "diagram"
+
+    def test_case_insensitive_match(self):
+        """Keyword matching must be case-insensitive."""
+        assert _classify_figure_type("TABLE OF VALUES") == "table"
+        assert _classify_figure_type("GRAPH OF RESULTS") == "chart"
+
+    def test_table_takes_precedence_over_other_keywords(self):
+        """When multiple keywords match, table takes priority (first branch)."""
+        assert _classify_figure_type("table chart") == "table"
 
 
 # ── Full Pipeline (mocked externals) ─────────────────────────────────────────

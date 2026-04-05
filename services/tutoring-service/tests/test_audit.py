@@ -2,16 +2,16 @@
 
 Uses an in-memory mock SQLAlchemy session so no real Postgres is needed.
 """
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
+
+import pytest
 
 from app.audit import (
     ACTION_READ_INTERACTIONS,
     ACTION_READ_PROFILE,
     write_audit_log,
 )
-
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 

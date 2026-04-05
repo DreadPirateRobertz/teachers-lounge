@@ -14,7 +14,6 @@ from app.graph import (
     get_prerequisite_chain,
 )
 
-
 # ── Lightweight stand-ins (avoid SQLAlchemy instrumentation in unit tests) ───
 
 COURSE_ID = uuid4()
@@ -393,6 +392,7 @@ class TestNewResponseModels:
 
     def test_mastery_update_request_validates_bounds(self):
         from pydantic import ValidationError
+
         from app.models import MasteryUpdateRequest
         req = MasteryUpdateRequest(mastery_score=0.75)
         assert req.mastery_score == 0.75

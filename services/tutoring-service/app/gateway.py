@@ -1,5 +1,4 @@
-"""
-AI Gateway client — module-level singleton with connection pooling.
+"""AI Gateway client — module-level singleton with connection pooling.
 
 A new AsyncOpenAI instance per request (the previous pattern) creates a new
 httpx.AsyncClient for every call, bypassing connection reuse and adding ~10ms

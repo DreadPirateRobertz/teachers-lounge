@@ -1,5 +1,4 @@
-"""
-JWT authentication for the ingestion service.
+"""JWT authentication for the ingestion service.
 
 Validates HS256 tokens issued by the User Service. Tokens carry:
   aud        — audience: "teacherslounge-services"  (validated here)

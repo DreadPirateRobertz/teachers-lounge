@@ -1,5 +1,4 @@
-"""
-Chat endpoint — JWT-protected, streaming SSE response via LiteLLM proxy.
+"""Chat endpoint — JWT-protected, streaming SSE response via LiteLLM proxy.
 
 Flow:
   1. Validate JWT → extract user_id
@@ -114,6 +113,124 @@ def _sse(
     return f"data: {json.dumps(payload)}\n\n"
 
 
+async def _chat_stream_generator(  # noqa: PLR0913
+    db: AsyncSession,
+    session_id: UUID,
+    user_id: UUID,
+    has_rag: bool,
+    messages: list[dict],
+    client,
+    tutor_msg_id: str,
+    sources_payload: list[dict],
+    diagram_results: list,
+    current_dials: dict,
+    student_message: str,
+):
+    """Async generator that streams SSE events for one tutor turn.
+
+    Streams delta tokens from the LiteLLM gateway, then emits sources, diagram,
+    and review_reminder events before a final done frame.  Handles AI Gateway
+    errors gracefully by falling back to a canned message.
+
+    Args:
+        db: Async SQLAlchemy session (used for post-stream persistence).
+        session_id: UUID of the tutoring session.
+        user_id: UUID of the authenticated student.
+        has_rag: Whether the session has a course_id (used for tracing).
+        messages: OpenAI-format message list to send to the gateway.
+        client: AsyncOpenAI client pointed at the LiteLLM proxy.
+        tutor_msg_id: UUID string for this tutor turn (tagged on all SSE frames).
+        sources_payload: Pre-built list of source dicts to emit after streaming.
+        diagram_results: Pre-fetched diagram chunks to emit as diagram events.
+        current_dials: Student's Felder-Silverman dial values for signal updating.
+        student_message: Raw student text (used for dial-signal detection).
+
+    Yields:
+        SSE-formatted strings ready to send over the event stream.
+    """
+    full_response: list[str] = []
+    start_ms = int(time.time() * 1000)
+
+    with _tracer.start_as_current_span("llm.generate") as span:
+        span.set_attribute("model", settings.tutor_primary_model)
+        span.set_attribute("has_rag", has_rag)
+        span.set_attribute("message_count", len(messages))
+
+    try:
+        stream = await client.chat.completions.create(
+            model=settings.tutor_primary_model,
+            messages=messages,
+            stream=True,
+            max_tokens=4096,
+        )
+
+        async for chunk in stream:
+            delta = chunk.choices[0].delta
+            if delta.content:
+                full_response.append(delta.content)
+                yield _sse("delta", content=delta.content, message_id=tutor_msg_id)
+
+        complete_text = "".join(full_response)
+        elapsed_ms = int(time.time() * 1000) - start_ms
+
+        await append_message(
+            db, session_id, user_id, role="tutor",
+            content=complete_text, response_time_ms=elapsed_ms,
+        )
+
+        if sources_payload:
+            yield _sse("sources", message_id=tutor_msg_id, sources=sources_payload)
+
+        for diagram in diagram_results:
+            yield _sse(
+                "diagram",
+                message_id=tutor_msg_id,
+                diagram={
+                    "diagram_id": diagram.diagram_id,
+                    "gcs_path": diagram.gcs_path,
+                    "caption": diagram.caption,
+                    "figure_type": diagram.figure_type,
+                    "score": round(diagram.score, 4),
+                },
+            )
+
+        # Step 4: Update dials from this message's signals (non-fatal)
+        signals = detect_signals(student_message)
+        if signals:
+            updated_dials = update_dials(current_dials, signals)
+            try:
+                await update_learning_profile_dials(db, user_id, updated_dials)
+                await db.commit()
+            except Exception:  # noqa: BLE001
+                logger.warning("Failed to persist learning-style dials for user %s", user_id)
+
+        # Step 5: Proactive SRS review reminder (non-fatal)
+        try:
+            review_prompt = await get_due_review_prompt(db, user_id)
+            if review_prompt:
+                yield _sse("review_reminder", content=review_prompt, message_id=tutor_msg_id)
+        except Exception:  # noqa: BLE001
+            logger.warning("Failed to fetch review reminder for user %s", user_id)
+
+        yield _sse("done", message_id=tutor_msg_id)
+
+    except (APIConnectionError, APITimeoutError) as exc:
+        logger.warning("AI Gateway unreachable: %s", exc)
+        await append_message(db, session_id, user_id, role="tutor", content=FALLBACK_MESSAGE)
+        yield _sse("delta", content=FALLBACK_MESSAGE, message_id=tutor_msg_id)
+        yield _sse("done", message_id=tutor_msg_id)
+
+    except APIStatusError as exc:
+        logger.error("AI Gateway error %s: %s", exc.status_code, exc.message)
+        await append_message(db, session_id, user_id, role="tutor", content=FALLBACK_MESSAGE)
+        yield _sse("delta", content=FALLBACK_MESSAGE, message_id=tutor_msg_id)
+        yield _sse("done", message_id=tutor_msg_id)
+
+    except Exception as exc:
+        logger.exception("Unexpected error in chat stream: %s", exc)
+        yield _sse("error", content="An unexpected error occurred. Please try again.")
+
+
 @router.post("/{session_id}/messages")
 async def send_message(
     session_id: UUID,
@@ -128,49 +245,38 @@ async def send_message(
     if session.user_id != user.user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # Last 10 exchanges = 20 messages (10 student + 10 tutor)
     history = await get_history(db, session_id, limit=settings.max_history_messages)
 
-    # Persist student message before streaming — durable even if stream fails
     student_message = body.content
     await append_message(db, session_id, user.user_id, role="student", content=student_message)
 
-    # --- Step 1: Fetch student's current learning-style dials from local DB (non-fatal) ---
+    # Step 1: Fetch student's learning-style dials (non-fatal)
     try:
         current_dials = await get_dials(db, user.user_id)
     except Exception:  # noqa: BLE001
         logger.warning("Failed to load learning-style dials for user %s", user.user_id)
         current_dials = {
-            "active_reflective": 0.0,
-            "sensing_intuitive": 0.0,
-            "visual_verbal": 0.0,
-            "sequential_global": 0.0,
+            "active_reflective": 0.0, "sensing_intuitive": 0.0,
+            "visual_verbal": 0.0, "sequential_global": 0.0,
         }
 
-    # --- Step 2: Build system prompt + retrieve grounding chunks ---
+    # Step 2: Build system prompt + retrieve grounding chunks
     source_chunks = []
     diagram_results = []
     if session.course_id is not None:
         base_prompt, source_chunks = await build_rag_context(
-            student_id=user.user_id,
-            session_id=session_id,
-            question=body.content,
-            course_id=session.course_id,
-            db=db,
+            student_id=user.user_id, session_id=session_id,
+            question=body.content, course_id=session.course_id, db=db,
         )
-        # Fetch diagrams when the question is visually-oriented (non-fatal)
         if _VISUAL_QUERY_PATTERNS.search(body.content):
             diagram_results = await fetch_diagram_chunks(
-                query=body.content,
-                course_id=session.course_id,
+                query=body.content, course_id=session.course_id,
                 limit=settings.diagram_limit,
             )
     else:
         base_prompt = PROFESSOR_NOVA_SYSTEM_PROMPT
 
-    # Step 3: Append style guidance to the system prompt
     system_prompt = base_prompt + build_style_prompt_section(current_dials)
-
     messages = [
         {"role": "system", "content": system_prompt},
         *_history_to_messages(history),
@@ -179,117 +285,22 @@ async def send_message(
 
     client = get_gateway_client()
     tutor_msg_id = str(uuid.uuid4())
-
-    # Build sources payload once — serialised into the sources event
     sources_payload = [
         {
-            "chunk_id": c.chunk_id,
-            "chapter": c.chapter,
-            "section": c.section,
-            "page": c.page,
-            "content_type": c.content_type,
-            "score": round(c.score, 4),
+            "chunk_id": c.chunk_id, "chapter": c.chapter, "section": c.section,
+            "page": c.page, "content_type": c.content_type, "score": round(c.score, 4),
         }
         for c in source_chunks
     ]
 
-    async def stream_generator():
-        full_response: list[str] = []
-        start_ms = int(time.time() * 1000)
-
-        with _tracer.start_as_current_span("llm.generate") as span:
-            span.set_attribute("model", settings.tutor_primary_model)
-            span.set_attribute("has_rag", session.course_id is not None)
-            span.set_attribute("message_count", len(messages))
-
-        try:
-            stream = await client.chat.completions.create(
-                model=settings.tutor_primary_model,
-                messages=messages,
-                stream=True,
-                max_tokens=4096,
-            )
-
-            async for chunk in stream:
-                delta = chunk.choices[0].delta
-                if delta.content:
-                    full_response.append(delta.content)
-                    yield _sse("delta", content=delta.content, message_id=tutor_msg_id)
-
-            complete_text = "".join(full_response)
-            elapsed_ms = int(time.time() * 1000) - start_ms
-
-            await append_message(
-                db,
-                session_id,
-                user.user_id,
-                role="tutor",
-                content=complete_text,
-                response_time_ms=elapsed_ms,
-            )
-
-            if sources_payload:
-                yield _sse("sources", message_id=tutor_msg_id, sources=sources_payload)
-
-            # Emit diagram events — one per result (frontend renders inline)
-            for diagram in diagram_results:
-                yield _sse(
-                    "diagram",
-                    message_id=tutor_msg_id,
-                    diagram={
-                        "diagram_id": diagram.diagram_id,
-                        "gcs_path": diagram.gcs_path,
-                        "caption": diagram.caption,
-                        "figure_type": diagram.figure_type,
-                        "score": round(diagram.score, 4),
-                    },
-                )
-
-            # --- Step 4: Update dials from this message's signals (pre-done, non-fatal) ---
-            signals = detect_signals(student_message)
-            if signals:
-                updated_dials = update_dials(current_dials, signals)
-                try:
-                    await update_learning_profile_dials(db, user.user_id, updated_dials)
-                    await db.commit()
-                except Exception:  # noqa: BLE001
-                    logger.warning("Failed to persist learning-style dials for user %s", user.user_id)
-
-            # --- Step 5: Proactive SRS review reminder (before done, non-fatal) ---
-            try:
-                review_prompt = await get_due_review_prompt(db, user.user_id)
-                if review_prompt:
-                    yield _sse("review_reminder", content=review_prompt, message_id=tutor_msg_id)
-            except Exception:  # noqa: BLE001
-                logger.warning("Failed to fetch review reminder for user %s", user.user_id)
-
-            yield _sse("done", message_id=tutor_msg_id)
-
-        except (APIConnectionError, APITimeoutError) as exc:
-            logger.warning("AI Gateway unreachable: %s", exc)
-            await append_message(
-                db, session_id, user.user_id, role="tutor", content=FALLBACK_MESSAGE
-            )
-            yield _sse("delta", content=FALLBACK_MESSAGE, message_id=tutor_msg_id)
-            yield _sse("done", message_id=tutor_msg_id)
-
-        except APIStatusError as exc:
-            logger.error("AI Gateway error %s: %s", exc.status_code, exc.message)
-            await append_message(
-                db, session_id, user.user_id, role="tutor", content=FALLBACK_MESSAGE
-            )
-            yield _sse("delta", content=FALLBACK_MESSAGE, message_id=tutor_msg_id)
-            yield _sse("done", message_id=tutor_msg_id)
-
-        except Exception as exc:
-            logger.exception("Unexpected error in chat stream: %s", exc)
-            yield _sse("error", content="An unexpected error occurred. Please try again.")
-
     return StreamingResponse(
-        stream_generator(),
+        _chat_stream_generator(
+            db=db, session_id=session_id, user_id=user.user_id,
+            has_rag=session.course_id is not None, messages=messages,
+            client=client, tutor_msg_id=tutor_msg_id, sources_payload=sources_payload,
+            diagram_results=diagram_results, current_dials=current_dials,
+            student_message=student_message,
+        ),
         media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "X-Accel-Buffering": "no",   # disable nginx buffering for SSE
-        },
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )

@@ -2,7 +2,7 @@ import uuid
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, UploadFile, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
 
 from app.auth import require_auth
 from app.config import settings
