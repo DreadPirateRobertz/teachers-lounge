@@ -202,7 +202,7 @@ async def _chat_stream_generator(  # noqa: PLR0913
                 await update_learning_profile_dials(db, user_id, updated_dials)
                 await db.commit()
             except Exception:  # noqa: BLE001
-                logger.warning("Failed to persist learning-style dials for user %s", user_id)
+                logger.warning("Failed to persist learning-style dials (user omitted)")
 
         # Step 5: Proactive SRS review reminder (non-fatal)
         try:
@@ -210,7 +210,7 @@ async def _chat_stream_generator(  # noqa: PLR0913
             if review_prompt:
                 yield _sse("review_reminder", content=review_prompt, message_id=tutor_msg_id)
         except Exception:  # noqa: BLE001
-            logger.warning("Failed to fetch review reminder for user %s", user_id)
+            logger.warning("Failed to fetch review reminder (user omitted)")
 
         yield _sse("done", message_id=tutor_msg_id)
 
@@ -254,7 +254,7 @@ async def send_message(
     try:
         current_dials = await get_dials(db, user.user_id)
     except Exception:  # noqa: BLE001
-        logger.warning("Failed to load learning-style dials for user %s", user.user_id)
+        logger.warning("Failed to load learning-style dials (user omitted)")
         current_dials = {
             "active_reflective": 0.0, "sensing_intuitive": 0.0,
             "visual_verbal": 0.0, "sequential_global": 0.0,

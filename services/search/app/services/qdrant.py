@@ -320,5 +320,5 @@ async def diagram_search(
             )
         )
 
-    logger.info("diagram_search course_id=%s limit=%d → %d results", _log_safe(course_id), limit, len(results))
+    logger.info("diagram_search limit=%d → %d results", limit, len(results))
     return results
