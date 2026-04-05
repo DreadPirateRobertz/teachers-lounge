@@ -37,6 +37,11 @@ class Settings(BaseSettings):
     # User Service — for learning profile reads/writes
     user_service_url: str = "http://user-service.teachers-lounge.svc.cluster.local:8080"
 
+    # Redis — session history cache
+    redis_url: str = "redis://redis.teachers-lounge.svc.cluster.local:6379/0"
+    # TTL for cached session history snapshots (seconds)
+    session_history_cache_ttl: int = 300  # 5 minutes
+
     # Search Service — called by the agentic RAG pipeline for curriculum retrieval
     search_service_url: str = "http://search-service.teachers-lounge.svc.cluster.local:8080"
 

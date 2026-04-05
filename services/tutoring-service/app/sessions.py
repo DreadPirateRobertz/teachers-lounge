@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .audit import ACTION_READ_INTERACTIONS, write_audit_log
 from .auth import JWTClaims, require_auth
+from .cache import get_cached_history, set_cached_history
 from .database import get_db
 from .history import create_session, get_history, get_session
 from .models import (
@@ -43,13 +44,27 @@ async def get_session_history(
     db: AsyncSession = Depends(get_db),
     user: JWTClaims = Depends(require_auth),
 ):
-    """Return conversation history. Returns 403 if the session belongs to another user."""
+    """Return conversation history for a session.
+
+    Checks a Redis cache first (5-minute TTL) before hitting Postgres.
+    Returns 403 if the session belongs to another user.
+    """
+    # Authorisation check always hits Postgres to prevent cache poisoning
     session = await get_session(db, session_id)
     if session is None:
         raise HTTPException(status_code=404, detail="Session not found")
     if session.user_id != user.user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
+    # Try cache
+    cached = await get_cached_history(session_id)
+    if cached is not None:
+        return HistoryResponse(
+            session_id=session_id,
+            messages=[MessageRecord(**m) for m in cached],
+        )
+
+    # Cache miss — load from Postgres
     interactions = await get_history(db, session_id)
 
     # FERPA: log every interaction history read
@@ -73,4 +88,12 @@ async def get_session_history(
         )
         for i in interactions
     ]
+
+    # Populate cache for next request (fire-and-forget — errors are swallowed in cache.py)
+    await set_cached_history(
+        user_id=user.user_id,
+        session_id=session_id,
+        messages=[m.model_dump(mode="json") for m in messages],
+    )
+
     return HistoryResponse(session_id=session_id, messages=messages)

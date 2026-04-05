@@ -1,0 +1,51 @@
+# HPA for search-service (Qdrant query wrapper).
+#
+# Search-service is CPU-bound during embedding computation and Qdrant query
+# serialisation. min 2 replicas to ensure availability during pod recycling.
+#
+# This is a standalone manifest (search-service does not have a Helm chart yet).
+# Apply with: kubectl apply -f infra/k8s/search-service-hpa.yaml -n <env>
+---
+apiVersion: autoscaling/v2
+kind: HorizontalPodAutoscaler
+metadata:
+  name: search-service
+  labels:
+    app: search-service
+    component: search
+spec:
+  scaleTargetRef:
+    apiVersion: apps/v1
+    kind: Deployment
+    name: search-service
+  minReplicas: 2  # keep 2 warm; Qdrant queries are fast but cold pods stall under burst
+  maxReplicas: 8
+  metrics:
+    - type: Resource
+      resource:
+        name: cpu
+        target:
+          type: Utilization
+          # 70% threshold: Qdrant HNSW queries are CPU-intensive; scale before saturation
+          averageUtilization: 70
+    - type: Resource
+      resource:
+        name: memory
+        target:
+          type: Utilization
+          # Qdrant loads index segments into memory; keep headroom for index growth
+          averageUtilization: 75
+  behavior:
+    scaleUp:
+      stabilizationWindowSeconds: 30
+      policies:
+        - type: Pods
+          value: 2
+          periodSeconds: 60
+    scaleDown:
+      # Slow scale-down: search index takes time to warm up on new pods
+      stabilizationWindowSeconds: 300
+      policies:
+        - type: Pods
+          value: 1
+          periodSeconds: 60

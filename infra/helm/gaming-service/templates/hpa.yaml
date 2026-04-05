@@ -13,6 +13,21 @@ spec:
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
   metrics:
+    {{- if .Values.autoscaling.rpsScaling.enabled }}
+    # Primary: RPS-based scaling via GKE Stackdriver custom metrics adapter.
+    # Gaming is read-heavy (leaderboard, profile); RPS is a more responsive signal than CPU.
+    - type: External
+      external:
+        metric:
+          name: {{ .Values.autoscaling.rpsScaling.metricName }}
+          selector:
+            matchLabels:
+              {{- include "gaming-service.selectorLabels" . | nindent 14 }}
+        target:
+          type: AverageValue
+          averageValue: {{ .Values.autoscaling.rpsScaling.targetRPS }}
+    {{- end }}
+    # Fallback: CPU utilization (catches non-traffic spikes, e.g. DB query bursts)
     - type: Resource
       resource:
         name: cpu

@@ -13,6 +13,19 @@ spec:
   minReplicas: {{ .Values.autoscaling.minReplicas }}
   maxReplicas: {{ .Values.autoscaling.maxReplicas }}
   metrics:
+    {{- if .Values.autoscaling.customMetricScaling.enabled }}
+    # Primary: active_streaming_sessions custom metric.
+    # CPU is misleading for SSE workloads — threads block on LLM I/O, not CPU.
+    # This metric (exposed by /metrics) reflects actual load directly.
+    - type: Pods
+      pods:
+        metric:
+          name: {{ .Values.autoscaling.customMetricScaling.metricName }}
+        target:
+          type: AverageValue
+          averageValue: {{ .Values.autoscaling.customMetricScaling.targetActiveStreamingSessions }}
+    {{- end }}
+    # CPU fallback: covers startup, DB queries, and cases where custom metric is unavailable
     - type: Resource
       resource:
         name: cpu

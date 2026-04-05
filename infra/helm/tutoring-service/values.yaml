@@ -52,6 +52,10 @@ autoscaling:
   maxReplicas: 10
   targetCPUUtilizationPercentage: 60
   targetMemoryUtilizationPercentage: 75
+  customMetricScaling:
+    enabled: false
+    targetActiveStreamingSessions: 20
+    metricName: "active_streaming_sessions"
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 30

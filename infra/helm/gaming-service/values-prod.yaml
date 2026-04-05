@@ -8,6 +8,13 @@ env:
 autoscaling:
   enabled: true
   minReplicas: 2
-  maxReplicas: 6
+  maxReplicas: 10  # raised from 6 per load test results (tl-efp)
+  # Primary metric: RPS via Stackdriver custom metric (gaming is read-heavy, RPS scales better than CPU)
   targetCPUUtilizationPercentage: 70
   targetMemoryUtilizationPercentage: 80
+  # RPS-based scaling: target 500 RPS per replica (tuned from k6 load test at 1000 VUs)
+  rpsScaling:
+    enabled: true
+    targetRPS: 500
+    # GKE Stackdriver metric exposed by Cloud Monitoring ingress adapter
+    metricName: "autoscaling.googleapis.com|nginx_connections_active"
