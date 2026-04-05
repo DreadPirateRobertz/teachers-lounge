@@ -29,6 +29,7 @@ type Storer interface {
 	CreateSubscription(ctx context.Context, p CreateSubscriptionParams) (*models.Subscription, error)
 	GetSubscriptionByUserID(ctx context.Context, userID uuid.UUID) (*models.Subscription, error)
 	UpdateSubscription(ctx context.Context, p UpdateSubscriptionParams) error
+	UpdateSubscriptionByUserID(ctx context.Context, userID uuid.UUID, p UpdateSubscriptionParams) error
 
 	WriteAuditLog(ctx context.Context, p AuditLogParams) error
 	CreateExportJob(ctx context.Context, userID uuid.UUID) (uuid.UUID, error)

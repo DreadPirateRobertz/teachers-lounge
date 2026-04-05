@@ -10,28 +10,70 @@ import (
 
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/middleware"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/model"
+	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/push"
 )
 
 // NotifStore is the subset of store.Store the handler depends on.
 type NotifStore interface {
 	CreateNotification(ctx context.Context, n *model.Notification) (*model.Notification, error)
 	ListUnread(ctx context.Context, userID string) ([]model.Notification, error)
+	SavePushToken(ctx context.Context, userID, token, platform string) error
+	GetPushTokens(ctx context.Context, userID string) ([]string, error)
 }
 
 // Handler holds dependencies for all HTTP handlers.
 type Handler struct {
 	store  NotifStore
+	pusher push.Pusher
 	logger *zap.Logger
 }
 
 // New returns a configured Handler.
-func New(store NotifStore, logger *zap.Logger) *Handler {
-	return &Handler{store: store, logger: logger}
+// pusher is used by the Push handler to deliver FCM notifications; pass a
+// push.LogPusher when FCM credentials are not configured.
+func New(store NotifStore, pusher push.Pusher, logger *zap.Logger) *Handler {
+	return &Handler{store: store, pusher: pusher, logger: logger}
+}
+
+// RegisterToken handles POST /notify/push/token.
+// Registers or refreshes a device push token for the authenticated user.
+// The user ID is taken from the request context (set by auth middleware), not
+// the request body — the body only carries token + platform.
+func (h *Handler) RegisterToken(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	var req model.RegisterTokenRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "invalid request body", http.StatusBadRequest)
+		return
+	}
+	if req.Token == "" {
+		http.Error(w, "token is required", http.StatusBadRequest)
+		return
+	}
+	platform := req.Platform
+	if platform == "" {
+		platform = "web"
+	}
+
+	if err := h.store.SavePushToken(r.Context(), userID, req.Token, platform); err != nil {
+		h.logger.Error("save push token", zap.Error(err))
+		http.Error(w, "internal server error", http.StatusInternalServerError)
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // Push handles POST /notify/push.
-// Phase 1 stub: validates request, enforces rate limit (via middleware), logs, returns 200.
-// Real FCM integration is Phase 8.
+// Looks up all FCM device tokens registered for the user and delivers the
+// notification to each one via the configured Pusher. Individual token
+// failures are logged but do not fail the overall request — partial delivery
+// is treated as success at the HTTP layer.
 func (h *Handler) Push(w http.ResponseWriter, r *http.Request) {
 	var req model.PushRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -43,22 +85,35 @@ func (h *Handler) Push(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logger.Info("push notification stub",
-		zap.String("user_id", req.UserID),
-		zap.String("title", req.Title),
-		zap.String("body", req.Body),
-	)
+	tokens, err := h.store.GetPushTokens(r.Context(), req.UserID)
+	if err != nil {
+		h.logger.Warn("get push tokens", zap.String("user_id", req.UserID), zap.Error(err))
+		// Fail open — a token-lookup error should not block the response.
+	}
 
-	// TODO(Phase 8): send via FCM
+	for _, token := range tokens {
+		if err := h.pusher.Send(r.Context(), token, req.Title, req.Body, req.Data); err != nil {
+			prefix := token
+			if len(prefix) > 8 {
+				prefix = prefix[:8]
+			}
+			h.logger.Warn("push send failed",
+				zap.String("user_id", req.UserID),
+				zap.String("token_prefix", prefix),
+				zap.Error(err),
+			)
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]string{"status": "queued"}); err != nil {
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "sent"}); err != nil {
 		h.logger.Error("encode push response", zap.Error(err))
 	}
 }
 
 // Email handles POST /notify/email.
 // Phase 1 stub: validates request, logs, returns 200.
-// Real SendGrid/Resend integration is Phase 8.
+// Real SendGrid/Resend integration is a follow-on bead.
 func (h *Handler) Email(w http.ResponseWriter, r *http.Request) {
 	var req model.EmailRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -70,12 +125,11 @@ func (h *Handler) Email(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.logger.Info("email notification stub",
+	h.logger.Info("email notification queued",
 		zap.String("user_id", req.UserID),
 		zap.String("template", req.Template),
 	)
 
-	// TODO(Phase 8): send via SendGrid/Resend
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(map[string]string{"status": "queued"}); err != nil {
 		h.logger.Error("encode email response", zap.Error(err))
@@ -114,7 +168,7 @@ func (h *Handler) InApp(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListUnread handles GET /notify/{userId}.
-// Returns the list of unread in-app notifications for the authenticated user.
+// Returns unread in-app notifications for the authenticated user.
 // The caller may only fetch their own notifications — path userId must match
 // the identity in the request context (set by auth middleware).
 func (h *Handler) ListUnread(w http.ResponseWriter, r *http.Request) {
@@ -124,7 +178,6 @@ func (h *Handler) ListUnread(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Identity assertion: the authenticated caller must match the requested userId.
 	callerID := middleware.UserIDFromContext(r.Context())
 	if callerID == "" || callerID != userID {
 		http.Error(w, "forbidden", http.StatusForbidden)

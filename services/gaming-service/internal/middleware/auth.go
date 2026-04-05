@@ -61,13 +61,21 @@ func extractBearer(r *http.Request) string {
 	return parts[1]
 }
 
+// jwtAudience is the expected "aud" claim on every token issued by user-service.
+const jwtAudience = "teacherslounge-services"
+
 func parseToken(tokenStr string, secret []byte) (*Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (any, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return secret, nil
-	})
+	token, err := jwt.ParseWithClaims(
+		tokenStr,
+		&Claims{},
+		func(t *jwt.Token) (any, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+			}
+			return secret, nil
+		},
+		jwt.WithAudience(jwtAudience),
+	)
 	if err != nil {
 		return nil, err
 	}

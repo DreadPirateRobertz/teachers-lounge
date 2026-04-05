@@ -9,16 +9,10 @@ export const metadata: Metadata = {
   description: 'AI-powered personalized tutor with gamification',
 }
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className={`${GeistSans.variable} ${GeistMono.variable}`}>
-      <body className="font-sans bg-bg-deep text-text-base antialiased">
-        {children}
-      </body>
+      <body className="font-sans bg-bg-deep text-text-base antialiased">{children}</body>
     </html>
   )
 }

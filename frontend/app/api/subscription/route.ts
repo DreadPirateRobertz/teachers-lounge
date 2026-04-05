@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   }
 
   const upstream = await fetch(`${USER_SERVICE_URL}/users/${userId}/subscription`, {
-    headers: { 'Authorization': `Bearer ${token}` },
+    headers: { Authorization: `Bearer ${token}` },
   })
 
   const body = await upstream.json()

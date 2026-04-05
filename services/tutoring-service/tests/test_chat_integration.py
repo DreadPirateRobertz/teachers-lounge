@@ -28,6 +28,7 @@ ALGORITHM = "HS256"
 def _make_token(user_id: str) -> str:
     return jwt.encode(
         {
+            "aud": "teacherslounge-services",
             "uid": user_id,
             "email": "test@example.com",
             "acct": "standard",

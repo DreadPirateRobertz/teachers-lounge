@@ -39,9 +39,14 @@ export default function ChatPanel() {
 
     const userMsg: Message = { id: newId(), role: 'user', content }
     const assistantId = newId()
-    const assistantMsg: Message = { id: assistantId, role: 'assistant', content: '', streaming: true }
+    const assistantMsg: Message = {
+      id: assistantId,
+      role: 'assistant',
+      content: '',
+      streaming: true,
+    }
 
-    setMessages(prev => [...prev, userMsg, assistantMsg])
+    setMessages((prev) => [...prev, userMsg, assistantMsg])
     setIsStreaming(true)
 
     const controller = new AbortController()
@@ -52,7 +57,7 @@ export default function ChatPanel() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          messages: [...messages, userMsg].map(m => ({
+          messages: [...messages, userMsg].map((m) => ({
             role: m.role,
             content: m.content,
           })),
@@ -73,27 +78,23 @@ export default function ChatPanel() {
         if (done) break
         buffer += decoder.decode(value, { stream: true })
         const current = buffer
-        setMessages(prev =>
-          prev.map(m =>
-            m.id === assistantId ? { ...m, content: current } : m
-          )
+        setMessages((prev) =>
+          prev.map((m) => (m.id === assistantId ? { ...m, content: current } : m)),
         )
       }
 
       // Mark streaming done
-      setMessages(prev =>
-        prev.map(m =>
-          m.id === assistantId ? { ...m, streaming: false } : m
-        )
+      setMessages((prev) =>
+        prev.map((m) => (m.id === assistantId ? { ...m, streaming: false } : m)),
       )
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return
-      setMessages(prev =>
-        prev.map(m =>
+      setMessages((prev) =>
+        prev.map((m) =>
           m.id === assistantId
             ? { ...m, content: 'Sorry, something went wrong. Please try again.', streaming: false }
-            : m
-        )
+            : m,
+        ),
       )
     } finally {
       setIsStreaming(false)
@@ -118,16 +119,25 @@ export default function ChatPanel() {
 
       {/* Message list */}
       <div className="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-4 min-h-0">
-        {messages.map(msg => (
+        {messages.map((msg) => (
           <ChatMessage key={msg.id} message={msg} />
         ))}
         {isStreaming && (
           <div className="flex gap-2 items-center text-xs text-text-dim animate-fade-in">
             <span className="text-sm">🤖</span>
             <div className="flex gap-1">
-              <span className="w-1.5 h-1.5 rounded-full bg-neon-blue animate-bounce" style={{ animationDelay: '0ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-neon-blue animate-bounce" style={{ animationDelay: '150ms' }} />
-              <span className="w-1.5 h-1.5 rounded-full bg-neon-blue animate-bounce" style={{ animationDelay: '300ms' }} />
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-neon-blue animate-bounce"
+                style={{ animationDelay: '0ms' }}
+              />
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-neon-blue animate-bounce"
+                style={{ animationDelay: '150ms' }}
+              />
+              <span
+                className="w-1.5 h-1.5 rounded-full bg-neon-blue animate-bounce"
+                style={{ animationDelay: '300ms' }}
+              />
             </div>
           </div>
         )}
@@ -135,12 +145,7 @@ export default function ChatPanel() {
       </div>
 
       {/* Input */}
-      <ChatInput
-        value={input}
-        onChange={setInput}
-        onSubmit={sendMessage}
-        disabled={isStreaming}
-      />
+      <ChatInput value={input} onChange={setInput} onSubmit={sendMessage} disabled={isStreaming} />
     </div>
   )
 }

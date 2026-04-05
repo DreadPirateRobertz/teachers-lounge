@@ -19,8 +19,8 @@ export function middleware(req: NextRequest) {
   const token = req.cookies.get('tl_token')?.value
   const path = req.nextUrl.pathname
 
-  const isPostAuth = SUBSCRIBE_POST_AUTH.some(p => path.startsWith(p))
-  const isPublic = !isPostAuth && PUBLIC_PATHS.some(p => path.startsWith(p))
+  const isPostAuth = SUBSCRIBE_POST_AUTH.some((p) => path.startsWith(p))
+  const isPublic = !isPostAuth && PUBLIC_PATHS.some((p) => path.startsWith(p))
 
   if (!token && !isPublic) {
     const loginUrl = new URL('/login', req.url)

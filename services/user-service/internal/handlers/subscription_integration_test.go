@@ -271,25 +271,12 @@ func TestCancelSubscription_NotActive(t *testing.T) {
 	userID, token := registerUser(t, ts)
 	uid, _ := uuid.Parse(userID)
 
-	sub, err := s.GetSubscriptionByUserID(context.Background(), uid)
-	if err != nil {
-		t.Fatalf("fetching subscription: %v", err)
-	}
-
-	// UpdateSubscription requires StripeSubscriptionID; seed one if absent.
-	stripeID := "sub_integration_test_" + uuid.New().String()[:8]
-	if sub.StripeSubscriptionID == nil || *sub.StripeSubscriptionID == "" {
-		sub.StripeSubscriptionID = &stripeID
-	} else {
-		stripeID = *sub.StripeSubscriptionID
-	}
-
+	// UpdateSubscriptionByUserID works for trial subs that have no StripeSubscriptionID.
 	cancelledStatus := models.StatusCancelled
-	if err := s.UpdateSubscription(context.Background(), store.UpdateSubscriptionParams{
-		StripeSubscriptionID: stripeID,
-		Status:               &cancelledStatus,
+	if err := s.UpdateSubscriptionByUserID(context.Background(), uid, store.UpdateSubscriptionParams{
+		Status: &cancelledStatus,
 	}); err != nil {
-		t.Skipf("could not set subscription to cancelled (no stripe ID): %v", err)
+		t.Fatalf("could not set subscription to cancelled: %v", err)
 	}
 
 	// Cancel should now return 422 since IsActive() = false for cancelled status.

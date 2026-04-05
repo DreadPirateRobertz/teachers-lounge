@@ -17,6 +17,7 @@ import (
 
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/handler"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/middleware"
+	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/push"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/store"
 )
 
@@ -51,7 +52,19 @@ func main() {
 	// ── Dependencies ─────────────────────────────────────────────────────────
 	notifStore := store.New(db)
 	rateLimiter := store.NewRateLimiter(rdb)
-	h := handler.New(notifStore, logger)
+
+	// Use FCMPusher when a server key is configured; fall back to LogPusher so
+	// the rest of the stack works without Firebase credentials (local dev).
+	var pusher push.Pusher
+	if cfg.fcmServerKey != "" {
+		pusher = push.NewFCMPusher(cfg.fcmServerKey)
+		logger.Info("FCM push enabled")
+	} else {
+		pusher = push.LogPusher{}
+		logger.Warn("FCM_SERVER_KEY not set — push notifications will not be delivered")
+	}
+
+	h := handler.New(notifStore, pusher, logger)
 
 	// ── Router ────────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -68,8 +81,9 @@ func main() {
 		// Replace with real JWT validation once user-service is wired.
 		r.Use(stubAuthMiddleware)
 
-		// Push — rate limited
+		// Push — rate limited; token registration
 		r.With(middleware.PushRateLimit(rateLimiter)).Post("/push", h.Push)
+		r.Post("/push/token", h.RegisterToken)
 
 		// Email — no rate limit at stub stage
 		r.Post("/email", h.Email)
@@ -126,6 +140,7 @@ type config struct {
 	databaseURL   string
 	redisAddr     string
 	redisPassword string
+	fcmServerKey  string
 }
 
 func configFromEnv() config {
@@ -134,6 +149,7 @@ func configFromEnv() config {
 		databaseURL:   envOr("DATABASE_URL", "postgres://tl_app:localdevpassword@postgres:5432/teacherslounge"),
 		redisAddr:     envOr("REDIS_ADDR", "redis:6379"),
 		redisPassword: envOr("REDIS_PASSWORD", "localredispassword"),
+		fcmServerKey:  os.Getenv("FCM_SERVER_KEY"), // optional; empty = LogPusher
 	}
 }
 

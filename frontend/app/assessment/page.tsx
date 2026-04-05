@@ -77,7 +77,12 @@ const DIM_META: Record<string, { label: string; left: string; right: string; col
   },
 }
 
-const DIMENSION_ORDER = ['active_reflective', 'sensing_intuitive', 'visual_verbal', 'sequential_global']
+const DIMENSION_ORDER = [
+  'active_reflective',
+  'sensing_intuitive',
+  'visual_verbal',
+  'sequential_global',
+]
 
 // ── Main page ────────────────────────────────────────────────────────────────
 
@@ -167,7 +172,7 @@ export default function AssessmentPage() {
         </div>
 
         {phase === 'loading' && <LoadingCard />}
-        {phase === 'intro'   && <IntroCard onStart={startAssessment} />}
+        {phase === 'intro' && <IntroCard onStart={startAssessment} />}
         {phase === 'question' && session && question && (
           <QuestionCard
             question={question}
@@ -215,9 +220,9 @@ function IntroCard({ onStart }: { onStart: () => void }) {
           Discover Your Learning Style
         </h2>
         <p className="text-xs text-text-dim leading-relaxed">
-          12 quick questions help Professor Nova understand how you learn best —
-          visual or verbal, active or reflective, sensing or intuitive, sequential or global.
-          Your answers shape how Nova explains things to you.
+          12 quick questions help Professor Nova understand how you learn best — visual or verbal,
+          active or reflective, sensing or intuitive, sequential or global. Your answers shape how
+          Nova explains things to you.
         </p>
       </div>
 
@@ -258,14 +263,16 @@ function QuestionCard({
   onSelect: (key: string) => void
   onSubmit: () => void
 }) {
-  const progress = ((question.index) / question.total) * 100
+  const progress = (question.index / question.total) * 100
 
   return (
     <div className="bg-bg-card border border-border-mid rounded-xl p-6 animate-slide-up">
       {/* Progress */}
       <div className="mb-5">
         <div className="flex justify-between text-[10px] text-text-dim mb-1.5">
-          <span>Question {question.index + 1} of {question.total}</span>
+          <span>
+            Question {question.index + 1} of {question.total}
+          </span>
           <span>{Math.round(progress)}%</span>
         </div>
         <div className="h-1 bg-border-dim rounded-full overflow-hidden">
@@ -281,9 +288,7 @@ function QuestionCard({
       </div>
 
       {/* Stem */}
-      <p className="text-sm text-text-bright font-medium mb-5 leading-relaxed">
-        {question.stem}
-      </p>
+      <p className="text-sm text-text-bright font-medium mb-5 leading-relaxed">{question.stem}</p>
 
       {/* Options */}
       <div className="space-y-3 mb-6">
@@ -299,7 +304,9 @@ function QuestionCard({
                   : 'border-border-mid bg-bg-panel text-text-base hover:border-border-mid/80 hover:bg-bg-input'
               }`}
             >
-              <span className={`font-mono font-bold mr-2 ${isSelected ? 'text-neon-blue' : 'text-text-dim'}`}>
+              <span
+                className={`font-mono font-bold mr-2 ${isSelected ? 'text-neon-blue' : 'text-text-dim'}`}
+              >
                 {opt.key}
               </span>
               {opt.text}
@@ -326,9 +333,7 @@ function ResultsCard({ results, xpEarned }: { results: Record<string, number>; x
       {/* Header */}
       <div className="bg-bg-card border border-neon-green/30 rounded-xl p-6 text-center shadow-neon-green-sm">
         <div className="text-3xl mb-2">✨</div>
-        <h2 className="text-base font-semibold text-text-bright mb-1">
-          Assessment Complete!
-        </h2>
+        <h2 className="text-base font-semibold text-text-bright mb-1">Assessment Complete!</h2>
         <p className="text-xs text-text-dim mb-3">
           Professor Nova will now adapt explanations to your style.
         </p>
@@ -349,20 +354,24 @@ function ResultsCard({ results, xpEarned }: { results: Record<string, number>; x
           const value = results[dim] ?? 0
           const leftPct = Math.round(Math.max(0, -value * 50))
           const rightPct = Math.round(Math.max(0, value * 50))
-          const isLeft  = value < -0.1
+          const isLeft = value < -0.1
           const isRight = value > 0.1
           const isNeutral = !isLeft && !isRight
 
           return (
             <div key={dim}>
               <div className="flex justify-between items-center mb-1.5">
-                <span className={`text-[11px] font-medium ${isLeft ? 'text-text-bright' : 'text-text-dim'}`}>
+                <span
+                  className={`text-[11px] font-medium ${isLeft ? 'text-text-bright' : 'text-text-dim'}`}
+                >
                   {meta.left}
                 </span>
                 <span className="text-[10px] text-text-dim uppercase tracking-wider font-mono">
                   {meta.label}
                 </span>
-                <span className={`text-[11px] font-medium ${isRight ? 'text-text-bright' : 'text-text-dim'}`}>
+                <span
+                  className={`text-[11px] font-medium ${isRight ? 'text-text-bright' : 'text-text-dim'}`}
+                >
                   {meta.right}
                 </span>
               </div>
@@ -372,7 +381,7 @@ function ResultsCard({ results, xpEarned }: { results: Record<string, number>; x
                 <div
                   className="absolute inset-0 rounded-full transition-all duration-700"
                   style={{
-                    left:  isLeft ? `${50 - leftPct}%` : '50%',
+                    left: isLeft ? `${50 - leftPct}%` : '50%',
                     right: isRight ? `${50 - rightPct}%` : '50%',
                     background: meta.color,
                     boxShadow: `0 0 6px ${meta.color}88`,
@@ -386,9 +395,7 @@ function ResultsCard({ results, xpEarned }: { results: Record<string, number>; x
                 <span className="text-[10px] text-text-dim font-mono">
                   {isLeft ? `${leftPct}% ${meta.left}` : ''}
                 </span>
-                <span className="text-[10px] text-text-dim">
-                  {isNeutral && 'Balanced'}
-                </span>
+                <span className="text-[10px] text-text-dim">{isNeutral && 'Balanced'}</span>
                 <span className="text-[10px] text-text-dim font-mono">
                   {isRight ? `${rightPct}% ${meta.right}` : ''}
                 </span>

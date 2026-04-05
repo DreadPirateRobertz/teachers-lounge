@@ -10,13 +10,13 @@ interface ActivityChartProps {
 }
 
 export default function ActivityChart({ days }: ActivityChartProps) {
-  const max = Math.max(...days.map(d => d.messages), 1)
+  const max = Math.max(...days.map((d) => d.messages), 1)
 
   // Show last 30 days as a grid of squares (GitHub-style heatmap)
   return (
     <div className="flex flex-col gap-2">
       <div className="flex gap-1 flex-wrap">
-        {days.map(d => {
+        {days.map((d) => {
           const intensity = d.messages / max
           const opacity = d.messages === 0 ? 0.08 : 0.2 + intensity * 0.8
           return (
@@ -34,7 +34,7 @@ export default function ActivityChart({ days }: ActivityChartProps) {
       </div>
       <div className="flex items-center gap-2 text-[10px] text-text-dim font-mono">
         <span>Less</span>
-        {[0.08, 0.3, 0.55, 0.8, 1].map(o => (
+        {[0.08, 0.3, 0.55, 0.8, 1].map((o) => (
           <div
             key={o}
             className="w-3 h-3 rounded-sm"

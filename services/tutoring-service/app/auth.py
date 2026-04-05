@@ -1,7 +1,8 @@
 """
 JWT validation — validates access tokens issued by the User Service (tl-38s).
 
-User Service signs HS256 JWTs with the following custom claims:
+User Service signs HS256 JWTs with the following claims:
+  aud        — audience: "teacherslounge-services"  (validated here)
   uid        — user UUID string  (also mirrored in RegisteredClaims.sub)
   email      — user email address
   acct       — account type: "standard" | "minor"
@@ -41,9 +42,7 @@ def require_auth(
             token,
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
-            # verify_aud=False: User Service does not set an "aud" claim yet.
-            # Tracked in tl-eam — enable once User Service adds aud: "teacherslounge-services".
-            options={"verify_aud": False},
+            audience=settings.jwt_audience,
         )
     except ExpiredSignatureError:
         raise HTTPException(

@@ -18,8 +18,10 @@ import (
 
 // ── Fakes ────────────────────────────────────────────────────────────────────
 
+// fakeStore is an in-memory implementation of handler.NotifStore for testing.
 type fakeStore struct {
 	notifications []model.Notification
+	pushTokens    map[string][]string // userID -> []token
 }
 
 func (f *fakeStore) CreateNotification(_ context.Context, n *model.Notification) (*model.Notification, error) {
@@ -38,10 +40,46 @@ func (f *fakeStore) ListUnread(_ context.Context, userID string) ([]model.Notifi
 	return out, nil
 }
 
+// SavePushToken records the token for the given user.
+func (f *fakeStore) SavePushToken(_ context.Context, userID, token, _ string) error {
+	if f.pushTokens == nil {
+		f.pushTokens = make(map[string][]string)
+	}
+	for _, t := range f.pushTokens[userID] {
+		if t == token {
+			return nil // already present — idempotent
+		}
+	}
+	f.pushTokens[userID] = append(f.pushTokens[userID], token)
+	return nil
+}
+
+// GetPushTokens returns all tokens registered for the given user.
+func (f *fakeStore) GetPushTokens(_ context.Context, userID string) ([]string, error) {
+	return f.pushTokens[userID], nil
+}
+
+// fakePusher records Send calls for assertion in tests.
+type fakePusher struct {
+	calls []pushCall
+}
+
+type pushCall struct {
+	token string
+	title string
+	body  string
+}
+
+// Send records the call and returns nil.
+func (p *fakePusher) Send(_ context.Context, token, title, body string, _ map[string]any) error {
+	p.calls = append(p.calls, pushCall{token: token, title: title, body: body})
+	return nil
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 func newHandler() *handler.Handler {
-	return handler.New(&fakeStore{}, zap.NewNop())
+	return handler.New(&fakeStore{}, &fakePusher{}, zap.NewNop())
 }
 
 func jsonBody(v any) *bytes.Buffer {
@@ -49,7 +87,7 @@ func jsonBody(v any) *bytes.Buffer {
 	return bytes.NewBuffer(b)
 }
 
-// ── Tests ─────────────────────────────────────────────────────────────────────
+// ── Push tests ────────────────────────────────────────────────────────────────
 
 func TestPush_ValidRequest_Returns200(t *testing.T) {
 	h := newHandler()
@@ -78,6 +116,52 @@ func TestPush_MissingFields_Returns400(t *testing.T) {
 	}
 }
 
+func TestPush_DeliversToRegisteredTokens(t *testing.T) {
+	s := &fakeStore{
+		pushTokens: map[string][]string{
+			"u1": {"tok-a", "tok-b"},
+		},
+	}
+	p := &fakePusher{}
+	h := handler.New(s, p, zap.NewNop())
+
+	body := jsonBody(model.PushRequest{UserID: "u1", Title: "Streak!", Body: "3 days"})
+	req := httptest.NewRequest(http.MethodPost, "/notify/push", body)
+	rr := httptest.NewRecorder()
+
+	h.Push(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(p.calls) != 2 {
+		t.Fatalf("expected 2 FCM sends, got %d", len(p.calls))
+	}
+	if p.calls[0].token != "tok-a" || p.calls[1].token != "tok-b" {
+		t.Fatalf("unexpected tokens: %+v", p.calls)
+	}
+}
+
+func TestPush_NoTokens_Returns200WithoutSend(t *testing.T) {
+	p := &fakePusher{}
+	h := handler.New(&fakeStore{}, p, zap.NewNop())
+
+	body := jsonBody(model.PushRequest{UserID: "u1", Title: "Hi", Body: "World"})
+	req := httptest.NewRequest(http.MethodPost, "/notify/push", body)
+	rr := httptest.NewRecorder()
+
+	h.Push(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if len(p.calls) != 0 {
+		t.Fatalf("expected 0 FCM sends when no tokens, got %d", len(p.calls))
+	}
+}
+
+// ── Email tests ───────────────────────────────────────────────────────────────
+
 func TestEmail_ValidRequest_Returns200(t *testing.T) {
 	h := newHandler()
 	body := jsonBody(model.EmailRequest{UserID: "u1", Template: "welcome"})
@@ -91,9 +175,11 @@ func TestEmail_ValidRequest_Returns200(t *testing.T) {
 	}
 }
 
+// ── In-app tests ──────────────────────────────────────────────────────────────
+
 func TestInApp_ValidRequest_Returns201(t *testing.T) {
 	s := &fakeStore{}
-	h := handler.New(s, zap.NewNop())
+	h := handler.New(s, &fakePusher{}, zap.NewNop())
 
 	body := jsonBody(model.InAppRequest{UserID: "u1", Type: "streak", Message: "You're on fire!"})
 	req := httptest.NewRequest(http.MethodPost, "/notify/in-app", body)
@@ -122,6 +208,80 @@ func TestInApp_MissingFields_Returns400(t *testing.T) {
 	}
 }
 
+// ── RegisterToken tests ───────────────────────────────────────────────────────
+
+func TestRegisterToken_ValidRequest_Returns204(t *testing.T) {
+	s := &fakeStore{}
+	h := handler.New(s, &fakePusher{}, zap.NewNop())
+
+	body := jsonBody(model.RegisterTokenRequest{Token: "tok-xyz", Platform: "ios"})
+	req := httptest.NewRequest(http.MethodPost, "/notify/push/token", body)
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+
+	h.RegisterToken(rr, req)
+
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if len(s.pushTokens["u1"]) != 1 || s.pushTokens["u1"][0] != "tok-xyz" {
+		t.Fatalf("expected token stored, got %v", s.pushTokens)
+	}
+}
+
+func TestRegisterToken_MissingToken_Returns400(t *testing.T) {
+	h := newHandler()
+	body := jsonBody(model.RegisterTokenRequest{Platform: "android"}) // missing Token
+	req := httptest.NewRequest(http.MethodPost, "/notify/push/token", body)
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+
+	h.RegisterToken(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestRegisterToken_NoCallerInContext_Returns401(t *testing.T) {
+	h := newHandler()
+	body := jsonBody(model.RegisterTokenRequest{Token: "tok-xyz", Platform: "ios"})
+	req := httptest.NewRequest(http.MethodPost, "/notify/push/token", body)
+	// No user ID in context
+	rr := httptest.NewRecorder()
+
+	h.RegisterToken(rr, req)
+
+	if rr.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401, got %d", rr.Code)
+	}
+}
+
+func TestRegisterToken_Idempotent_StoresSameTokenOnce(t *testing.T) {
+	s := &fakeStore{}
+	h := handler.New(s, &fakePusher{}, zap.NewNop())
+
+	reg := func() {
+		body := jsonBody(model.RegisterTokenRequest{Token: "tok-dup", Platform: "ios"})
+		req := httptest.NewRequest(http.MethodPost, "/notify/push/token", body)
+		req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+		rr := httptest.NewRecorder()
+		h.RegisterToken(rr, req)
+		if rr.Code != http.StatusNoContent {
+			t.Fatalf("expected 204, got %d", rr.Code)
+		}
+	}
+
+	reg()
+	reg()
+
+	if len(s.pushTokens["u1"]) != 1 {
+		t.Fatalf("expected token stored once, got %d", len(s.pushTokens["u1"]))
+	}
+}
+
+// ── ListUnread tests ──────────────────────────────────────────────────────────
+
 func TestListUnread_ReturnsStoredNotifications(t *testing.T) {
 	s := &fakeStore{
 		notifications: []model.Notification{
@@ -129,11 +289,10 @@ func TestListUnread_ReturnsStoredNotifications(t *testing.T) {
 			{ID: "n2", UserID: "u2", Type: "xp", Message: "Other user", Read: false},
 		},
 	}
-	h := handler.New(s, zap.NewNop())
+	h := handler.New(s, &fakePusher{}, zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/notify/u1", nil)
 	req = withURLParam(req, "userId", "u1")
-	// Inject matching caller identity into context
 	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
 	rr := httptest.NewRecorder()
 
@@ -159,11 +318,10 @@ func TestListUnread_ForbiddenWhenCallerMismatch(t *testing.T) {
 			{ID: "n1", UserID: "u1", Type: "xp", Message: "Level up!", Read: false},
 		},
 	}
-	h := handler.New(s, zap.NewNop())
+	h := handler.New(s, &fakePusher{}, zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/notify/u1", nil)
 	req = withURLParam(req, "userId", "u1")
-	// Caller is u2 trying to read u1's notifications
 	req = req.WithContext(middleware.WithUserID(req.Context(), "u2"))
 	rr := httptest.NewRecorder()
 
@@ -178,7 +336,6 @@ func TestListUnread_ForbiddenWhenNoCallerInContext(t *testing.T) {
 	h := newHandler()
 	req := httptest.NewRequest(http.MethodGet, "/notify/u1", nil)
 	req = withURLParam(req, "userId", "u1")
-	// No user ID in context
 	rr := httptest.NewRecorder()
 
 	h.ListUnread(rr, req)
@@ -187,6 +344,8 @@ func TestListUnread_ForbiddenWhenNoCallerInContext(t *testing.T) {
 		t.Fatalf("expected 403 when no caller identity, got %d", rr.Code)
 	}
 }
+
+// ── Health test ───────────────────────────────────────────────────────────────
 
 func TestHealth_Returns200(t *testing.T) {
 	h := newHandler()
@@ -200,8 +359,9 @@ func TestHealth_Returns200(t *testing.T) {
 	}
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 // withURLParam injects a chi URL param into the request context.
-// Avoids pulling in chi as a test dependency for simple URL param reads.
 func withURLParam(r *http.Request, key, value string) *http.Request {
 	chiCtx := chi.NewRouteContext()
 	chiCtx.URLParams.Add(key, value)

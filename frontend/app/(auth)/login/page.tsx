@@ -40,7 +40,7 @@ export default function LoginPage() {
               id="email"
               type="email"
               value={email}
-              onChange={e => setEmail(e.target.value)}
+              onChange={(e) => setEmail(e.target.value)}
               placeholder="you@university.edu"
               required
               autoComplete="email"
@@ -53,7 +53,7 @@ export default function LoginPage() {
               id="password"
               type="password"
               value={password}
-              onChange={e => setPassword(e.target.value)}
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="••••••••"
               required
               autoComplete="current-password"
@@ -67,11 +67,7 @@ export default function LoginPage() {
             </div>
           )}
 
-          <button
-            type="submit"
-            disabled={loading}
-            className="neon-btn-primary"
-          >
+          <button type="submit" disabled={loading} className="neon-btn-primary">
             {loading ? 'Signing in…' : 'Sign In ⚡'}
           </button>
         </form>
@@ -79,7 +75,10 @@ export default function LoginPage() {
         <div className="mt-4 text-center">
           <p className="text-xs text-text-dim">
             No account?{' '}
-            <Link href="/register" className="text-neon-blue hover:text-glow-blue transition-colors">
+            <Link
+              href="/register"
+              className="text-neon-blue hover:text-glow-blue transition-colors"
+            >
               Start your free trial →
             </Link>
           </p>

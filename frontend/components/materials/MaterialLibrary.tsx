@@ -39,8 +39,16 @@ const STATUS_CONFIG = {
 } as const
 
 const FILE_EMOJI: Record<string, string> = {
-  MP4: '🎬', MOV: '🎬', MP3: '🎵', WAV: '🎵',
-  JPG: '🖼️', PNG: '🖼️', PDF: '📄', DOCX: '📝', PPTX: '📊', XLSX: '📊',
+  MP4: '🎬',
+  MOV: '🎬',
+  MP3: '🎵',
+  WAV: '🎵',
+  JPG: '🖼️',
+  PNG: '🖼️',
+  PDF: '📄',
+  DOCX: '📝',
+  PPTX: '📊',
+  XLSX: '📊',
 }
 
 interface Props {
@@ -86,12 +94,16 @@ function MaterialRow({ material }: { material: UploadedMaterial }) {
   )
 }
 
-type StatusCfg = typeof STATUS_CONFIG[keyof typeof STATUS_CONFIG]
+type StatusCfg = (typeof STATUS_CONFIG)[keyof typeof STATUS_CONFIG]
 
 function StatusBadge({ cfg }: { cfg: StatusCfg }) {
   return (
-    <div className={`flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-medium flex-shrink-0 ${cfg.bg} ${cfg.border} ${cfg.color}`}>
-      <span className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot} ${cfg.pulse ? 'animate-pulse-slow' : ''}`} />
+    <div
+      className={`flex items-center gap-1 px-1.5 py-0.5 rounded border text-[10px] font-medium flex-shrink-0 ${cfg.bg} ${cfg.border} ${cfg.color}`}
+    >
+      <span
+        className={`w-1.5 h-1.5 rounded-full flex-shrink-0 ${cfg.dot} ${cfg.pulse ? 'animate-pulse-slow' : ''}`}
+      />
       {cfg.label}
     </div>
   )

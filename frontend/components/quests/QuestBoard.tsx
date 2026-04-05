@@ -92,15 +92,11 @@ export default function QuestBoard() {
           <h2 className="font-mono text-base font-bold text-text-bright tracking-wide">
             Daily Quests
           </h2>
-          <div className="text-xs text-text-dim mt-0.5">
-            Complete quests to earn XP and gems
-          </div>
+          <div className="text-xs text-text-dim mt-0.5">Complete quests to earn XP and gems</div>
         </div>
         <div className="text-right">
           <div className="text-[10px] text-text-dim uppercase tracking-wider">Resets in</div>
-          <div className="font-mono text-sm font-bold text-neon-blue text-glow-blue">
-            {resetIn}
-          </div>
+          <div className="font-mono text-sm font-bold text-neon-blue text-glow-blue">{resetIn}</div>
         </div>
       </div>
 
@@ -150,7 +146,8 @@ export default function QuestBoard() {
 // ── Quest card ────────────────────────────────────────────────────────────────
 
 function QuestCard({ quest }: { quest: QuestState }) {
-  const pct = quest.target > 0 ? Math.min(100, Math.round((quest.progress / quest.target) * 100)) : 0
+  const pct =
+    quest.target > 0 ? Math.min(100, Math.round((quest.progress / quest.target) * 100)) : 0
   const icon = QUEST_ICON[quest.id] ?? '📋'
 
   return (
@@ -189,14 +186,14 @@ function QuestCard({ quest }: { quest: QuestState }) {
             </div>
           </div>
 
-          <div className="text-[11px] text-text-dim mt-0.5 leading-tight">
-            {quest.description}
-          </div>
+          <div className="text-[11px] text-text-dim mt-0.5 leading-tight">{quest.description}</div>
 
           {/* Progress section */}
           {quest.completed ? (
             <div className="mt-2 flex items-center gap-1.5">
-              <span className="text-neon-green text-xs font-semibold text-glow-green">✓ Complete</span>
+              <span className="text-neon-green text-xs font-semibold text-glow-green">
+                ✓ Complete
+              </span>
             </div>
           ) : (
             <div className="mt-2">

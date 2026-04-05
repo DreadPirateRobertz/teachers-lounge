@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     # User Service signs tokens with this secret; all services validate with it.
     jwt_secret: str = "REPLACE_ME"
     jwt_algorithm: str = "HS256"
+    jwt_audience: str = "teacherslounge-services"
 
     # CORS — comma-separated list of allowed origins
     allowed_origins: str = "http://localhost:3000"
@@ -32,6 +33,9 @@ class Settings(BaseSettings):
     # "last 10 exchanges" = 10 student messages + 10 tutor replies = 20 messages
     max_history_messages: int = 20
     max_message_length: int = 8000     # chars per student message
+
+    # User Service — for learning profile reads/writes
+    user_service_url: str = "http://user-service.teachers-lounge.svc.cluster.local:8080"
 
     # Search Service — called by the agentic RAG pipeline for curriculum retrieval
     search_service_url: str = "http://search-service.teachers-lounge.svc.cluster.local:8080"
