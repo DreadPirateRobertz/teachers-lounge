@@ -38,7 +38,16 @@ async def _get_or_create_mastery(
     )
     row = result.scalar_one_or_none()
     if row is None:
-        row = StudentConceptMastery(user_id=user_id, concept_id=concept_id)
+        row = StudentConceptMastery(
+            user_id=user_id,
+            concept_id=concept_id,
+            mastery_score=0.0,
+            decay_rate=0.1,
+            review_count=0,
+            ease_factor=2.5,
+            interval_days=1,
+            repetitions=0,
+        )
         db.add(row)
         await db.flush()
     return row
