@@ -9,7 +9,8 @@ const TUTORING_SERVICE_URL = process.env.TUTORING_SERVICE_URL || 'http://tutorin
  * Policy rationale:
  * - default-src 'self': block all unlisted origins by default
  * - script-src 'self' 'unsafe-inline': Next.js inline scripts required for hydration;
- *   nonce-based CSP is preferred long-term but requires middleware refactor
+ *   'unsafe-inline' weakens XSS protection — tracked in tl-ixk for migration to
+ *   per-request nonces via Next.js middleware + <Script nonce={nonce} />
  * - style-src 'self' 'unsafe-inline': Tailwind + emotion CSS-in-JS require inline styles
  * - img-src 'self' data: blob:: data: for canvas/Three.js screenshots, blob: for
  *   generated molecule renders

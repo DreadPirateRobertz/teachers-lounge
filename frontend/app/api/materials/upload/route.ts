@@ -19,6 +19,10 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   }
 
   // Reject oversized requests early before reading the body.
+  // Limitation: Content-Length can be omitted (chunked transfer) or spoofed —
+  // this is a best-effort early gate only. The authoritative size limit is
+  // enforced by the ingestion service and the infrastructure reverse proxy
+  // (nginx/GKE Ingress client_max_body_size). Do not rely on this check alone.
   const contentLength = Number(req.headers.get('content-length') ?? 0)
   if (contentLength > MAX_UPLOAD_BYTES) {
     return NextResponse.json({ detail: 'file too large' }, { status: 413 })
