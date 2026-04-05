@@ -210,9 +210,11 @@ services:
         condition: service_healthy
     environment:
       NODE_ENV: production
+      # Disable HSTS + upgrade-insecure-requests for local dev (no TLS)
+      DISABLE_HSTS: "true"
       # Server-side (SSR) URLs use Docker internal hostnames — not exposed to browser
       USER_SERVICE_URL: http://user-service:8080
-      TUTORING_SERVICE_URL: http://tutoring-service:8000
+      TUTORING_SERVICE_URL: http://tutoring-service:8080
       ANALYTICS_SERVICE_URL: http://analytics-service:8085
     ports:
       - "0.0.0.0:3000:3000"
