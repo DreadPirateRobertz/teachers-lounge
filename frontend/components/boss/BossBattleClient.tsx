@@ -17,6 +17,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { type AnimationState, type BossVisualDef, getRandomTaunt } from './BossCharacterLibrary'
 import BossHUD, { type PowerUp } from './BossHUD'
 import ErrorBoundary from '@/components/ErrorBoundary'
+import useSwipeGesture, { SwipeDirection } from '@/hooks/useSwipeGesture'
 
 // BossScene is client-only WebGL; dynamic import prevents SSR errors.
 const BossScene = dynamic(() => import('./BossScene'), { ssr: false })
@@ -212,6 +213,15 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
     return () => clearTimeout(t)
   }, [taunt])
 
+  // ── Swipe gesture: right = correct, left = wrong ─────────────────────────
+
+  const { onTouchStart, onTouchEnd, swipeDirection, reset: resetSwipe } = useSwipeGesture({
+    onSwipe: (dir) => {
+      if (actionPending || phase !== 'active') return
+      submitAnswer(dir === SwipeDirection.Right)
+    },
+  })
+
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
@@ -223,7 +233,21 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
 
       {/* Active battle */}
       {(phase === 'active' || animState === 'death') && (
-        <div className="flex flex-col items-center gap-6 w-full max-w-md">
+        /*
+         * Swipe zone: right = correct, left = wrong.
+         * `touch-action: pan-y` allows vertical scroll while intercepting
+         * horizontal swipes.  A hint banner fades in briefly after a swipe
+         * to confirm the gesture was received.
+         */
+        <div
+          className="flex flex-col items-center gap-6 w-full max-w-md"
+          style={{ touchAction: 'pan-y' }}
+          onTouchStart={onTouchStart as React.TouchEventHandler}
+          onTouchEnd={(e) => {
+            ;(onTouchEnd as React.TouchEventHandler)(e)
+            setTimeout(resetSwipe, 600)
+          }}
+        >
           <ErrorBoundary
             componentName="BossScene"
             fallback={
@@ -254,32 +278,51 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
             onPowerUpAction={activatePowerUp}
             disabled={actionPending}
           />
-          {/* Demo attack buttons — replace with real quiz UI in Phase 4 */}
-          <div className="flex gap-3">
+          {/* Swipe hint — briefly shown after a horizontal swipe on mobile */}
+          {swipeDirection && (
+            <p
+              aria-live="polite"
+              className="text-xs font-mono text-text-dim animate-fade-in"
+            >
+              {swipeDirection === SwipeDirection.Right ? '→ Correct' : '← Wrong'}
+            </p>
+          )}
+
+          {/* Demo attack buttons — replace with real quiz UI in Phase 4.
+              Min touch target 44×44 px (Apple HIG) for K-12 mobile usability. */}
+          <div className="flex gap-3 w-full">
             <button
               onClick={() => submitAnswer(true)}
               disabled={actionPending}
-              className="px-5 py-2 rounded-lg text-sm font-mono font-bold bg-neon-green/10
-                border border-neon-green/40 text-neon-green hover:bg-neon-green/20 transition-colors
-                disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex-1 min-h-[44px] px-5 py-3 rounded-lg text-sm font-mono font-bold
+                bg-neon-green/10 border border-neon-green/40 text-neon-green
+                hover:bg-neon-green/20 active:bg-neon-green/30 transition-colors
+                disabled:opacity-40 disabled:cursor-not-allowed
+                touch-manipulation"
+              style={{ touchAction: 'manipulation' }}
             >
               ✓ Correct
             </button>
             <button
               onClick={() => submitAnswer(false)}
               disabled={actionPending}
-              className="px-5 py-2 rounded-lg text-sm font-mono font-bold bg-neon-pink/10
-                border border-neon-pink/40 text-neon-pink hover:bg-neon-pink/20 transition-colors
-                disabled:opacity-40 disabled:cursor-not-allowed"
+              className="flex-1 min-h-[44px] px-5 py-3 rounded-lg text-sm font-mono font-bold
+                bg-neon-pink/10 border border-neon-pink/40 text-neon-pink
+                hover:bg-neon-pink/20 active:bg-neon-pink/30 transition-colors
+                disabled:opacity-40 disabled:cursor-not-allowed
+                touch-manipulation"
+              style={{ touchAction: 'manipulation' }}
             >
               ✗ Wrong
             </button>
             <button
               onClick={forfeit}
               disabled={actionPending}
-              className="px-4 py-2 rounded-lg text-xs font-mono text-text-dim
+              className="min-h-[44px] px-4 py-3 rounded-lg text-xs font-mono text-text-dim
                 border border-border-dim hover:border-neon-pink/30 transition-colors
-                disabled:opacity-40 disabled:cursor-not-allowed"
+                disabled:opacity-40 disabled:cursor-not-allowed
+                touch-manipulation"
+              style={{ touchAction: 'manipulation' }}
             >
               Forfeit
             </button>
