@@ -18,7 +18,6 @@ describe('ReadyStep', () => {
 
   it('shows the avatar emoji', () => {
     render(<ReadyStep avatarEmoji="🦊" displayName="FoxUser" onDone={() => {}} />)
-    // The emoji appears in the avatar display
     expect(screen.getAllByText('🦊').length).toBeGreaterThan(0)
   })
 
@@ -33,5 +32,17 @@ describe('ReadyStep', () => {
     render(<ReadyStep avatarEmoji="🎓" displayName="Bob" onDone={onDone} />)
     fireEvent.click(screen.getByRole('button', { name: /start learning/i }))
     expect(onDone).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows "Launching..." and disables button when finishing', () => {
+    render(<ReadyStep avatarEmoji="🎓" displayName="Alice" finishing onDone={() => {}} />)
+    const btn = screen.getByRole('button', { name: /launching/i })
+    expect(btn).toBeDisabled()
+    expect(btn).toHaveTextContent('Launching...')
+  })
+
+  it('shows normal button text when not finishing', () => {
+    render(<ReadyStep avatarEmoji="🎓" displayName="Alice" finishing={false} onDone={() => {}} />)
+    expect(screen.getByRole('button', { name: /start learning/i })).toBeEnabled()
   })
 })
