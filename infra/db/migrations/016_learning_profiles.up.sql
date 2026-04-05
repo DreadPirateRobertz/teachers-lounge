@@ -4,6 +4,8 @@
 
 BEGIN;
 
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 -- Per-student Felder-Silverman learning-style dials (local, authoritative store)
 CREATE TABLE learning_profiles (
   user_id           UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
@@ -21,7 +23,7 @@ CREATE TABLE learning_profiles (
 -- Log of which explanation types helped a student understand a specific concept.
 -- Accumulated over interactions; used to personalise future explanations.
 CREATE TABLE explanation_preferences (
-  id               UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id               UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id          UUID        NOT NULL REFERENCES users(id)    ON DELETE CASCADE,
   concept_id       UUID        NOT NULL REFERENCES concepts(id) ON DELETE CASCADE,
   explanation_type VARCHAR(50) NOT NULL,   -- 'visual', 'verbal', 'example', 'derivation', 'analogy'
@@ -35,7 +37,7 @@ CREATE INDEX idx_explanation_prefs_user_concept
 -- Misconception log: tracked student errors with recency-weighted confidence.
 -- confidence decays over time in application logic; resolved=TRUE dismisses the entry.
 CREATE TABLE misconceptions (
-  id           UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id      UUID        NOT NULL REFERENCES users(id)    ON DELETE CASCADE,
   concept_id   UUID        NOT NULL REFERENCES concepts(id) ON DELETE CASCADE,
   description  TEXT        NOT NULL,

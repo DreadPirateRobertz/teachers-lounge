@@ -32,7 +32,8 @@ from app.main import app
 
 STUDENT_ID = uuid4()
 CONCEPT_ID = uuid4()
-NOW = datetime(2026, 4, 5, 12, 0, 0, tzinfo=timezone.utc)
+# Computed at runtime so relative offsets (NOW ± N days) are always meaningful.
+NOW = datetime.now(timezone.utc)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -329,7 +330,10 @@ class TestRecordAnswer:
                 json={"quality": 4},
             )
 
-        db.add.assert_called()
+        db.add.assert_called_once()
+        added = db.add.call_args[0][0]
+        from app.orm import ReviewRecord
+        assert isinstance(added, ReviewRecord)
         db.commit.assert_awaited_once()
 
     @pytest.mark.asyncio
