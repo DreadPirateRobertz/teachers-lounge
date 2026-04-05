@@ -62,7 +62,8 @@ func (s *Store) CreateUser(ctx context.Context, p CreateUserParams) (*models.Use
 		INSERT INTO users (email, password_hash, display_name, avatar_emoji, account_type, date_of_birth, guardian_email)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, email, password_hash, display_name, avatar_emoji, account_type,
-		          is_admin, date_of_birth, guardian_email, guardian_consent_at, created_at, updated_at`
+		          is_admin, date_of_birth, guardian_email, guardian_consent_at,
+		          has_completed_onboarding, onboarded_at, created_at, updated_at`
 
 	row := s.pool.QueryRow(ctx, q,
 		p.Email, p.PasswordHash, p.DisplayName, p.AvatarEmoji, p.AccountType,
@@ -74,7 +75,8 @@ func (s *Store) CreateUser(ctx context.Context, p CreateUserParams) (*models.Use
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	const q = `
 		SELECT id, email, password_hash, display_name, avatar_emoji, account_type,
-		       is_admin, date_of_birth, guardian_email, guardian_consent_at, created_at, updated_at
+		       is_admin, date_of_birth, guardian_email, guardian_consent_at,
+		       has_completed_onboarding, onboarded_at, created_at, updated_at
 		FROM users WHERE email = $1`
 	row := s.pool.QueryRow(ctx, q, email)
 	return scanUser(row)
@@ -83,7 +85,8 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (*models.User,
 func (s *Store) GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	const q = `
 		SELECT id, email, password_hash, display_name, avatar_emoji, account_type,
-		       is_admin, date_of_birth, guardian_email, guardian_consent_at, created_at, updated_at
+		       is_admin, date_of_birth, guardian_email, guardian_consent_at,
+		       has_completed_onboarding, onboarded_at, created_at, updated_at
 		FROM users WHERE id = $1`
 	row := s.pool.QueryRow(ctx, q, id)
 	return scanUser(row)
@@ -97,9 +100,23 @@ func (s *Store) UpdateUser(ctx context.Context, id uuid.UUID, p UpdateUserParams
 		    updated_at    = NOW()
 		WHERE id = $1
 		RETURNING id, email, password_hash, display_name, avatar_emoji, account_type,
-		          is_admin, date_of_birth, guardian_email, guardian_consent_at, created_at, updated_at`
+		          is_admin, date_of_birth, guardian_email, guardian_consent_at,
+		          has_completed_onboarding, onboarded_at, created_at, updated_at`
 	row := s.pool.QueryRow(ctx, q, id, p.DisplayName, p.AvatarEmoji)
 	return scanUser(row)
+}
+
+// CompleteOnboarding marks the user's onboarding wizard as finished and
+// records the timestamp.  Idempotent: safe to call if already completed.
+func (s *Store) CompleteOnboarding(ctx context.Context, userID uuid.UUID) error {
+	const q = `
+		UPDATE users
+		SET has_completed_onboarding = TRUE,
+		    onboarded_at             = COALESCE(onboarded_at, NOW()),
+		    updated_at               = NOW()
+		WHERE id = $1`
+	_, err := s.pool.Exec(ctx, q, userID)
+	return err
 }
 
 // DeleteUser cascades via FK constraints: all related rows are deleted automatically.

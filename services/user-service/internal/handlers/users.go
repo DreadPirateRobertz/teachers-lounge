@@ -103,6 +103,32 @@ func (h *UsersHandler) UpdatePreferences(w http.ResponseWriter, r *http.Request)
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// PATCH /users/{id}/onboarding — mark the first-run wizard as complete.
+//
+// Idempotent: safe to call multiple times.  Returns 204 on success.
+// The onboarded_at timestamp is set to NOW() on the first call; subsequent
+// calls leave it unchanged (COALESCE in SQL).
+func (h *UsersHandler) CompleteOnboarding(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUserIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	if err := h.store.CompleteOnboarding(r.Context(), userID); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update onboarding status")
+		return
+	}
+
+	// Invalidate session cache so the next profile fetch includes the updated flag.
+	claims := middleware.ClaimsFromCtx(r.Context())
+	if claims != nil {
+		_ = h.cache.DeleteSession(r.Context(), rediskeys.Session(claims.UserID))
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // POST /users/{id}/export — triggers async GDPR data export
 func (h *UsersHandler) ExportData(w http.ResponseWriter, r *http.Request) {
 	userID, err := parseUserIDParam(r)

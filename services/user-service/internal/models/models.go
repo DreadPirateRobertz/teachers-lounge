@@ -29,8 +29,11 @@ type User struct {
 	// K-12 / FERPA: guardian consent for minors
 	GuardianEmail     *string    `json:"guardian_email,omitempty"`
 	GuardianConsentAt *time.Time `json:"guardian_consent_at,omitempty"`
-	CreatedAt         time.Time  `json:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at"`
+	// Onboarding state (tl-num): set to true after the first-run wizard completes.
+	HasCompletedOnboarding bool       `json:"has_completed_onboarding"`
+	OnboardedAt            *time.Time `json:"onboarded_at,omitempty"`
+	CreatedAt              time.Time  `json:"created_at"`
+	UpdatedAt              time.Time  `json:"updated_at"`
 }
 
 // IsMinor returns true if the user's date of birth indicates they are under 18.
@@ -143,12 +146,13 @@ type AuthResponse struct {
 }
 
 type UserResponse struct {
-	ID           uuid.UUID          `json:"id"`
-	Email        string             `json:"email"`
-	DisplayName  string             `json:"display_name"`
-	AvatarEmoji  string             `json:"avatar_emoji"`
-	AccountType  AccountType        `json:"account_type"`
-	Subscription *SubscriptionSummary `json:"subscription,omitempty"`
+	ID                     uuid.UUID            `json:"id"`
+	Email                  string               `json:"email"`
+	DisplayName            string               `json:"display_name"`
+	AvatarEmoji            string               `json:"avatar_emoji"`
+	AccountType            AccountType          `json:"account_type"`
+	HasCompletedOnboarding bool                 `json:"has_completed_onboarding"`
+	Subscription           *SubscriptionSummary `json:"subscription,omitempty"`
 }
 
 type SubscriptionSummary struct {

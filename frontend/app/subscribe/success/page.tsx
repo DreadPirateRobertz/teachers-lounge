@@ -16,10 +16,10 @@ export default function SubscribeSuccessPage() {
       <p className="text-xs text-text-dim mb-8">No charge until your trial ends. Cancel anytime.</p>
 
       <Link
-        href="/"
+        href="/onboard"
         className="px-6 py-3 bg-neon-green text-bg-deep font-semibold rounded-lg shadow-neon-green-sm hover:bg-neon-green/90 transition-colors text-sm"
       >
-        Start Learning ⚡
+        Set up your profile ⚡
       </Link>
 
       <p className="mt-6 text-[10px] text-text-dim italic">

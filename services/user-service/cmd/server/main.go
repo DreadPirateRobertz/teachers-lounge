@@ -120,6 +120,7 @@ func main() {
 		r.With(middleware.AuditLog(db, models.AuditActionReadProfile, "user_profile,learning_profile", "ferpa_compliance")).
 			Get("/profile", usersH.GetProfile)
 		r.Patch("/preferences", usersH.UpdatePreferences)
+		r.Patch("/onboarding", usersH.CompleteOnboarding)
 		r.Post("/export", usersH.ExportData)
 		r.Get("/export/{jobID}", usersH.GetExport)
 		r.Delete("", usersH.DeleteAccount)

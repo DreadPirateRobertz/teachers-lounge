@@ -91,6 +91,7 @@ func scanUser(row scanner) (*models.User, error) {
 	err := row.Scan(
 		&u.ID, &u.Email, &u.PasswordHash, &u.DisplayName, &u.AvatarEmoji,
 		&u.AccountType, &u.IsAdmin, &u.DateOfBirth, &u.GuardianEmail, &u.GuardianConsentAt,
+		&u.HasCompletedOnboarding, &u.OnboardedAt,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {
