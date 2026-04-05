@@ -29,10 +29,10 @@ const CSP = [
   "font-src 'self'",
   "connect-src 'self'",
   "media-src 'self' blob:",
-  "worker-src blob:",
+  'worker-src blob:',
   "frame-ancestors 'none'",
   "form-action 'self'",
-  "upgrade-insecure-requests",
+  'upgrade-insecure-requests',
 ].join('; ')
 
 const SECURITY_HEADERS = [

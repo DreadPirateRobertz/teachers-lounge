@@ -37,10 +37,7 @@ export async function POST(req: NextRequest) {
   // Validate and truncate individual message content.
   const messages = rawMessages.map((m) => {
     const msg = m as Record<string, unknown>
-    const content =
-      typeof msg.content === 'string'
-        ? msg.content.slice(0, MAX_MESSAGE_LENGTH)
-        : ''
+    const content = typeof msg.content === 'string' ? msg.content.slice(0, MAX_MESSAGE_LENGTH) : ''
     return { ...msg, content }
   })
 
