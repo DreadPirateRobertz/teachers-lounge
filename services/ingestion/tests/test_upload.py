@@ -318,6 +318,7 @@ class TestAuth:
         assert resp.status_code == 200
 
 
+
 class TestMaterialStatus:
     """Tests for GET /v1/ingest/{material_id}/status."""
 
