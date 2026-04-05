@@ -36,6 +36,11 @@ function makeRequest(opts: {
 }
 
 describe('POST /api/materials/upload — validation', () => {
+  beforeEach(() => {
+    delete process.env.INGESTION_SERVICE_URL
+    jest.resetModules()
+  })
+
   afterEach(() => {
     jest.resetModules()
   })
@@ -48,6 +53,35 @@ describe('POST /api/materials/upload — validation', () => {
 
     expect(res.status).toBe(400)
     expect(data.detail).toContain('course_id')
+  })
+
+  it('returns 400 when course_id is not a valid UUID', async () => {
+    const { POST } = await import('./route')
+    const req = makeRequest({ courseId: '../etc/passwd' })
+    const res = await POST(req)
+    const data = await res.json()
+
+    expect(res.status).toBe(400)
+    expect(data.detail).toContain('UUID')
+  })
+
+  it('accepts a valid UUID course_id and returns 202 from mock', async () => {
+    const { POST } = await import('./route')
+    const req = makeRequest({ courseId: '550e8400-e29b-41d4-a716-446655440000' })
+    const res = await POST(req)
+    expect(res.status).toBe(202)
+  })
+
+  it('returns 413 when content-length header exceeds 500 MB', async () => {
+    const { POST } = await import('./route')
+    const headers: Record<string, string> = {
+      Cookie: `tl_token=${MOCK_TOKEN}`,
+      'Content-Length': String(501 * 1024 * 1024),
+    }
+    const url = `http://localhost/api/materials/upload?course_id=550e8400-e29b-41d4-a716-446655440000`
+    const req = new NextRequest(url, { method: 'POST', headers, body: new FormData() })
+    const res = await POST(req)
+    expect(res.status).toBe(413)
   })
 })
 

@@ -1,6 +1,11 @@
-import { NextRequest } from 'next/server'
+import { NextRequest, NextResponse } from 'next/server'
 
 const TUTORING_SERVICE_URL = process.env.TUTORING_SERVICE_URL
+
+/** Maximum number of messages accepted per request (prevents context-window stuffing). */
+const MAX_MESSAGES = 50
+/** Maximum character length for a single message content string. */
+const MAX_MESSAGE_LENGTH = 4000
 
 // Mock streaming response for Phase 1 (before Tutoring Service is live)
 async function* mockStream(userMessage: string): AsyncGenerator<string> {
@@ -21,8 +26,22 @@ async function* mockStream(userMessage: string): AsyncGenerator<string> {
 }
 
 export async function POST(req: NextRequest) {
-  const { messages } = await req.json()
-  const lastMessage = messages?.[messages.length - 1]?.content ?? ''
+  const body = await req.json()
+  const rawMessages: unknown[] = Array.isArray(body?.messages) ? body.messages : []
+
+  // Validate message count — prevents context-window stuffing attacks.
+  if (rawMessages.length > MAX_MESSAGES) {
+    return NextResponse.json({ error: 'too many messages' }, { status: 400 })
+  }
+
+  // Validate and truncate individual message content.
+  const messages = rawMessages.map((m) => {
+    const msg = m as Record<string, unknown>
+    const content = typeof msg.content === 'string' ? msg.content.slice(0, MAX_MESSAGE_LENGTH) : ''
+    return { ...msg, content }
+  })
+
+  const lastMessage = messages[messages.length - 1]?.content ?? ''
 
   // Forward to Tutoring Service when available
   if (TUTORING_SERVICE_URL) {

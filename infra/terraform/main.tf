@@ -56,6 +56,18 @@ module "monitoring" {
   depends_on = [module.gke]
 }
 
+## CMEK encryption keys — Cloud SQL, GCS, and application-layer.
+## Must be applied before Cloud SQL instances or GCS buckets are created so
+## the service accounts can be granted CryptoKeyEncrypterDecrypter access.
+module "kms" {
+  source = "./modules/kms"
+
+  project_id     = var.project_id
+  project_number = var.project_number
+  cluster_name   = var.cluster_name
+  kms_location   = var.region
+}
+
 ## Qdrant GCS snapshot bucket + Workload Identity IAM.
 ## The bucket name and GCP SA email are output for use in the Helm values-prod.yaml.
 module "qdrant_gcs" {

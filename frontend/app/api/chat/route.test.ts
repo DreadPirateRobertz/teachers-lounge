@@ -28,6 +28,51 @@ function makeRequest(opts: {
   })
 }
 
+describe('POST /api/chat — input validation', () => {
+  beforeEach(() => {
+    delete process.env.TUTORING_SERVICE_URL
+    jest.resetModules()
+  })
+
+  it('rejects requests with more than 50 messages', async () => {
+    const { POST } = await import('./route')
+    const messages = Array.from({ length: 51 }, (_, i) => ({ role: 'user', content: `msg ${i}` }))
+    const req = new NextRequest('http://localhost/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages }),
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toBe('too many messages')
+  })
+
+  it('truncates message content exceeding 4000 chars and serves response', async () => {
+    const { POST } = await import('./route')
+    const longContent = 'x'.repeat(5000)
+    const req = new NextRequest('http://localhost/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ messages: [{ role: 'user', content: longContent }] }),
+    })
+    const res = await POST(req)
+    // Should not reject — truncated content falls back to mock stream
+    expect(res.status).toBe(200)
+  })
+
+  it('handles missing messages array gracefully', async () => {
+    const { POST } = await import('./route')
+    const req = new NextRequest('http://localhost/api/chat', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({}),
+    })
+    const res = await POST(req)
+    expect(res.status).toBe(200) // Falls through to mock
+  })
+})
+
 describe('POST /api/chat — mock stream (no TUTORING_SERVICE_URL)', () => {
   const originalEnv = process.env.TUTORING_SERVICE_URL
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"net/http"
 	"os"
@@ -39,10 +40,17 @@ func main() {
 	defer pool.Close()
 
 	// Redis
-	rdb := redis.NewClient(&redis.Options{
+	redisOpts := &redis.Options{
 		Addr:     cfg.redisAddr,
 		Password: cfg.redisPassword,
-	})
+	}
+	if cfg.redisTLSEnabled {
+		redisOpts.TLSConfig = &tls.Config{
+			ServerName: cfg.redisTLSServerName,
+			MinVersion: tls.VersionTLS12,
+		}
+	}
+	rdb := redis.NewClient(redisOpts)
 	defer rdb.Close()
 
 	if err := rdb.Ping(context.Background()).Err(); err != nil {
@@ -89,7 +97,7 @@ func main() {
 
 		r.With(middleware.RateLimit(rl, ratelimit.BucketXP, logger)).Post("/gaming/xp", h.GainXP)
 		r.Get("/gaming/profile/{userId}", h.GetProfile)
-		r.Post("/gaming/streak/checkin", h.StreakCheckin)
+		r.With(middleware.RateLimit(rl, ratelimit.BucketStreak, logger)).Post("/gaming/streak/checkin", h.StreakCheckin)
 		r.Post("/gaming/leaderboard/update", h.LeaderboardUpdate)
 		r.Get("/gaming/leaderboard", h.GetLeaderboard)
 		r.Get("/gaming/leaderboard/friends", h.GetFriendLeaderboard)
@@ -102,12 +110,12 @@ func main() {
 		r.With(middleware.RateLimit(rl, ratelimit.BucketQuizAnswer, logger)).Post("/gaming/quiz/sessions/{sessionId}/answer", h.SubmitAnswer)
 		r.Get("/gaming/quiz/sessions/{sessionId}/hint", h.GetHint)
 		r.Get("/gaming/quests/daily", h.GetDailyQuests)
-		r.Post("/gaming/quests/progress", h.UpdateQuestProgress)
+		r.With(middleware.RateLimit(rl, ratelimit.BucketQuestProgress, logger)).Post("/gaming/quests/progress", h.UpdateQuestProgress)
 
 		// Boss battle routes
-		r.Post("/gaming/boss/start", h.StartBattle)
+		r.With(middleware.RateLimit(rl, ratelimit.BucketBossStart, logger)).Post("/gaming/boss/start", h.StartBattle)
 		r.Get("/gaming/boss/session/{sessionId}", h.GetBattleSession)
-		r.Post("/gaming/boss/attack", h.Attack)
+		r.With(middleware.RateLimit(rl, ratelimit.BucketBossAttack, logger)).Post("/gaming/boss/attack", h.Attack)
 		r.Post("/gaming/boss/powerup", h.ActivatePowerUp)
 		r.Post("/gaming/boss/forfeit", h.ForfeitBattle)
 
@@ -159,24 +167,30 @@ func main() {
 }
 
 type config struct {
-	port          string
-	databaseURL   string
-	redisAddr     string
-	redisPassword string
-	jwtSecret     string
-	aiGatewayURL  string
-	aiGatewayKey  string
+	port               string
+	databaseURL        string
+	redisAddr          string
+	redisPassword      string
+	// redisTLSEnabled enables TLS for Memorystore (prod). Set REDIS_TLS_ENABLED=true.
+	redisTLSEnabled    bool
+	// redisTLSServerName is the Memorystore host for TLS SNI verification.
+	redisTLSServerName string
+	jwtSecret          string
+	aiGatewayURL       string
+	aiGatewayKey       string
 }
 
 func loadConfig() config {
 	return config{
-		port:          getEnv("PORT", "8083"),
-		databaseURL:   requireEnv("DATABASE_URL"),
-		redisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
-		redisPassword: getEnv("REDIS_PASSWORD", ""),
-		jwtSecret:     requireEnv("JWT_SECRET"),
-		aiGatewayURL:  getEnv("AI_GATEWAY_URL", ""),
-		aiGatewayKey:  getEnv("AI_GATEWAY_KEY", ""),
+		port:               getEnv("PORT", "8083"),
+		databaseURL:        requireEnv("DATABASE_URL"),
+		redisAddr:          getEnv("REDIS_ADDR", "localhost:6379"),
+		redisPassword:      getEnv("REDIS_PASSWORD", ""),
+		redisTLSEnabled:    getEnv("REDIS_TLS_ENABLED", "false") == "true",
+		redisTLSServerName: getEnv("REDIS_TLS_SERVER_NAME", ""),
+		jwtSecret:          requireEnv("JWT_SECRET"),
+		aiGatewayURL:       getEnv("AI_GATEWAY_URL", ""),
+		aiGatewayKey:       getEnv("AI_GATEWAY_KEY", ""),
 	}
 }
 

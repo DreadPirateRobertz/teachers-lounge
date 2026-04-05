@@ -15,9 +15,14 @@ type Config struct {
 	DatabaseURL string
 
 	// Redis
-	RedisAddr     string
-	RedisPassword string
-	RedisDB       int
+	RedisAddr          string
+	RedisPassword      string
+	RedisDB            int
+	// RedisTLSEnabled enables TLS for Memorystore (prod). Set REDIS_TLS_ENABLED=true.
+	RedisTLSEnabled    bool
+	// RedisTLSServerName is the Memorystore host for TLS SNI verification.
+	// Typically the host portion of REDIS_ADDR without the port.
+	RedisTLSServerName string
 
 	// JWT
 	JWTSecret            string
@@ -46,6 +51,8 @@ func Load() (*Config, error) {
 		DatabaseURL:           requireEnv("DATABASE_URL"),
 		RedisAddr:             getEnv("REDIS_ADDR", "localhost:6379"),
 		RedisPassword:         getEnv("REDIS_PASSWORD", ""),
+		RedisTLSEnabled:       getEnv("REDIS_TLS_ENABLED", "false") == "true",
+		RedisTLSServerName:    getEnv("REDIS_TLS_SERVER_NAME", ""),
 		JWTSecret:             requireEnv("JWT_SECRET"),
 		AccessTokenDuration:   15 * time.Minute,
 		RefreshTokenDuration:  30 * 24 * time.Hour,
