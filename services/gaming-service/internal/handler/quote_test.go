@@ -12,7 +12,17 @@ import (
 
 	"github.com/teacherslounge/gaming-service/internal/middleware"
 	"github.com/teacherslounge/gaming-service/internal/model"
+	"github.com/teacherslounge/gaming-service/internal/taunt"
 )
+
+// noopTaunter satisfies taunt.Generator with a no-op implementation for tests.
+type noopTaunter struct{}
+
+func (noopTaunter) Generate(_ context.Context, _, _, _ string, _ int) (string, error) {
+	return "boo", nil
+}
+
+var _ taunt.Generator = noopTaunter{}
 
 // quoteStorer is a minimal Storer stub for quote handler tests.
 type quoteStorer struct {
@@ -98,6 +108,21 @@ func (s *quoteStorer) RecordBattleResult(ctx context.Context, r *model.BattleRes
 	return nil
 }
 func (s *quoteStorer) DeductGems(ctx context.Context, u string, a int) (int, error) { return 0, nil }
+func (s *quoteStorer) SaveTaunt(ctx context.Context, bossID string, round int, tauntText string) error {
+	return nil
+}
+func (s *quoteStorer) GetRandomTaunt(ctx context.Context, bossID string, round int) (string, bool, error) {
+	return "", false, nil
+}
+func (s *quoteStorer) GrantAchievement(ctx context.Context, userID, achievementType, badgeName string) (*model.Achievement, bool, error) {
+	return nil, false, nil
+}
+func (s *quoteStorer) GetAchievements(ctx context.Context, userID string) ([]model.Achievement, error) {
+	return nil, nil
+}
+func (s *quoteStorer) AddCosmeticItem(ctx context.Context, userID, key, value string) error {
+	return nil
+}
 func (s *quoteStorer) CreateAssessmentSession(ctx context.Context, u string) (*model.AssessmentSession, error) {
 	return nil, nil
 }
@@ -111,7 +136,7 @@ func (s *quoteStorer) RecordAssessmentAnswer(ctx context.Context, sID, uID, qID,
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func newQuoteHandler(st *quoteStorer) *Handler {
-	return New(st, zap.NewNop())
+	return New(st, noopTaunter{}, zap.NewNop())
 }
 
 func quoteRequest(userID, quotectx string) *http.Request {

@@ -127,6 +127,16 @@ func (b *battleStore) GetAssessmentSession(_ context.Context, _ string) (*model.
 func (b *battleStore) RecordAssessmentAnswer(_ context.Context, _, _, _, _ string) (*model.AssessmentSession, error) {
 	return nil, nil
 }
+func (b *battleStore) RandomQuoteForUser(_ context.Context, _, _ string) (*model.Quote, error) {
+	return nil, nil
+}
+func (b *battleStore) GrantAchievement(_ context.Context, _, _, _ string) (*model.Achievement, bool, error) {
+	return nil, false, nil
+}
+func (b *battleStore) GetAchievements(_ context.Context, _ string) ([]model.Achievement, error) {
+	return nil, nil
+}
+func (b *battleStore) AddCosmeticItem(_ context.Context, _, _, _ string) error { return nil }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
