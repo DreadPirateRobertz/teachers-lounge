@@ -79,7 +79,7 @@ func (p *fakePusher) Send(_ context.Context, token, title, body string, _ map[st
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 func newHandler() *handler.Handler {
-	return handler.New(&fakeStore{}, &fakePusher{}, zap.NewNop())
+	return handler.New(&fakeStore{}, &fakePusher{}, &fakeEmailer{}, &fakeLimiter{allow: true}, zap.NewNop())
 }
 
 func jsonBody(v any) *bytes.Buffer {
@@ -123,7 +123,7 @@ func TestPush_DeliversToRegisteredTokens(t *testing.T) {
 		},
 	}
 	p := &fakePusher{}
-	h := handler.New(s, p, zap.NewNop())
+	h := handler.New(s, p, &fakeEmailer{}, &fakeLimiter{allow: true}, zap.NewNop())
 
 	body := jsonBody(model.PushRequest{UserID: "u1", Title: "Streak!", Body: "3 days"})
 	req := httptest.NewRequest(http.MethodPost, "/notify/push", body)
@@ -144,7 +144,7 @@ func TestPush_DeliversToRegisteredTokens(t *testing.T) {
 
 func TestPush_NoTokens_Returns200WithoutSend(t *testing.T) {
 	p := &fakePusher{}
-	h := handler.New(&fakeStore{}, p, zap.NewNop())
+	h := handler.New(&fakeStore{}, p, &fakeEmailer{}, &fakeLimiter{allow: true}, zap.NewNop())
 
 	body := jsonBody(model.PushRequest{UserID: "u1", Title: "Hi", Body: "World"})
 	req := httptest.NewRequest(http.MethodPost, "/notify/push", body)
@@ -162,16 +162,16 @@ func TestPush_NoTokens_Returns200WithoutSend(t *testing.T) {
 
 // ── Email tests ───────────────────────────────────────────────────────────────
 
-func TestEmail_ValidRequest_Returns200(t *testing.T) {
+func TestEmail_ValidRequest_Returns202(t *testing.T) {
 	h := newHandler()
-	body := jsonBody(model.EmailRequest{UserID: "u1", Template: "welcome"})
+	body := jsonBody(model.EmailRequest{UserID: "u1", To: "test@example.com", Template: "welcome"})
 	req := httptest.NewRequest(http.MethodPost, "/notify/email", body)
 	rr := httptest.NewRecorder()
 
 	h.Email(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 
@@ -179,7 +179,7 @@ func TestEmail_ValidRequest_Returns200(t *testing.T) {
 
 func TestInApp_ValidRequest_Returns201(t *testing.T) {
 	s := &fakeStore{}
-	h := handler.New(s, &fakePusher{}, zap.NewNop())
+	h := handler.New(s, &fakePusher{}, &fakeEmailer{}, &fakeLimiter{allow: true}, zap.NewNop())
 
 	body := jsonBody(model.InAppRequest{UserID: "u1", Type: "streak", Message: "You're on fire!"})
 	req := httptest.NewRequest(http.MethodPost, "/notify/in-app", body)
@@ -212,7 +212,7 @@ func TestInApp_MissingFields_Returns400(t *testing.T) {
 
 func TestRegisterToken_ValidRequest_Returns204(t *testing.T) {
 	s := &fakeStore{}
-	h := handler.New(s, &fakePusher{}, zap.NewNop())
+	h := handler.New(s, &fakePusher{}, &fakeEmailer{}, &fakeLimiter{allow: true}, zap.NewNop())
 
 	body := jsonBody(model.RegisterTokenRequest{Token: "tok-xyz", Platform: "ios"})
 	req := httptest.NewRequest(http.MethodPost, "/notify/push/token", body)
@@ -259,7 +259,7 @@ func TestRegisterToken_NoCallerInContext_Returns401(t *testing.T) {
 
 func TestRegisterToken_Idempotent_StoresSameTokenOnce(t *testing.T) {
 	s := &fakeStore{}
-	h := handler.New(s, &fakePusher{}, zap.NewNop())
+	h := handler.New(s, &fakePusher{}, &fakeEmailer{}, &fakeLimiter{allow: true}, zap.NewNop())
 
 	reg := func() {
 		body := jsonBody(model.RegisterTokenRequest{Token: "tok-dup", Platform: "ios"})
@@ -289,7 +289,7 @@ func TestListUnread_ReturnsStoredNotifications(t *testing.T) {
 			{ID: "n2", UserID: "u2", Type: "xp", Message: "Other user", Read: false},
 		},
 	}
-	h := handler.New(s, &fakePusher{}, zap.NewNop())
+	h := handler.New(s, &fakePusher{}, &fakeEmailer{}, &fakeLimiter{allow: true}, zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/notify/u1", nil)
 	req = withURLParam(req, "userId", "u1")
@@ -318,7 +318,7 @@ func TestListUnread_ForbiddenWhenCallerMismatch(t *testing.T) {
 			{ID: "n1", UserID: "u1", Type: "xp", Message: "Level up!", Read: false},
 		},
 	}
-	h := handler.New(s, &fakePusher{}, zap.NewNop())
+	h := handler.New(s, &fakePusher{}, &fakeEmailer{}, &fakeLimiter{allow: true}, zap.NewNop())
 
 	req := httptest.NewRequest(http.MethodGet, "/notify/u1", nil)
 	req = withURLParam(req, "userId", "u1")
