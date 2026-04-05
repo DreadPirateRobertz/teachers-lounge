@@ -1,11 +1,12 @@
 /**
  * @jest-environment jsdom
  *
- * Tests for MaterialsSidebar — three-tab panel with Mastery, Rankings,
- * and Power-ups content. Verifies tab navigation and default active tab.
+ * Tests for MaterialsSidebar — four-tab panel with Mastery, Rankings,
+ * Power-ups, and Materials content. Verifies tab navigation and default
+ * active tab.
  */
 import React from 'react'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MaterialsSidebar from './MaterialsSidebar'
 
@@ -21,12 +22,25 @@ jest.mock('@/components/ErrorBoundary', () => {
   return MockErrorBoundary
 })
 
+// ---------------------------------------------------------------------------
+// Mock fetch so the Materials panel polling doesn't make real network calls
+// ---------------------------------------------------------------------------
+
+const mockFetch = jest.fn()
+beforeEach(() => { global.fetch = mockFetch })
+afterEach(() => { mockFetch.mockReset() })
+
+// ---------------------------------------------------------------------------
+// Tests
+// ---------------------------------------------------------------------------
+
 describe('MaterialsSidebar — tab labels', () => {
-  it('renders all 3 tab labels', () => {
+  it('renders all 4 tab labels', () => {
     render(<MaterialsSidebar />)
     expect(screen.getByRole('button', { name: 'Mastery' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Rankings' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Power-ups' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Materials' })).toBeInTheDocument()
   })
 })
 
@@ -86,5 +100,45 @@ describe('MaterialsSidebar — Power-ups tab', () => {
     render(<MaterialsSidebar />)
     await user.click(screen.getByRole('button', { name: 'Power-ups' }))
     expect(screen.queryByText('Atomic Structure')).not.toBeInTheDocument()
+  })
+})
+
+describe('MaterialsSidebar — Materials tab', () => {
+  it('shows the upload drop zone after clicking Materials tab', async () => {
+    const user = userEvent.setup()
+    render(<MaterialsSidebar courseId="11111111-1111-4111-8111-111111111111" />)
+    await user.click(screen.getByRole('button', { name: 'Materials' }))
+    expect(screen.getByText(/browse/i)).toBeInTheDocument()
+    expect(screen.getByText(/drop a file/i)).toBeInTheDocument()
+  })
+
+  it('hides mastery topics when Materials tab is active', async () => {
+    const user = userEvent.setup()
+    render(<MaterialsSidebar />)
+    await user.click(screen.getByRole('button', { name: 'Materials' }))
+    expect(screen.queryByText('Atomic Structure')).not.toBeInTheDocument()
+  })
+
+  it('shows uploaded material in library after successful upload', async () => {
+    const user = userEvent.setup()
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 202,
+      json: async () => ({
+        job_id: 'job-abc',
+        material_id: 'a1b2c3d4-e5f6-4a7b-8c9d-e0f1a2b3c4d5',
+        status: 'pending',
+      }),
+    })
+
+    render(<MaterialsSidebar courseId="11111111-1111-4111-8111-111111111111" />)
+    await user.click(screen.getByRole('button', { name: 'Materials' }))
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement
+    await user.upload(input, new File(['pdf'], 'notes.pdf', { type: 'application/pdf' }))
+    await user.click(screen.getByRole('button', { name: /upload material/i }))
+
+    await waitFor(() => expect(screen.getByText('notes.pdf')).toBeInTheDocument())
+    expect(screen.getByText('Pending')).toBeInTheDocument()
   })
 })
