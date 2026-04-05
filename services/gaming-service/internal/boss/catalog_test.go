@@ -1,6 +1,7 @@
 package boss_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/teacherslounge/gaming-service/internal/boss"
@@ -19,6 +20,35 @@ func TestByID_KnownBoss(t *testing.T) {
 	}
 }
 
+func TestByID_TheBonder(t *testing.T) {
+	def := boss.ByID("the_bonder")
+	if def == nil {
+		t.Fatal("expected to find the_bonder boss")
+	}
+	if def.Name != "THE BONDER" {
+		t.Errorf("want Name=THE BONDER, got %s", def.Name)
+	}
+	if def.Tier != 2 {
+		t.Errorf("want Tier=2, got %d", def.Tier)
+	}
+}
+
+func TestByID_FinalBoss(t *testing.T) {
+	def := boss.ByID("final_boss")
+	if def == nil {
+		t.Fatal("expected to find final_boss")
+	}
+	if def.Name != "FINAL BOSS" {
+		t.Errorf("want Name=FINAL BOSS, got %s", def.Name)
+	}
+	if def.Tier != 6 {
+		t.Errorf("want Tier=6, got %d", def.Tier)
+	}
+	if def.MaxRounds != 10 {
+		t.Errorf("final boss should have 10 rounds, got %d", def.MaxRounds)
+	}
+}
+
 func TestByID_Unknown(t *testing.T) {
 	def := boss.ByID("not_a_boss")
 	if def != nil {
@@ -26,12 +56,26 @@ func TestByID_Unknown(t *testing.T) {
 	}
 }
 
+func TestCatalog_HasSixBosses(t *testing.T) {
+	if len(boss.Catalog) != 6 {
+		t.Errorf("expected 6 bosses in catalog, got %d", len(boss.Catalog))
+	}
+}
+
+func TestCatalog_OrderedByTier(t *testing.T) {
+	for i, def := range boss.Catalog {
+		if def.Tier != i+1 {
+			t.Errorf("boss at index %d has Tier=%d, want %d", i, def.Tier, i+1)
+		}
+	}
+}
+
 func TestBossHP_ScalesWithTierAndLevel(t *testing.T) {
 	// Higher tier → higher HP at same level.
 	hpTier1 := boss.BossHP(1, 5)
-	hpTier5 := boss.BossHP(5, 5)
-	if hpTier5 <= hpTier1 {
-		t.Errorf("tier 5 boss HP (%d) should exceed tier 1 (%d)", hpTier5, hpTier1)
+	hpTier6 := boss.BossHP(6, 5)
+	if hpTier6 <= hpTier1 {
+		t.Errorf("tier 6 boss HP (%d) should exceed tier 1 (%d)", hpTier6, hpTier1)
 	}
 
 	// Higher player level → higher boss HP at same tier.
@@ -98,11 +142,11 @@ func TestAllBossesHaveRequiredFields(t *testing.T) {
 		if def.Topic == "" {
 			t.Errorf("boss %s missing Topic", def.ID)
 		}
-		if def.Tier < 1 || def.Tier > 5 {
-			t.Errorf("boss %s Tier=%d out of range 1-5", def.ID, def.Tier)
+		if def.Tier < 1 || def.Tier > 6 {
+			t.Errorf("boss %s Tier=%d out of range 1-6", def.ID, def.Tier)
 		}
-		if def.MaxRounds < 5 || def.MaxRounds > 7 {
-			t.Errorf("boss %s MaxRounds=%d should be 5-7", def.ID, def.MaxRounds)
+		if def.MaxRounds < 5 {
+			t.Errorf("boss %s MaxRounds=%d should be >= 5", def.ID, def.MaxRounds)
 		}
 		if def.VictoryXP <= 0 {
 			t.Errorf("boss %s VictoryXP=%d should be positive", def.ID, def.VictoryXP)
@@ -110,5 +154,38 @@ func TestAllBossesHaveRequiredFields(t *testing.T) {
 		if def.Taunt == "" {
 			t.Errorf("boss %s missing Taunt", def.ID)
 		}
+	}
+}
+
+func TestAllBossesHaveVisualConfig(t *testing.T) {
+	for _, def := range boss.Catalog {
+		if def.Visual.PrimaryColor == "" {
+			t.Errorf("boss %s missing Visual.PrimaryColor", def.ID)
+		}
+		if !strings.HasPrefix(def.Visual.PrimaryColor, "#") {
+			t.Errorf("boss %s PrimaryColor %q should be a hex color", def.ID, def.Visual.PrimaryColor)
+		}
+		if def.Visual.Geometry == "" {
+			t.Errorf("boss %s missing Visual.Geometry", def.ID)
+		}
+		if len(def.Visual.TauntPool) < 3 {
+			t.Errorf("boss %s should have at least 3 taunts, has %d", def.ID, len(def.Visual.TauntPool))
+		}
+		if def.Visual.AttackDescription == "" {
+			t.Errorf("boss %s missing Visual.AttackDescription", def.ID)
+		}
+		if def.Visual.IdleDescription == "" {
+			t.Errorf("boss %s missing Visual.IdleDescription", def.ID)
+		}
+	}
+}
+
+func TestAllBossGeometriesAreUnique(t *testing.T) {
+	seen := map[string]string{}
+	for _, def := range boss.Catalog {
+		if prev, ok := seen[def.Visual.Geometry]; ok {
+			t.Errorf("boss %s reuses geometry %q already used by %s", def.ID, def.Visual.Geometry, prev)
+		}
+		seen[def.Visual.Geometry] = def.ID
 	}
 }
