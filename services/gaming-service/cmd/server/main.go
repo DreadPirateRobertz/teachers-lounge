@@ -111,6 +111,9 @@ func main() {
 		r.Get("/gaming/boss/catalog", h.GetBossCatalog)
 		r.Get("/gaming/boss/catalog/{bossId}", h.GetBossByID)
 
+		// Achievement / loot routes
+		r.Get("/gaming/achievements/{userId}", h.GetAchievements)
+
 		// Learning style assessment
 		r.Post("/gaming/assessment/start", h.StartAssessment)
 		r.Get("/gaming/assessment/sessions/{sessionId}", h.GetAssessmentSession)
