@@ -1,0 +1,13 @@
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]
+
+[tool.ruff.lint.per-file-ignores]
+# Test imports are often used via pytest fixtures or conftest side-effects;
+# F401 false-positives are common in test files.
+"tests/**" = ["F401"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"

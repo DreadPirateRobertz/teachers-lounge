@@ -5,7 +5,7 @@ histograms and counters for the RAG pipeline, SSE streaming, and
 session lifecycle per the Phase 8 spec.
 """
 
-from prometheus_client import Counter, Gauge, Histogram, make_asgi_app
+from prometheus_client import Counter, Histogram, make_asgi_app
 
 # ── Session metrics ──────────────────────────────────────────────────────────
 

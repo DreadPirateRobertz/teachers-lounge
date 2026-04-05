@@ -1,5 +1,4 @@
 """Conversation history — CRUD helpers for sessions and interactions."""
-from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import select

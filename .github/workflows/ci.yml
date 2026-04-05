@@ -138,6 +138,7 @@ jobs:
         uses: golangci/golangci-lint-action@v6
         with:
           version: latest
+          go-version: '1.25'
           working-directory: services/${{ matrix.service }}
       - run: go test ./... -race -timeout 60s -coverprofile=coverage.out -covermode=atomic
         if: steps.check.outputs.exists == 'true'

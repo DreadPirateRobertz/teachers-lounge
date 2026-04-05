@@ -9,7 +9,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from .auth import JWTClaims, require_auth
 from .database import get_db
 from .graph import (
-    ADEQUATE_THRESHOLD,
     detect_gaps,
     generate_remediation_path,
     get_concept,
