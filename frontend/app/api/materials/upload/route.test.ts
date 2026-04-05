@@ -87,6 +87,9 @@ describe('POST /api/materials/upload — validation', () => {
 
 describe('POST /api/materials/upload — mock fallback (no INGESTION_SERVICE_URL)', () => {
   const originalEnv = process.env.INGESTION_SERVICE_URL
+  // Valid UUID v4 constants — route enforces UUID format before reaching mock path.
+  const MOCK_COURSE_ID = '550e8400-e29b-41d4-a716-446655440000'
+  const MOCK_COURSE_ID_2 = '550e8400-e29b-41d4-a716-446655440042'
 
   beforeEach(() => {
     delete process.env.INGESTION_SERVICE_URL
@@ -103,7 +106,7 @@ describe('POST /api/materials/upload — mock fallback (no INGESTION_SERVICE_URL
 
   it('returns 202 with mock job response', async () => {
     const { POST } = await import('./route')
-    const res = await POST(makeRequest({ courseId: 'course-1' }))
+    const res = await POST(makeRequest({ courseId: MOCK_COURSE_ID }))
     const data = await res.json()
 
     expect(res.status).toBe(202)
@@ -115,10 +118,10 @@ describe('POST /api/materials/upload — mock fallback (no INGESTION_SERVICE_URL
   it('mock gcs_path includes courseId and filename', async () => {
     const file = new File(['pdf bytes'], 'lecture.pdf', { type: 'application/pdf' })
     const { POST } = await import('./route')
-    const res = await POST(makeRequest({ courseId: 'course-42', file }))
+    const res = await POST(makeRequest({ courseId: MOCK_COURSE_ID_2, file }))
     const data = await res.json()
 
-    expect(data.gcs_path).toContain('course-42')
+    expect(data.gcs_path).toContain(MOCK_COURSE_ID_2)
     expect(data.gcs_path).toContain('lecture.pdf')
   })
 })
@@ -126,6 +129,8 @@ describe('POST /api/materials/upload — mock fallback (no INGESTION_SERVICE_URL
 describe('POST /api/materials/upload — ingestion service proxy', () => {
   const originalFetch = global.fetch
   const originalEnv = process.env.INGESTION_SERVICE_URL
+  // Valid UUID v4 — route enforces UUID format before proxying to ingestion service.
+  const PROXY_COURSE_ID = '550e8400-e29b-41d4-a716-446655440001'
 
   beforeEach(() => {
     process.env.INGESTION_SERVICE_URL = 'http://ingestion-service:8084'
@@ -143,7 +148,7 @@ describe('POST /api/materials/upload — ingestion service proxy', () => {
 
   it('returns 401 when no auth provided', async () => {
     const { POST } = await import('./route')
-    const res = await POST(makeRequest({ courseId: 'c1', token: null }))
+    const res = await POST(makeRequest({ courseId: PROXY_COURSE_ID, token: null }))
     const data = await res.json()
 
     expect(res.status).toBe(401)
@@ -165,10 +170,10 @@ describe('POST /api/materials/upload — ingestion service proxy', () => {
     })
 
     const { POST } = await import('./route')
-    const res = await POST(makeRequest({ courseId: 'c1', token: MOCK_TOKEN }))
+    const res = await POST(makeRequest({ courseId: PROXY_COURSE_ID, token: MOCK_TOKEN }))
 
     expect(res.status).toBe(200)
-    expect(capturedUrl).toContain('course_id=c1')
+    expect(capturedUrl).toContain(`course_id=${PROXY_COURSE_ID}`)
     expect(capturedUrl).toContain('/v1/ingest/upload')
     expect(capturedHeaders['Authorization']).toBe(`Bearer ${MOCK_TOKEN}`)
   })
@@ -177,7 +182,7 @@ describe('POST /api/materials/upload — ingestion service proxy', () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'))
 
     const { POST } = await import('./route')
-    const res = await POST(makeRequest({ courseId: 'c1' }))
+    const res = await POST(makeRequest({ courseId: PROXY_COURSE_ID }))
     const data = await res.json()
 
     expect(res.status).toBe(502)
@@ -193,7 +198,7 @@ describe('POST /api/materials/upload — ingestion service proxy', () => {
     )
 
     const { POST } = await import('./route')
-    const res = await POST(makeRequest({ courseId: 'c1' }))
+    const res = await POST(makeRequest({ courseId: PROXY_COURSE_ID }))
     expect(res.status).toBe(422)
   })
 })
