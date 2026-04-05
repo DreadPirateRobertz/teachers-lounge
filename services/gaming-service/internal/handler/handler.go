@@ -47,6 +47,11 @@ type Storer interface {
 	RecordBattleResult(ctx context.Context, result *model.BattleResult) error
 	DeductGems(ctx context.Context, userID string, amount int) (int, error)
 
+	// Loot / achievement methods
+	GrantAchievement(ctx context.Context, userID, achievementType, badgeName string) (*model.Achievement, bool, error)
+	GetAchievements(ctx context.Context, userID string) ([]model.Achievement, error)
+	AddCosmeticItem(ctx context.Context, userID, key, value string) error
+
 	// Learning style assessment
 	CreateAssessmentSession(ctx context.Context, userID string) (*model.AssessmentSession, error)
 	GetAssessmentSession(ctx context.Context, sessionID string) (*model.AssessmentSession, error)
@@ -336,6 +341,25 @@ func (h *Handler) UpdateQuestProgress(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, resp)
+}
+
+// GetAchievements handles GET /gaming/achievements/{userId}
+func (h *Handler) GetAchievements(w http.ResponseWriter, r *http.Request) {
+	userID := chi.URLParam(r, "userId")
+	callerID := middleware.UserIDFromContext(r.Context())
+	if callerID == "" || callerID != userID {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		return
+	}
+
+	achievements, err := h.store.GetAchievements(r.Context(), userID)
+	if err != nil {
+		h.logger.Error("get achievements", zap.String("user_id", userID), zap.Error(err))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, model.AchievementsResponse{Achievements: achievements})
 }
 
 // Health handles GET /health

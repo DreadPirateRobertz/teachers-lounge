@@ -93,6 +93,9 @@ func main() {
 		r.Post("/gaming/boss/powerup", h.ActivatePowerUp)
 		r.Post("/gaming/boss/forfeit", h.ForfeitBattle)
 
+		// Achievement / loot routes
+		r.Get("/gaming/achievements/{userId}", h.GetAchievements)
+
 		// Learning style assessment
 		r.Post("/gaming/assessment/start", h.StartAssessment)
 		r.Get("/gaming/assessment/sessions/{sessionId}", h.GetAssessmentSession)

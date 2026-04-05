@@ -116,4 +116,6 @@ type BattleResult struct {
 	XPEarned   int64       `json:"xp_earned"`
 	GemsEarned int         `json:"gems_earned"`
 	FinishedAt time.Time   `json:"finished_at"`
+	// LootDrop is populated on victory and drives the loot reveal UI.
+	LootDrop   *LootDrop   `json:"loot_drop,omitempty"`
 }

@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/teacherslounge/gaming-service/internal/battle"
+	"github.com/teacherslounge/gaming-service/internal/loot"
 	"github.com/teacherslounge/gaming-service/internal/middleware"
 	"github.com/teacherslounge/gaming-service/internal/model"
 	"github.com/teacherslounge/gaming-service/internal/xp"
@@ -276,16 +277,27 @@ func (h *Handler) ForfeitBattle(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, result)
 }
 
-// finishBattle records the result, awards XP on victory, and cleans up the session.
+// finishBattle records the result, awards XP and loot on victory, and cleans
+// up the Redis session. On victory it computes the boss-specific loot drop
+// (gems, achievement badge, cosmetic), persists each reward, and attaches the
+// full LootDrop to the returned BattleResult for the UI to consume.
 func (h *Handler) finishBattle(r *http.Request, session *model.BattleSession, won bool) *model.BattleResult {
+	ctx := r.Context()
+
 	var xpEarned int64
-	var gemsEarned int
+	var drop *loot.Drop
 	if won {
 		xpEarned = session.XPReward
-		gemsEarned = session.GemReward
+		d := loot.ForBoss(string(session.BossID))
+		drop = &d
 	} else {
 		// Consolation XP: 10% of reward.
 		xpEarned = session.XPReward / 10
+	}
+
+	gemsEarned := 0
+	if drop != nil {
+		gemsEarned = drop.Gems
 	}
 
 	result := &model.BattleResult{
@@ -298,8 +310,6 @@ func (h *Handler) finishBattle(r *http.Request, session *model.BattleSession, wo
 		GemsEarned: gemsEarned,
 		FinishedAt: time.Now().UTC(),
 	}
-
-	ctx := r.Context()
 
 	if err := h.store.RecordBattleResult(ctx, result); err != nil {
 		h.logger.Error("record battle result", zap.Error(err))
@@ -316,6 +326,40 @@ func (h *Handler) finishBattle(r *http.Request, session *model.BattleSession, wo
 				h.logger.Error("upsert xp for battle reward", zap.Error(err))
 			}
 		}
+	}
+
+	// Persist loot on victory and build the LootDrop for the response.
+	if drop != nil {
+		lootDrop := &model.LootDrop{
+			XPEarned:   xpEarned,
+			GemsEarned: gemsEarned,
+			Quote:      drop.Quote,
+		}
+
+		// Grant achievement badge.
+		if drop.BadgeType != "" {
+			achievement, isNew, err := h.store.GrantAchievement(ctx, session.UserID, drop.BadgeType, drop.BadgeName)
+			if err != nil {
+				h.logger.Error("grant achievement", zap.String("type", drop.BadgeType), zap.Error(err))
+			} else {
+				lootDrop.Achievement = achievement
+				lootDrop.NewBadge = isNew
+			}
+		}
+
+		// Persist cosmetic item.
+		if drop.CosmeticKey != "" {
+			if err := h.store.AddCosmeticItem(ctx, session.UserID, drop.CosmeticKey, drop.CosmeticValue); err != nil {
+				h.logger.Error("add cosmetic", zap.String("key", drop.CosmeticKey), zap.Error(err))
+			} else {
+				lootDrop.Cosmetic = &model.Cosmetic{
+					Key:   drop.CosmeticKey,
+					Value: drop.CosmeticValue,
+				}
+			}
+		}
+
+		result.LootDrop = lootDrop
 	}
 
 	// Clean up Redis session.
