@@ -158,3 +158,105 @@ describe('ChatMessage', () => {
     expect(screen.queryByText('Should not appear')).toBeNull()
   })
 })
+
+// ── TTS audio player integration ──────────────────────────────────────────────
+
+describe('ChatMessage — TTS audio player', () => {
+  beforeAll(() => {
+    Object.defineProperty(HTMLMediaElement.prototype, 'play', {
+      configurable: true,
+      value: jest.fn().mockResolvedValue(undefined),
+    })
+    Object.defineProperty(HTMLMediaElement.prototype, 'pause', {
+      configurable: true,
+      value: jest.fn(),
+    })
+    Object.defineProperty(HTMLMediaElement.prototype, 'load', {
+      configurable: true,
+      value: jest.fn(),
+    })
+  })
+
+  it('renders TTS player for assistant messages with audioUrl', () => {
+    render(
+      <ChatMessage
+        message={msg({
+          role: 'assistant',
+          content: 'Here is the explanation.',
+          audioUrl: 'https://tts.example.com/audio/abc.mp3',
+        })}
+      />,
+    )
+    expect(screen.getByRole('button', { name: /play/i })).toBeInTheDocument()
+  })
+
+  it('does not render TTS player for user messages', () => {
+    render(
+      <ChatMessage
+        message={msg({
+          role: 'user',
+          content: 'Hello',
+          audioUrl: 'https://tts.example.com/audio/abc.mp3',
+        })}
+      />,
+    )
+    expect(screen.queryByRole('button', { name: /play/i })).toBeNull()
+  })
+
+  it('does not render TTS player when audioUrl is absent', () => {
+    render(<ChatMessage message={msg({ role: 'assistant', content: 'No audio here.' })} />)
+    expect(screen.queryByRole('button', { name: /play/i })).toBeNull()
+  })
+
+  it('renders phrase bookmarks when audioPhrases are provided', () => {
+    render(
+      <ChatMessage
+        message={msg({
+          role: 'assistant',
+          content: 'Listen carefully.',
+          audioUrl: 'https://tts.example.com/audio/abc.mp3',
+          audioPhrases: [{ text: 'Key concept here.', startMs: 3000 }],
+        })}
+      />,
+    )
+    expect(screen.getByText('Key concept here.')).toBeInTheDocument()
+  })
+})
+
+// ── NotesPanel integration ─────────────────────────────────────────────────────
+
+describe('ChatMessage — NotesPanel', () => {
+  it('renders notes panel for assistant messages with notes', () => {
+    render(
+      <ChatMessage
+        message={msg({
+          role: 'assistant',
+          content: 'See the notes below.',
+          notes: [
+            { type: 'definition', term: 'Osmosis', body: 'Diffusion of water through a membrane.' },
+          ],
+        })}
+      />,
+    )
+    expect(screen.getByRole('heading', { name: /notes/i })).toBeInTheDocument()
+    expect(screen.getByText('Osmosis')).toBeInTheDocument()
+  })
+
+  it('does not render notes panel for user messages', () => {
+    render(
+      <ChatMessage
+        message={msg({
+          role: 'user',
+          content: 'Hi',
+          notes: [{ type: 'definition', term: 'Should not appear', body: '...' }],
+        })}
+      />,
+    )
+    expect(screen.queryByText('Should not appear')).toBeNull()
+  })
+
+  it('does not render notes panel when notes array is empty', () => {
+    render(<ChatMessage message={msg({ role: 'assistant', content: 'No notes.', notes: [] })} />)
+    expect(screen.queryByRole('heading', { name: /notes/i })).toBeNull()
+  })
+})
