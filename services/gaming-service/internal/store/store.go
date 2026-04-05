@@ -28,6 +28,12 @@ const (
 
 	questKeyPrefix = "quests:daily:"
 	questTTL       = 24 * time.Hour
+
+	// leaderboardSnapshotTTL is the cache lifetime for pre-serialised top-10 snapshots.
+	// The global leaderboard does not need real-time accuracy — 30s is imperceptible to users
+	// and eliminates repeated ZRevRangeWithScores calls under high concurrent read load.
+	leaderboardSnapshotTTL    = 30 * time.Second
+	leaderboardSnapshotPrefix = "leaderboard:snapshot:"
 )
 
 // DB is the subset of *pgxpool.Pool that the Store uses.
@@ -171,21 +177,14 @@ func (s *Store) StreakCheckin(ctx context.Context, userID string) (current, long
 
 // leaderboardTopN returns the top n entries by score from the given sorted set key,
 // plus the rank of userID (omitted when empty or not present).
+//
+// The top-n list (without the per-user rank) is cached in Redis for
+// leaderboardSnapshotTTL to reduce ZRevRangeWithScores calls under read load.
+// The per-user rank is always fetched live so it remains accurate.
 func (s *Store) leaderboardTopN(ctx context.Context, key, userID string, n int) ([]model.LeaderboardEntry, *model.LeaderboardEntry, error) {
-	members, err := s.rdb.ZRevRangeWithScores(ctx, key, 0, int64(n-1)).Result()
+	entries, err := s.leaderboardTopNSnapshot(ctx, key, n)
 	if err != nil {
-		return nil, nil, fmt.Errorf("zrevrange %s: %w", key, err)
-	}
-
-	entries := make([]model.LeaderboardEntry, len(members))
-	for i, m := range members {
-		uid := m.Member.(string)
-		entries[i] = model.LeaderboardEntry{
-			UserID:  uid,
-			XP:      m.Score,
-			Rank:    int64(i + 1),
-			IsRival: rival.IsRival(uid),
-		}
+		return nil, nil, err
 	}
 
 	var userEntry *model.LeaderboardEntry
@@ -203,6 +202,45 @@ func (s *Store) leaderboardTopN(ctx context.Context, key, userID string, n int) 
 	}
 
 	return entries, userEntry, nil
+}
+
+// leaderboardTopNSnapshot returns the top n entries from a cached Redis snapshot.
+// On cache miss it fetches from the sorted set and writes a new snapshot.
+func (s *Store) leaderboardTopNSnapshot(ctx context.Context, key string, n int) ([]model.LeaderboardEntry, error) {
+	snapKey := leaderboardSnapshotPrefix + key
+
+	// Try cache hit first
+	cached, err := s.rdb.Get(ctx, snapKey).Bytes()
+	if err == nil {
+		var entries []model.LeaderboardEntry
+		if jsonErr := json.Unmarshal(cached, &entries); jsonErr == nil {
+			return entries, nil
+		}
+	}
+
+	// Cache miss — fetch from sorted set
+	members, err := s.rdb.ZRevRangeWithScores(ctx, key, 0, int64(n-1)).Result()
+	if err != nil {
+		return nil, fmt.Errorf("zrevrange %s: %w", key, err)
+	}
+
+	entries := make([]model.LeaderboardEntry, len(members))
+	for i, m := range members {
+		uid := m.Member.(string)
+		entries[i] = model.LeaderboardEntry{
+			UserID:  uid,
+			XP:      m.Score,
+			Rank:    int64(i + 1),
+			IsRival: rival.IsRival(uid),
+		}
+	}
+
+	// Write snapshot — ignore errors (cache is best-effort)
+	if b, jsonErr := json.Marshal(entries); jsonErr == nil {
+		_ = s.rdb.Set(ctx, snapKey, b, leaderboardSnapshotTTL).Err()
+	}
+
+	return entries, nil
 }
 
 // weeklyKey returns the Redis key for the current ISO week's leaderboard.

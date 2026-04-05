@@ -28,8 +28,20 @@ async def get_session(db: AsyncSession, session_id: UUID) -> Session | None:
 async def get_history(
     db: AsyncSession,
     session_id: UUID,
-    limit: int = 50,
+    limit: int = 20,
 ) -> list[Interaction]:
+    """Load interaction history for a session.
+
+    Args:
+        db: Async SQLAlchemy session.
+        session_id: UUID of the tutoring session.
+        limit: Maximum messages to return. Defaults to 20 (10 exchanges).
+            Uses the composite index on (session_id, created_at DESC) for
+            efficient pagination without full-table sort.
+
+    Returns:
+        Interactions ordered oldest-first (ascending created_at).
+    """
     result = await db.execute(
         select(Interaction)
         .where(Interaction.session_id == session_id)

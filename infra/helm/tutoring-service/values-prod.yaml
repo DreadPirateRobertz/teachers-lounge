@@ -12,5 +12,14 @@ autoscaling:
   enabled: true
   minReplicas: 3
   maxReplicas: 12
-  targetCPUUtilizationPercentage: 60
+  # CPU is a poor signal for SSE/streaming (goroutines block on LLM I/O, not CPU).
+  # Scale on active_streaming_sessions custom metric instead.
+  targetCPUUtilizationPercentage: 70  # fallback if custom metric unavailable
   targetMemoryUtilizationPercentage: 75
+  # Custom metric: active SSE streaming sessions per pod
+  # Exposed by tutoring-service /metrics (Prometheus) and scraped by GKE custom metrics adapter.
+  customMetricScaling:
+    enabled: true
+    # Scale when avg active streaming sessions per pod exceeds this threshold
+    targetActiveStreamingSessions: 20
+    metricName: "active_streaming_sessions"

@@ -45,6 +45,10 @@ autoscaling:
   maxReplicas: 6
   targetCPUUtilizationPercentage: 70
   targetMemoryUtilizationPercentage: 80
+  rpsScaling:
+    enabled: false
+    targetRPS: 500
+    metricName: "autoscaling.googleapis.com|nginx_connections_active"
   behavior:
     scaleUp:
       stabilizationWindowSeconds: 30

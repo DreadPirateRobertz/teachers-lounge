@@ -23,6 +23,7 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
+from .cache import close_cache, init_cache
 from .chat import router as chat_router
 from .chat_simple import router as chat_simple_router
 from .concepts import router as concepts_router
@@ -86,7 +87,13 @@ async def on_startup():
     # Create tables if they don't exist (dev only — production uses Alembic migrations)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    await init_cache()
     logger.info("Tutoring service started")
+
+
+@app.on_event("shutdown")
+async def on_shutdown():
+    await close_cache()
 
 
 @app.get("/health", tags=["ops"])
