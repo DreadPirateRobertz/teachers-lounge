@@ -15,6 +15,7 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
+	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/email"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/handler"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/middleware"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/push"
@@ -53,8 +54,7 @@ func main() {
 	notifStore := store.New(db)
 	rateLimiter := store.NewRateLimiter(rdb)
 
-	// Use FCMPusher when a server key is configured; fall back to LogPusher so
-	// the rest of the stack works without Firebase credentials (local dev).
+	// FCM push — use real sender when FCM_SERVER_KEY is configured.
 	var pusher push.Pusher
 	if cfg.fcmServerKey != "" {
 		pusher = push.NewFCMPusher(cfg.fcmServerKey)
@@ -64,7 +64,21 @@ func main() {
 		logger.Warn("FCM_SERVER_KEY not set — push notifications will not be delivered")
 	}
 
-	h := handler.New(notifStore, pusher, logger)
+	// Email — use SendGrid when SENDGRID_API_KEY is configured.
+	var emailer email.Sender
+	if cfg.sendgridAPIKey != "" {
+		fromAddr := cfg.fromEmail
+		if fromAddr == "" {
+			fromAddr = "noreply@teacherslounge.app"
+		}
+		emailer = email.NewSendGridSender(cfg.sendgridAPIKey, fromAddr)
+		logger.Info("SendGrid email enabled", zap.String("from", fromAddr))
+	} else {
+		emailer = email.LogSender{}
+		logger.Warn("SENDGRID_API_KEY not set — emails will not be delivered")
+	}
+
+	h := handler.New(notifStore, pusher, emailer, rateLimiter, logger)
 
 	// ── Router ────────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -85,8 +99,13 @@ func main() {
 		r.With(middleware.PushRateLimit(rateLimiter)).Post("/push", h.Push)
 		r.Post("/push/token", h.RegisterToken)
 
-		// Email — no rate limit at stub stage
+		// Email — SendGrid delivery
 		r.Post("/email", h.Email)
+
+		// Event trigger — push + email + in-app from a single game event
+		// Rate limit is enforced inside the handler (not middleware) so the
+		// trigger can apply it per-user without requiring auth context.
+		r.Post("/trigger", h.Trigger)
 
 		// In-app — Postgres backed
 		r.Post("/in-app", h.InApp)
@@ -136,20 +155,24 @@ func stubAuthMiddleware(next http.Handler) http.Handler {
 }
 
 type config struct {
-	port          string
-	databaseURL   string
-	redisAddr     string
-	redisPassword string
-	fcmServerKey  string
+	port           string
+	databaseURL    string
+	redisAddr      string
+	redisPassword  string
+	fcmServerKey   string
+	sendgridAPIKey string
+	fromEmail      string
 }
 
 func configFromEnv() config {
 	return config{
-		port:          envOr("PORT", "9000"),
-		databaseURL:   envOr("DATABASE_URL", "postgres://tl_app:localdevpassword@postgres:5432/teacherslounge"),
-		redisAddr:     envOr("REDIS_ADDR", "redis:6379"),
-		redisPassword: envOr("REDIS_PASSWORD", "localredispassword"),
-		fcmServerKey:  os.Getenv("FCM_SERVER_KEY"), // optional; empty = LogPusher
+		port:           envOr("PORT", "9000"),
+		databaseURL:    envOr("DATABASE_URL", "postgres://tl_app:localdevpassword@postgres:5432/teacherslounge"),
+		redisAddr:      envOr("REDIS_ADDR", "redis:6379"),
+		redisPassword:  envOr("REDIS_PASSWORD", "localredispassword"),
+		fcmServerKey:   os.Getenv("FCM_SERVER_KEY"),   // optional; empty = LogPusher
+		sendgridAPIKey: os.Getenv("SENDGRID_API_KEY"), // optional; empty = LogSender
+		fromEmail:      os.Getenv("FROM_EMAIL"),       // optional; defaults to noreply@teacherslounge.app
 	}
 }
 

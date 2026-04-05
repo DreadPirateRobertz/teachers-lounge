@@ -8,6 +8,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
+	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/email"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/middleware"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/model"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/push"
@@ -23,16 +24,19 @@ type NotifStore interface {
 
 // Handler holds dependencies for all HTTP handlers.
 type Handler struct {
-	store  NotifStore
-	pusher push.Pusher
-	logger *zap.Logger
+	store   NotifStore
+	pusher  push.Pusher
+	emailer email.Sender
+	limiter middleware.Limiter
+	logger  *zap.Logger
 }
 
 // New returns a configured Handler.
-// pusher is used by the Push handler to deliver FCM notifications; pass a
-// push.LogPusher when FCM credentials are not configured.
-func New(store NotifStore, pusher push.Pusher, logger *zap.Logger) *Handler {
-	return &Handler{store: store, pusher: pusher, logger: logger}
+// pusher delivers FCM push notifications; pass push.LogPusher when FCM is unconfigured.
+// emailer delivers transactional email; pass email.LogSender when SendGrid is unconfigured.
+// limiter enforces the per-user daily push rate limit for the /notify/trigger path.
+func New(store NotifStore, pusher push.Pusher, emailer email.Sender, limiter middleware.Limiter, logger *zap.Logger) *Handler {
+	return &Handler{store: store, pusher: pusher, emailer: emailer, limiter: limiter, logger: logger}
 }
 
 // RegisterToken handles POST /notify/push/token.
@@ -112,27 +116,68 @@ func (h *Handler) Push(w http.ResponseWriter, r *http.Request) {
 }
 
 // Email handles POST /notify/email.
-// Phase 1 stub: validates request, logs, returns 200.
-// Real SendGrid/Resend integration is a follow-on bead.
+// Renders the named template with the provided vars and delivers it via the
+// configured email.Sender. Returns 202 Accepted when delivery is attempted.
 func (h *Handler) Email(w http.ResponseWriter, r *http.Request) {
 	var req model.EmailRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	if req.UserID == "" || req.Template == "" {
-		http.Error(w, "user_id and template are required", http.StatusBadRequest)
+	if req.UserID == "" || req.To == "" || req.Template == "" {
+		http.Error(w, "user_id, to, and template are required", http.StatusBadRequest)
 		return
 	}
 
-	h.logger.Info("email notification queued",
-		zap.String("user_id", req.UserID),
-		zap.String("template", req.Template),
-	)
+	subject, htmlBody := renderTemplate(req.Template, req.Vars)
+	if err := h.emailer.Send(r.Context(), req.To, subject, htmlBody); err != nil {
+		h.logger.Error("send email", zap.String("user_id", req.UserID), zap.Error(err))
+		http.Error(w, "email delivery failed", http.StatusInternalServerError)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(map[string]string{"status": "queued"}); err != nil {
+	w.WriteHeader(http.StatusAccepted)
+	if err := json.NewEncoder(w).Encode(map[string]string{"status": "sent"}); err != nil {
 		h.logger.Error("encode email response", zap.Error(err))
+	}
+}
+
+// renderTemplate converts a template name and vars map to a subject + HTML body.
+// Templates are defined inline; no file-system access required.
+func renderTemplate(tmpl string, vars map[string]any) (subject, htmlBody string) {
+	str := func(key, fallback string) string {
+		if vars == nil {
+			return fallback
+		}
+		if v, ok := vars[key].(string); ok && v != "" {
+			return v
+		}
+		return fallback
+	}
+
+	switch tmpl {
+	case "streak_at_risk":
+		return "Don't break your streak — study today!",
+			"<h2>Your streak is at risk 🔥</h2><p>Log in and answer a few questions to keep your streak alive.</p>"
+	case "rival_passed":
+		rival := str("rival_name", "a rival")
+		return rival + " just passed you — take back your rank!",
+			"<h2>" + rival + " just passed you ⚔️</h2><p>Climb back up the leaderboard.</p>"
+	case "boss_unlock":
+		boss := str("boss_name", "a new boss")
+		return "Challenge unlocked: " + boss + " awaits!",
+			"<h2>New challenge: " + boss + " 👾</h2><p>You've levelled up enough to face a new boss.</p>"
+	case "quiz_countdown":
+		return "Quiz expiring — finish it now!",
+			"<h2>Your quiz session is expiring ⏱</h2><p>Complete it before time runs out.</p>"
+	case "achievement_near_miss":
+		achievement := str("achievement_name", "an achievement")
+		return "You're this close to unlocking " + achievement + "!",
+			"<h2>Almost there! 🏆</h2><p>Just a bit more to unlock " + achievement + ".</p>"
+	default:
+		return "Activity update — TeachersLounge",
+			"<p>You have a new notification. Open the app to see more.</p>"
 	}
 }
 
