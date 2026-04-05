@@ -183,6 +183,8 @@ jobs:
         with:
           python-version: '3.13'
           cache: pip
+      - run: pip install setuptools wheel --quiet
+        if: steps.check.outputs.exists == 'true'
       - run: pip install -r requirements.txt --quiet
         if: steps.check.outputs.exists == 'true'
       - run: pip install ruff pytest pytest-asyncio --quiet
@@ -366,8 +368,8 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const fs = require('fs');
-            const log = fs.readFileSync('test-results/all.txt', 'utf8').slice(-3000);
+            const { readFileSync } = await import('fs');
+            const log = readFileSync('test-results/all.txt', 'utf8').slice(-3000);
             github.rest.issues.create({
               owner: context.repo.owner,
               repo: context.repo.repo,
