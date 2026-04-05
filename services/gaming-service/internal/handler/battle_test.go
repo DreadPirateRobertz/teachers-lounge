@@ -27,6 +27,8 @@ type battleStore struct {
 	savedTaunt string
 	// tauntPool is keyed by "bossID:round". Present entry means cache hit.
 	tauntPool map[string]string
+	// tauntSaved is closed by SaveTaunt so tests can wait for the async persist.
+	tauntSaved chan struct{}
 }
 
 func (b *battleStore) GetBattleSession(_ context.Context, _ string) (*model.BattleSession, error) {
@@ -47,8 +49,12 @@ func (b *battleStore) UpsertXP(_ context.Context, _ string, _ int64, _ int) erro
 func (b *battleStore) DeductGems(_ context.Context, _ string, _ int) (int, error) { return 5, nil }
 
 // SaveTaunt records the taunt so tests can assert it was persisted.
+// Closes tauntSaved (if set) to unblock tests waiting on the async goroutine.
 func (b *battleStore) SaveTaunt(_ context.Context, bossID string, round int, t string) error {
 	b.savedTaunt = t
+	if b.tauntSaved != nil {
+		close(b.tauntSaved)
+	}
 	return nil
 }
 
@@ -191,8 +197,9 @@ func TestAttack_WrongAnswer_TauntServedFromCache(t *testing.T) {
 
 func TestAttack_WrongAnswer_TauntGeneratedAndSavedOnCacheMiss(t *testing.T) {
 	s := &battleStore{
-		session:   activeSession(),
-		tauntPool: map[string]string{},
+		session:    activeSession(),
+		tauntPool:  map[string]string{},
+		tauntSaved: make(chan struct{}),
 	}
 	h := newBattleHandler(s, taunt.StaticGenerator{Taunt: "fresh generated taunt"})
 
@@ -206,6 +213,13 @@ func TestAttack_WrongAnswer_TauntGeneratedAndSavedOnCacheMiss(t *testing.T) {
 	json.NewDecoder(rr.Body).Decode(&resp)
 	if resp.Taunt != "fresh generated taunt" {
 		t.Fatalf("expected generated taunt, got %q", resp.Taunt)
+	}
+
+	// SaveTaunt is called in a background goroutine; wait for it with a timeout.
+	select {
+	case <-s.tauntSaved:
+	case <-time.After(500 * time.Millisecond):
+		t.Fatal("timed out waiting for taunt to be persisted")
 	}
 	if s.savedTaunt != "fresh generated taunt" {
 		t.Fatalf("generated taunt not persisted to store, got %q", s.savedTaunt)
