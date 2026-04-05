@@ -7,6 +7,10 @@ const config: Config = {
   },
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/$1',
+    // Stub CSS imports (katex, etc.) so they don't crash in jsdom
+    '\\.css$': '<rootDir>/__mocks__/styleMock.js',
+    // Stub next/dynamic to render components synchronously in tests
+    '^next/dynamic$': '<rootDir>/__mocks__/nextDynamic.js',
   },
   testMatch: ['**/*.test.ts', '**/*.test.tsx'],
   setupFilesAfterEnv: ['@testing-library/jest-dom'],

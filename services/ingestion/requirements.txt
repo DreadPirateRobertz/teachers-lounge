@@ -33,6 +33,12 @@ openai==1.58.1
 # Vector store
 qdrant-client==1.12.1
 
+# Vision / figure extraction
+PyMuPDF==1.24.3
+Pillow==10.4.0
+transformers==4.44.2
+torch==2.5.1
+
 # Test dependencies
 pytest==8.3.3
 pytest-asyncio==0.24.0
