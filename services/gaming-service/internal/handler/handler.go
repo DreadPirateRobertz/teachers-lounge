@@ -43,6 +43,7 @@ type Storer interface {
 	AwardQuestRewards(ctx context.Context, userID string, xpDelta, gemsDelta int) (newXP int64, newLevel int, leveledUp bool, newGems int, err error)
 
 	// Boss battle methods
+	GetDefeatedBossIDs(ctx context.Context, userID string) ([]string, error)
 	SaveBattleSession(ctx context.Context, session *model.BattleSession) error
 	GetBattleSession(ctx context.Context, sessionID string) (*model.BattleSession, error)
 	DeleteBattleSession(ctx context.Context, sessionID string) error
