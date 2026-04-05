@@ -94,9 +94,7 @@ const mockBoss: BossVisualDef = {
 }
 
 function renderBattle() {
-  return render(
-    <BossBattleClient boss={mockBoss} userId="user-1" initialGems={10} />,
-  )
+  return render(<BossBattleClient boss={mockBoss} userId="user-1" initialGems={10} />)
 }
 
 // ── Tests ─────────────────────────────────────────────────────────────────────
