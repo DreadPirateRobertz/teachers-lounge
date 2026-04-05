@@ -36,8 +36,12 @@ export function buildCsp(nonce?: string): string {
     'worker-src blob:',
     "frame-ancestors 'none'",
     "form-action 'self'",
-    'upgrade-insecure-requests',
   ]
+
+  // Only upgrade to HTTPS in production — local dev runs over plain HTTP
+  if (process.env.NODE_ENV === 'production' && process.env.DISABLE_HSTS !== 'true') {
+    directives.push('upgrade-insecure-requests')
+  }
 
   return directives.join('; ')
 }
