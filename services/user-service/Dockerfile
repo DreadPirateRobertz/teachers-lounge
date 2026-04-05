@@ -11,11 +11,12 @@ COPY . .
 RUN CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -o /user-service ./cmd/server
 
 # ── Runtime image ────────────────────────────────────────────
-FROM gcr.io/distroless/static-debian12 AS runtime
+FROM alpine:3.19 AS runtime
 
+RUN adduser -D -u 10001 nonroot
 COPY --from=builder /user-service /user-service
 
 EXPOSE 8080
-USER nonroot:nonroot
+USER nonroot
 
 ENTRYPOINT ["/user-service"]
