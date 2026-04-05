@@ -57,4 +57,12 @@ describe('next.config security headers', () => {
     expect(h?.value).toContain('microphone=()')
     expect(h?.value).toContain('geolocation=()')
   })
+
+  it('does not contain unsafe-inline in script-src (nonce migration tl-ixk)', () => {
+    const csp = headers.find((h) => h.key === 'Content-Security-Policy')
+    expect(csp).toBeDefined()
+    const scriptSrcMatch = csp!.value.match(/script-src([^;]+)/)
+    expect(scriptSrcMatch).not.toBeNull()
+    expect(scriptSrcMatch![1]).not.toContain('unsafe-inline')
+  })
 })
