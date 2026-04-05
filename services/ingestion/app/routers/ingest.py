@@ -6,7 +6,13 @@ from fastapi import APIRouter, Depends, UploadFile, HTTPException, status
 
 from app.auth import require_auth
 from app.config import settings
-from app.models import ACCEPTED_MIME_TYPES, IngestJobMessage, ProcessingStatus, UploadResponse
+from app.models import (
+    ACCEPTED_MIME_TYPES,
+    IngestJobMessage,
+    MaterialStatusResponse,
+    ProcessingStatus,
+    UploadResponse,
+)
 from app.services import db, gcs, pubsub
 
 router = APIRouter(prefix="/v1/ingest", tags=["ingest"])
@@ -88,4 +94,42 @@ async def upload_file(
         material_id=material_id,
         status=ProcessingStatus.PENDING,
         gcs_path=gcs_path,
+    )
+
+
+@router.get(
+    "/{material_id}/status",
+    response_model=MaterialStatusResponse,
+    summary="Poll processing status for an uploaded material",
+)
+async def get_material_status(
+    material_id: uuid.UUID,
+    user_id: Annotated[uuid.UUID, Depends(require_auth)],
+) -> MaterialStatusResponse:
+    """Return the current processing status and chunk count for a material.
+
+    The upload endpoint returns a ``material_id``; clients poll this endpoint
+    to track progress from ``pending`` → ``processing`` → ``complete``
+    (or ``failed``).
+
+    Args:
+        material_id: UUID of the material returned by the upload endpoint.
+        user_id: Authenticated caller's UUID (validated JWT).
+
+    Returns:
+        MaterialStatusResponse with current status and chunk count.
+
+    Raises:
+        HTTPException: 404 when no material with that ID exists.
+    """
+    row = await db.get_material_status(material_id)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="material not found",
+        )
+    return MaterialStatusResponse(
+        material_id=material_id,
+        processing_status=ProcessingStatus(row["processing_status"]),
+        chunk_count=row["chunk_count"],
     )

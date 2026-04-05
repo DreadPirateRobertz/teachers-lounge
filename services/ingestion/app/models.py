@@ -18,6 +18,14 @@ class UploadResponse(BaseModel):
     gcs_path: str
 
 
+class MaterialStatusResponse(BaseModel):
+    """Response payload for GET /v1/ingest/{material_id}/status."""
+
+    material_id: UUID
+    processing_status: ProcessingStatus
+    chunk_count: int
+
+
 class IngestJobMessage(BaseModel):
     """Pub/Sub message payload for the ingest-jobs topic."""
     job_id: UUID
