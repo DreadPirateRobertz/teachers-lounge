@@ -81,7 +81,10 @@ export default function ParentalConsentForm({ userId, onSuccess }: ParentalConse
       </p>
 
       <div className="flex flex-col gap-1.5">
-        <label htmlFor="guardian-email" className="text-xs font-mono text-text-dim uppercase tracking-wide">
+        <label
+          htmlFor="guardian-email"
+          className="text-xs font-mono text-text-dim uppercase tracking-wide"
+        >
           Guardian Email
         </label>
         <input

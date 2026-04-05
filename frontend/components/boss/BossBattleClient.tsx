@@ -215,7 +215,12 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
 
   // ── Swipe gesture: right = correct, left = wrong ─────────────────────────
 
-  const { onTouchStart, onTouchEnd, swipeDirection, reset: resetSwipe } = useSwipeGesture({
+  const {
+    onTouchStart,
+    onTouchEnd,
+    swipeDirection,
+    reset: resetSwipe,
+  } = useSwipeGesture({
     onSwipe: (dir) => {
       if (actionPending || phase !== 'active') return
       submitAnswer(dir === SwipeDirection.Right)
@@ -280,10 +285,7 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
           />
           {/* Swipe hint — briefly shown after a horizontal swipe on mobile */}
           {swipeDirection && (
-            <p
-              aria-live="polite"
-              className="text-xs font-mono text-text-dim animate-fade-in"
-            >
+            <p aria-live="polite" className="text-xs font-mono text-text-dim animate-fade-in">
               {swipeDirection === SwipeDirection.Right ? '→ Correct' : '← Wrong'}
             </p>
           )}

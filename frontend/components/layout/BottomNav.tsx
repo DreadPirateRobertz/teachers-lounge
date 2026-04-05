@@ -72,9 +72,7 @@ export default function BottomNav() {
               'flex flex-col items-center justify-center flex-1 gap-0.5',
               'py-2 min-h-[56px] text-xs font-mono transition-colors',
               'active:bg-bg-card',
-              active
-                ? 'text-neon-blue'
-                : 'text-text-dim hover:text-text-base',
+              active ? 'text-neon-blue' : 'text-text-dim hover:text-text-base',
             ].join(' ')}
           >
             <span className="text-lg leading-none" aria-hidden="true">

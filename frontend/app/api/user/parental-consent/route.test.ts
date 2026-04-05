@@ -41,6 +41,13 @@ describe('POST /api/user/parental-consent', () => {
     expect(res.status).toBe(400)
   })
 
+  it('returns 400 when user_id is not a valid UUID', async () => {
+    const res = await POST(makeRequest({ user_id: '../admin', guardian_email: 'p@ex.com' }))
+    expect(res.status).toBe(400)
+    const body = await res.json()
+    expect(body.error).toMatch(/Invalid user_id/)
+  })
+
   it('proxies to user-service and returns 202 on success', async () => {
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
@@ -48,7 +55,12 @@ describe('POST /api/user/parental-consent', () => {
       json: async () => ({ message: 'ok' }),
     }) as jest.Mock
 
-    const res = await POST(makeRequest({ user_id: 'uid-123', guardian_email: 'p@ex.com' }))
+    const res = await POST(
+      makeRequest({
+        user_id: '550e8400-e29b-41d4-a716-446655440000',
+        guardian_email: 'p@ex.com',
+      }),
+    )
     expect(res.status).toBe(202)
     const body = await res.json()
     expect(body.message).toBe('consent email sent')
@@ -61,7 +73,12 @@ describe('POST /api/user/parental-consent', () => {
       json: async () => ({ error: 'invalid guardian email' }),
     }) as jest.Mock
 
-    const res = await POST(makeRequest({ user_id: 'uid-123', guardian_email: 'p@ex.com' }))
+    const res = await POST(
+      makeRequest({
+        user_id: '550e8400-e29b-41d4-a716-446655440000',
+        guardian_email: 'p@ex.com',
+      }),
+    )
     expect(res.status).toBe(422)
     const body = await res.json()
     expect(body.error).toBe('invalid guardian email')
@@ -70,7 +87,12 @@ describe('POST /api/user/parental-consent', () => {
   it('returns 500 when user-service is unreachable', async () => {
     global.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED')) as jest.Mock
 
-    const res = await POST(makeRequest({ user_id: 'uid-123', guardian_email: 'p@ex.com' }))
+    const res = await POST(
+      makeRequest({
+        user_id: '550e8400-e29b-41d4-a716-446655440000',
+        guardian_email: 'p@ex.com',
+      }),
+    )
     expect(res.status).toBe(500)
   })
 })

@@ -39,10 +39,13 @@ export async function POST(request: NextRequest): Promise<NextResponse> {
   }
 
   if (!body.user_id || !body.guardian_email) {
-    return NextResponse.json(
-      { error: 'user_id and guardian_email are required' },
-      { status: 400 },
-    )
+    return NextResponse.json({ error: 'user_id and guardian_email are required' }, { status: 400 })
+  }
+
+  // Validate user_id is a UUID to prevent path traversal / SSRF
+  const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+  if (!UUID_RE.test(body.user_id)) {
+    return NextResponse.json({ error: 'Invalid user_id' }, { status: 400 })
   }
 
   try {
