@@ -152,7 +152,9 @@ function MaterialsPanel({ courseId }: { courseId: string }) {
 
       if (updates.size > 0) {
         setMaterials((prev) =>
-          prev.map((m) => (updates.has(m.materialId) ? { ...m, status: updates.get(m.materialId)! } : m)),
+          prev.map((m) =>
+            updates.has(m.materialId) ? { ...m, status: updates.get(m.materialId)! } : m,
+          ),
         )
       }
     }, POLL_INTERVAL_MS)

@@ -24,11 +24,7 @@ const INVALID_ID = 'not-a-uuid'
  * @param tokenCookie - Optional tl_token cookie value.
  * @returns NextRequest pointed at the route URL.
  */
-function makeRequest(
-  materialId: string,
-  authHeader?: string,
-  tokenCookie?: string,
-): NextRequest {
+function makeRequest(materialId: string, authHeader?: string, tokenCookie?: string): NextRequest {
   const url = `http://localhost/api/materials/${materialId}/status`
   const headers: Record<string, string> = {}
   if (authHeader) headers['authorization'] = authHeader

@@ -72,12 +72,7 @@ export async function GET(
   const data: unknown = await upstream.json().catch(() => ({ detail: upstream.statusText }))
 
   // Map ingestion service field `processing_status` → `status`.
-  if (
-    upstream.ok &&
-    typeof data === 'object' &&
-    data !== null &&
-    'processing_status' in data
-  ) {
+  if (upstream.ok && typeof data === 'object' && data !== null && 'processing_status' in data) {
     const row = data as Record<string, unknown>
     const response: MaterialStatusResponse = {
       material_id: String(row.material_id ?? materialId),

@@ -27,8 +27,12 @@ jest.mock('@/components/ErrorBoundary', () => {
 // ---------------------------------------------------------------------------
 
 const mockFetch = jest.fn()
-beforeEach(() => { global.fetch = mockFetch })
-afterEach(() => { mockFetch.mockReset() })
+beforeEach(() => {
+  global.fetch = mockFetch
+})
+afterEach(() => {
+  mockFetch.mockReset()
+})
 
 // ---------------------------------------------------------------------------
 // Tests
