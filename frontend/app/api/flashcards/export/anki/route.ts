@@ -27,7 +27,8 @@ export async function GET(req: NextRequest) {
   const blob = await upstream.arrayBuffer()
   const contentDisposition =
     upstream.headers.get('content-disposition') ?? 'attachment; filename="flashcards.apkg"'
-  const contentType = upstream.headers.get('content-type') ?? 'application/octet-stream'
+  const contentType =
+    upstream.headers.get('content-type') ?? 'application/octet-stream'
 
   return new NextResponse(blob, {
     status: upstream.status,
