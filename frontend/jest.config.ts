@@ -9,6 +9,7 @@ const config: Config = {
     '^@/(.*)$': '<rootDir>/$1',
   },
   testMatch: ['**/*.test.ts', '**/*.test.tsx'],
+  setupFiles: ['jest-canvas-mock'],
   setupFilesAfterEnv: ['@testing-library/jest-dom'],
 }
 
