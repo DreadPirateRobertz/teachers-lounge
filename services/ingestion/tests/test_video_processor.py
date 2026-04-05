@@ -201,10 +201,13 @@ class TestTranscribeGoogleSync:
         mock_client.recognize.return_value = MagicMock(results=[result_obj])
 
         import sys
+        mock_google_cloud = MagicMock()
+        mock_google_cloud.speech = mock_speech
         original = sys.modules.copy()
-        # Inject mock before function call
+        # Inject mock before function call; wire .speech so `from google.cloud import speech`
+        # returns mock_speech (attribute lookup on the google.cloud module object).
         sys.modules["google"] = MagicMock()
-        sys.modules["google.cloud"] = MagicMock()
+        sys.modules["google.cloud"] = mock_google_cloud
         sys.modules["google.cloud.speech"] = mock_speech
         try:
             segments = _transcribe_google_sync(audio_file)

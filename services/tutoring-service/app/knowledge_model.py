@@ -33,7 +33,6 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .orm import (
-    Concept,
     ExplanationPreference,
     LearningProfile,
     Misconception,
