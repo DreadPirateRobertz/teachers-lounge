@@ -1,7 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
 
-const INGESTION_SERVICE_URL = process.env.INGESTION_SERVICE_URL
-
 /** UUID v4 pattern for materialId path parameter validation. */
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
 
@@ -33,9 +31,12 @@ export interface MaterialStatusResponse {
  */
 export async function GET(
   req: NextRequest,
-  { params }: { params: { materialId: string } },
+  { params }: { params: Promise<{ materialId: string }> },
 ): Promise<NextResponse> {
-  const { materialId } = params
+  // Next.js 15: params is a Promise — must be awaited before use.
+  const { materialId } = await params
+  // Read env inside handler so test mutations to process.env take effect.
+  const INGESTION_SERVICE_URL = process.env.INGESTION_SERVICE_URL
 
   if (!UUID_RE.test(materialId)) {
     return NextResponse.json({ detail: 'materialId must be a valid UUID' }, { status: 400 })

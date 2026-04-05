@@ -46,7 +46,9 @@ export function useMaterialStatus(
       }
 
       try {
-        const res = await fetch(`/api/materials/${materialId}/status`)
+        const res = await fetch(`/api/materials/${materialId}/status`, {
+          credentials: 'include',
+        })
         if (!res.ok) return
         const data = (await res.json()) as { status: UploadedMaterial['status'] }
         const next = data.status

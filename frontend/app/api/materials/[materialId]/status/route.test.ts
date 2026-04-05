@@ -36,13 +36,22 @@ function makeRequest(
   return new NextRequest(url, { headers })
 }
 
-/** Invoke the route handler with the given materialId. */
+/**
+ * Invoke the route handler with the given materialId.
+ *
+ * Wraps params in Promise.resolve() to match Next.js 15's async params
+ * contract — the handler awaits params before destructuring.
+ *
+ * @param materialId - The materialId path segment value.
+ * @param opts       - Optional auth header and cookie overrides.
+ * @returns The NextResponse from the route handler.
+ */
 async function callRoute(
   materialId: string,
   opts: { authHeader?: string; tokenCookie?: string } = {},
 ) {
   const req = makeRequest(materialId, opts.authHeader, opts.tokenCookie)
-  return GET(req, { params: { materialId } })
+  return GET(req, { params: Promise.resolve({ materialId }) })
 }
 
 // ---------------------------------------------------------------------------

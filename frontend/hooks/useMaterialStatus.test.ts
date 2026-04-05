@@ -84,7 +84,23 @@ describe('useMaterialStatus — polling', () => {
 
     await waitFor(() => expect(result.current).toBe('processing'))
     expect(mockFetch).toHaveBeenCalledTimes(1)
-    expect(mockFetch).toHaveBeenCalledWith(`/api/materials/${MATERIAL_ID}/status`)
+    expect(mockFetch).toHaveBeenCalledWith(
+      `/api/materials/${MATERIAL_ID}/status`,
+      expect.objectContaining({ credentials: 'include' }),
+    )
+  })
+
+  it('sends credentials: include so the auth cookie is forwarded', async () => {
+    mockFetch.mockReturnValueOnce(mockStatusResponse('complete'))
+
+    renderHook(() => useMaterialStatus(MATERIAL_ID, 'pending'))
+    act(() => { jest.advanceTimersByTime(POLL_INTERVAL_MS) })
+
+    await waitFor(() => expect(mockFetch).toHaveBeenCalledTimes(1))
+    expect(mockFetch).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ credentials: 'include' }),
+    )
   })
 
   it('stops polling when status becomes "complete"', async () => {
