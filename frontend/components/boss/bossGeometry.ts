@@ -93,11 +93,7 @@ function buildGrid(config: BossConfig): THREE.Group {
   for (let row = 0; row < 3; row++) {
     for (let col = 0; col < 3; col++) {
       const cube = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), mat)
-      cube.position.set(
-        (col - 1) * spacing,
-        (row - 1) * spacing,
-        0,
-      )
+      cube.position.set((col - 1) * spacing, (row - 1) * spacing, 0)
       group.add(cube)
     }
   }
