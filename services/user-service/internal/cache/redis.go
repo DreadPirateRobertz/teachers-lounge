@@ -125,11 +125,6 @@ func (c *Client) GetLoginAttempts(ctx context.Context, key string) (int64, error
 	return n, err
 }
 
-// IncrWithTTL is a generic INCR+EXPIRE counter used for rate limiting non-login endpoints.
-func (c *Client) IncrWithTTL(ctx context.Context, key string, ttl time.Duration) (int64, error) {
-	return c.IncrLoginAttempts(ctx, key, ttl)
-}
-
 // ============================================================
 // GENERIC HELPERS (used by other services)
 // ============================================================

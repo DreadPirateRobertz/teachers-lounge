@@ -36,6 +36,9 @@ type Storer interface {
 	CreateExportJob(ctx context.Context, userID uuid.UUID) (uuid.UUID, error)
 	GetExportJob(ctx context.Context, jobID, userID uuid.UUID) (*models.ExportJob, error)
 	BuildUserExport(ctx context.Context, jobID, userID uuid.UUID) (*models.UserExport, error)
+	InitConsent(ctx context.Context, userID uuid.UUID, ip, userAgent string) error
+	GetConsent(ctx context.Context, userID uuid.UUID) (*models.ConsentBundle, error)
+	UpdateConsent(ctx context.Context, userID uuid.UUID, p UpdateConsentParams) error
 	UpdateGuardianConsent(ctx context.Context, userID uuid.UUID, guardianEmail string) error
 
 	// Teacher profiles

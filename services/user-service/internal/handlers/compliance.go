@@ -66,7 +66,7 @@ func (h *ComplianceHandler) GetAuditLog(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	p := store.AuditLogQueryParams{
+	p := store.QueryAuditLogParams{
 		StudentID: &studentID,
 	}
 

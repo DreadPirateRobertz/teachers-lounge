@@ -196,9 +196,6 @@ func (m *mockStore) UpdateSubscriptionByUserID(_ context.Context, _ uuid.UUID, _
 }
 
 func (m *mockStore) WriteAuditLog(_ context.Context, _ store.AuditLogParams) error { return nil }
-func (m *mockStore) QueryAuditLog(_ context.Context, _ store.AuditLogQueryParams) ([]*models.AuditLogEntry, error) {
-	return nil, nil
-}
 func (m *mockStore) CreateExportJob(_ context.Context, _ uuid.UUID) (uuid.UUID, error) {
 	return uuid.New(), nil
 }
@@ -313,10 +310,6 @@ func (m *mockCache) IncrWithTTL(_ context.Context, key string, _ time.Duration) 
 	defer m.mu.Unlock()
 	m.attempts[key]++
 	return m.attempts[key], nil
-}
-
-func (m *mockCache) IncrWithTTL(_ context.Context, _ string, _ time.Duration) (int64, error) {
-	return 1, nil
 }
 
 // ============================================================

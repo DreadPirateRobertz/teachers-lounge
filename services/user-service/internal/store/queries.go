@@ -215,3 +215,13 @@ func scanTeacherClass(row scanner) (*models.TeacherClass, error) {
 	}
 	return c, nil
 }
+
+// UpdateConsentParams holds the optional consent fields to update for a user.
+// Nil fields are skipped; only non-nil fields are written to consent_records.
+type UpdateConsentParams struct {
+	Tutoring  *bool
+	Analytics *bool
+	Marketing *bool
+	IPAddress string
+	UserAgent string
+}
