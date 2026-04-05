@@ -1,7 +1,7 @@
 """Tests for upload endpoint: file type validation and size enforcement."""
 import uuid
 from io import BytesIO
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from fastapi.testclient import TestClient

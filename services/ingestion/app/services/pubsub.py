@@ -1,5 +1,4 @@
 import asyncio
-import json
 import logging
 
 from google.cloud import pubsub_v1

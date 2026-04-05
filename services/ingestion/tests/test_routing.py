@@ -13,7 +13,7 @@ def _make_job(mime_type: str) -> IngestJobMessage:
         user_id=uuid.uuid4(),
         course_id=uuid.uuid4(),
         material_id=uuid.uuid4(),
-        gcs_path=f"gs://tvtutor-raw-uploads/test/file",
+        gcs_path="gs://tvtutor-raw-uploads/test/file",
         mime_type=mime_type,
         filename="test_file",
     )
