@@ -107,6 +107,10 @@ func main() {
 		r.Post("/gaming/boss/powerup", h.ActivatePowerUp)
 		r.Post("/gaming/boss/forfeit", h.ForfeitBattle)
 
+		// Boss catalog — visual/animation metadata for the frontend
+		r.Get("/gaming/boss/catalog", h.GetBossCatalog)
+		r.Get("/gaming/boss/catalog/{bossId}", h.GetBossByID)
+
 		// Learning style assessment
 		r.Post("/gaming/assessment/start", h.StartAssessment)
 		r.Get("/gaming/assessment/sessions/{sessionId}", h.GetAssessmentSession)

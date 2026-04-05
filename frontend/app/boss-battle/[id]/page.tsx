@@ -1,51 +1,59 @@
 import Link from 'next/link'
+import BossBattleClient from '@/components/boss/BossBattleClient'
+import { getBossDef } from '@/components/boss/BossCharacterLibrary'
 
-// Phase 4 stub — WebGL/Three.js boss battles are built in Phase 4
-// This page is the future home of the animated boss fight experience.
-//
-// What will live here:
-//   - Three.js canvas (molecule bosses, physics via Cannon.js/Rapier)
-//   - HP bars (student + boss), timer, power-up tray
-//   - 5-7 quiz rounds with escalating difficulty
-//   - Combo system, loot drops, Weird Science particle effects
-//   - Sci-fi quote overlays on hits/misses
-
+/**
+ * BossBattlePage — server component that resolves boss metadata and renders
+ * the interactive BossBattleClient.
+ *
+ * The `id` param maps to a boss ID from BossCharacterLibrary
+ * (e.g. "the_atom", "the_bonder", "final_boss").
+ * Chapter IDs (numbers 1-6) are also accepted for legacy URL support.
+ */
 export default async function BossBattlePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
-  return (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-bg-deep text-center px-4">
-      {/* Boss placeholder art */}
-      <div className="relative mb-8">
-        <div className="text-8xl animate-pulse-slow">⚗️</div>
-        <div className="absolute inset-0 rounded-full bg-neon-pink/5 blur-2xl" />
-      </div>
 
-      <h1 className="font-mono text-2xl font-bold text-neon-pink text-glow-pink mb-2">
-        Boss Battle
-      </h1>
-      <p className="text-xs font-mono text-text-dim mb-1">Chapter {id}</p>
+  // Accept either the string ID ("the_atom") or the legacy chapter number ("1").
+  const bossId = resolveBossId(id)
+  const boss = getBossDef(bossId)
 
-      <div className="mt-6 px-6 py-4 bg-bg-card border border-neon-pink/20 rounded-xl max-w-sm">
-        <p className="text-sm text-text-base mb-2">
-          ⚔️ <strong className="text-text-bright">The Atom</strong> awaits.
+  if (!boss) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-bg-deep text-center px-4">
+        <h1 className="font-mono text-xl font-bold text-neon-pink mb-4">Boss not found</h1>
+        <p className="text-sm text-text-dim font-mono mb-6">
+          No boss found for id: <code className="text-neon-blue">{id}</code>
         </p>
-        <p className="text-xs text-text-dim leading-relaxed">
-          Boss battles arrive in <span className="text-neon-gold font-mono">Phase 4</span>. Finish
-          studying your course material — the fight will unlock when you reach 60% mastery on this
-          chapter.
-        </p>
+        <Link
+          href="/"
+          className="text-xs text-neon-blue border border-neon-blue/30 px-4 py-2 rounded-lg hover:bg-neon-blue/10 transition-colors"
+        >
+          ← Back to Tutor
+        </Link>
       </div>
+    )
+  }
 
-      <div className="mt-4 text-xs text-text-dim italic">
-        &ldquo;Do. Or do not. There is no try.&rdquo; — Yoda
-      </div>
+  // userId and initialGems would normally come from the session cookie / auth token.
+  // For now we pass placeholder values — the real auth integration is Phase 2 work.
+  const userId = 'demo-user'
+  const initialGems = 10
 
-      <Link
-        href="/"
-        className="mt-8 text-xs text-neon-blue border border-neon-blue/30 px-4 py-2 rounded-lg hover:bg-neon-blue/10 transition-colors"
-      >
-        ← Back to Tutor
-      </Link>
-    </div>
-  )
+  return <BossBattleClient boss={boss} userId={userId} initialGems={initialGems} />
+}
+
+/**
+ * Maps a URL segment to a canonical boss ID.
+ * Accepts numeric chapter IDs (1–6) as well as string IDs.
+ */
+function resolveBossId(segment: string): string {
+  const chapterMap: Record<string, string> = {
+    '1': 'the_atom',
+    '2': 'the_bonder',
+    '3': 'name_lord',
+    '4': 'the_stereochemist',
+    '5': 'the_reactor',
+    '6': 'final_boss',
+  }
+  return chapterMap[segment] ?? segment
 }
