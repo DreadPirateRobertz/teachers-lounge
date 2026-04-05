@@ -23,7 +23,7 @@ Usage::
 """
 import logging
 import sys
-from contextvars import ContextVar
+from contextvars import ContextVar, Token
 from typing import IO
 
 from pythonjsonlogger.json import JsonFormatter
@@ -47,7 +47,7 @@ def get_trace_id() -> str:
     return _trace_id_ctx.get() or _NO_TRACE
 
 
-def set_trace_id(trace_id: str):
+def set_trace_id(trace_id: str) -> Token[str]:
     """Store a trace ID in the current async context.
 
     The returned token must be passed to ``_trace_id_ctx.reset(token)`` to
