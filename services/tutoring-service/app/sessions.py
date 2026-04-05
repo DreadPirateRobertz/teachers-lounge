@@ -1,9 +1,10 @@
 """Session management endpoints — JWT-protected."""
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .audit import ACTION_READ_INTERACTIONS, write_audit_log
 from .auth import JWTClaims, require_auth
 from .database import get_db
 from .history import create_session, get_history, get_session
@@ -38,6 +39,7 @@ async def new_session(
 @router.get("/{session_id}", response_model=HistoryResponse)
 async def get_session_history(
     session_id: UUID,
+    request: Request,
     db: AsyncSession = Depends(get_db),
     user: JWTClaims = Depends(require_auth),
 ):
@@ -49,6 +51,18 @@ async def get_session_history(
         raise HTTPException(status_code=403, detail="Forbidden")
 
     interactions = await get_history(db, session_id)
+
+    # FERPA: log every interaction history read
+    await write_audit_log(
+        db,
+        accessor_id=user.user_id,
+        student_id=user.user_id,
+        action=ACTION_READ_INTERACTIONS,
+        data_accessed=f"chat_session:{session_id}",
+        purpose="user_request",
+        ip_address=request.client.host if request.client else "",
+    )
+
     messages = [
         MessageRecord(
             id=i.id,

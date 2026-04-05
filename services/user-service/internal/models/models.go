@@ -220,6 +220,71 @@ type StudentProgress struct {
 	Quiz     *QuizStats            `json:"quiz_stats,omitempty"`
 }
 
+// ============================================================
+// COMPLIANCE (FERPA / GDPR)
+// ============================================================
+
+// ConsentType enumerates the consent categories collected at registration.
+type ConsentType string
+
+const (
+	ConsentTutoring  ConsentType = "tutoring"
+	ConsentAnalytics ConsentType = "analytics"
+	ConsentMarketing ConsentType = "marketing"
+)
+
+// ConsentRecord is one row of the consent_records table.
+type ConsentRecord struct {
+	ID          uuid.UUID   `json:"id"`
+	UserID      uuid.UUID   `json:"user_id"`
+	ConsentType ConsentType `json:"consent_type"`
+	Granted     bool        `json:"granted"`
+	GrantedAt   *time.Time  `json:"granted_at,omitempty"`
+	IPAddress   string      `json:"ip_address,omitempty"`
+	UserAgent   string      `json:"user_agent,omitempty"`
+}
+
+// ConsentBundle is the full consent state for a user (all three types).
+type ConsentBundle struct {
+	Tutoring  *ConsentRecord `json:"tutoring"`
+	Analytics *ConsentRecord `json:"analytics"`
+	Marketing *ConsentRecord `json:"marketing"`
+}
+
+// ConsentUpdateRequest carries optional updates for each consent type.
+type ConsentUpdateRequest struct {
+	Tutoring  *bool `json:"tutoring,omitempty"`
+	Analytics *bool `json:"analytics,omitempty"`
+	Marketing *bool `json:"marketing,omitempty"`
+}
+
+// AuditLogEntry is a row returned from the admin audit query.
+type AuditLogEntry struct {
+	ID           uuid.UUID  `json:"id"`
+	Timestamp    time.Time  `json:"timestamp"`
+	AccessorID   *uuid.UUID `json:"accessor_id,omitempty"`
+	StudentID    *uuid.UUID `json:"student_id,omitempty"`
+	Action       string     `json:"action"`
+	DataAccessed string     `json:"data_accessed"`
+	Purpose      string     `json:"purpose"`
+	IPAddress    string     `json:"ip_address"`
+}
+
+// FERPA audit action constants used across user-service and tutoring-service.
+const (
+	AuditActionReadProfile      = "READ_PROFILE"
+	AuditActionReadInteractions = "READ_INTERACTIONS"
+	AuditActionReadQuizResults  = "READ_QUIZ_RESULTS"
+	AuditActionUpdateProfile    = "UPDATE_PROFILE"
+	AuditActionDeleteAccount    = "DELETE_ACCOUNT"
+	AuditActionExportData       = "EXPORT_DATA"
+	AuditActionAdminAccess      = "ADMIN_ACCESS"
+)
+
+// ============================================================
+// CLASS MATERIAL ASSIGNMENTS
+// ============================================================
+
 // ClassMaterialAssignment is a material assigned to a class.
 type ClassMaterialAssignment struct {
 	ClassID    uuid.UUID  `json:"class_id"`

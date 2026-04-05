@@ -69,6 +69,23 @@ type AuditLogParams struct {
 	IPAddress    string
 }
 
+// AuditLogQueryParams filters the audit_log query for the admin endpoint.
+type AuditLogQueryParams struct {
+	StudentID *uuid.UUID
+	From      *time.Time
+	To        *time.Time
+	Limit     int
+}
+
+// UpdateConsentParams carries the changes for a consent PATCH operation.
+type UpdateConsentParams struct {
+	Tutoring  *bool
+	Analytics *bool
+	Marketing *bool
+	IPAddress string
+	UserAgent string
+}
+
 // ============================================================
 // SCAN HELPERS
 // ============================================================

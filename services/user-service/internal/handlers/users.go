@@ -10,9 +10,8 @@ import (
 	"github.com/teacherslounge/user-service/internal/cache"
 	"github.com/teacherslounge/user-service/internal/middleware"
 	"github.com/teacherslounge/user-service/internal/models"
-	"github.com/teacherslounge/user-service/internal/store"
-
 	"github.com/teacherslounge/user-service/internal/rediskeys"
+	"github.com/teacherslounge/user-service/internal/store"
 )
 
 type UsersHandler struct {
@@ -49,6 +48,23 @@ func (h *UsersHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	sub, _ := h.store.GetSubscriptionByUserID(r.Context(), userID)
+
+	// FERPA: log every profile read
+	claims := middleware.ClaimsFromCtx(r.Context())
+	accessorID := &userID
+	if claims != nil {
+		if id, err := uuid.Parse(claims.UserID); err == nil {
+			accessorID = &id
+		}
+	}
+	_ = h.store.WriteAuditLog(r.Context(), store.AuditLogParams{
+		AccessorID:   accessorID,
+		StudentID:    &userID,
+		Action:       models.AuditActionReadProfile,
+		DataAccessed: "user_profile,learning_profile",
+		Purpose:      "user_request",
+		IPAddress:    realIP(r),
+	})
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"user":             toUserResponse(user, sub),
@@ -112,11 +128,10 @@ func (h *UsersHandler) ExportData(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Write audit log entry
 	_ = h.store.WriteAuditLog(r.Context(), store.AuditLogParams{
 		AccessorID:   &userID,
 		StudentID:    &userID,
-		Action:       "export_request",
+		Action:       models.AuditActionExportData,
 		DataAccessed: "all_user_data",
 		Purpose:      "gdpr_right_to_portability",
 		IPAddress:    realIP(r),
@@ -135,7 +150,9 @@ func (h *UsersHandler) ExportData(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// DELETE /users/{id} — GDPR right to erasure (cascading delete via FK)
+// DELETE /users/{id} — GDPR right to erasure.
+// Synchronously: deletes from Postgres (FK CASCADE) + clears all Redis user keys.
+// Async: enqueues an erasure_jobs record for Qdrant + GCS cleanup by a background worker.
 func (h *UsersHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	userID, err := parseUserIDParam(r)
 	if err != nil {
@@ -143,27 +160,38 @@ func (h *UsersHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Audit the deletion before it happens
+	// Audit before deletion so accessor_id FK is still valid
 	_ = h.store.WriteAuditLog(r.Context(), store.AuditLogParams{
 		AccessorID:   &userID,
 		StudentID:    &userID,
-		Action:       "account_delete",
+		Action:       models.AuditActionDeleteAccount,
 		DataAccessed: "all_user_data",
 		Purpose:      "gdpr_right_to_erasure",
 		IPAddress:    realIP(r),
 	})
 
-	// Revoke all refresh tokens first
+	// Enqueue external store cleanup before Postgres deletion
+	_, _ = h.store.CreateErasureJob(r.Context(), userID, map[string]any{
+		"qdrant_collections": []string{
+			"curriculum_chunks", "interaction_embeddings",
+		},
+		"gcs_prefixes": []string{
+			"tvtutor-raw-uploads/" + userID.String() + "/",
+			"tvtutor-exports/" + userID.String() + "/",
+		},
+	})
+
+	// Revoke all refresh tokens
 	_ = h.store.RevokeAllUserTokens(r.Context(), userID)
 
-	// Clear session cache
-	_ = h.cache.DeleteSession(r.Context(), rediskeys.Session(userID.String()))
-
-	// Delete user — FK CASCADE handles all child rows
+	// Delete user — FK CASCADE removes all child Postgres rows
 	if err := h.store.DeleteUser(r.Context(), userID); err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to delete account")
 		return
 	}
+
+	// Clear all Redis keys scoped to this user
+	_ = h.cache.DeleteUserKeys(r.Context(), userID.String())
 
 	// Clear refresh cookie
 	http.SetCookie(w, &http.Cookie{
@@ -175,6 +203,51 @@ func (h *UsersHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 		Path:     "/",
 		SameSite: http.SameSiteStrictMode,
 	})
+
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// GET /users/{id}/consent
+func (h *UsersHandler) GetConsent(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUserIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	bundle, err := h.store.GetConsent(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	writeJSON(w, http.StatusOK, bundle)
+}
+
+// PATCH /users/{id}/consent
+func (h *UsersHandler) UpdateConsent(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUserIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	var req models.ConsentUpdateRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid request body")
+		return
+	}
+
+	if err := h.store.UpdateConsent(r.Context(), userID, store.UpdateConsentParams{
+		Tutoring:  req.Tutoring,
+		Analytics: req.Analytics,
+		Marketing: req.Marketing,
+		IPAddress: realIP(r),
+		UserAgent: r.UserAgent(),
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to update consent")
+		return
+	}
 
 	w.WriteHeader(http.StatusNoContent)
 }

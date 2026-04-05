@@ -113,6 +113,12 @@ func ClaimsFromCtx(ctx context.Context) *auth.Claims {
 	return c
 }
 
+// WithUserIDForTest injects a user ID into a context for unit testing.
+// Use only in _test.go files.
+func WithUserIDForTest(ctx context.Context, userID uuid.UUID) context.Context {
+	return context.WithValue(ctx, ctxKeyUserID{}, userID.String())
+}
+
 // ============================================================
 // HELPERS
 // ============================================================
