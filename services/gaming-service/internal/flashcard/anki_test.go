@@ -82,7 +82,7 @@ func TestBuildAPKGMediaEntry(t *testing.T) {
 		defer rc.Close()
 
 		var buf bytes.Buffer
-		buf.ReadFrom(rc)
+		_, _ = buf.ReadFrom(rc)
 		if buf.String() != "{}" {
 			t.Errorf("media entry = %q, want {}", buf.String())
 		}

@@ -365,7 +365,7 @@ func mustRegister(t *testing.T, h *handlers.AuthHandler, s *mockStore) (string, 
 		AccountType:  models.AccountTypeStandard,
 	})
 	trialEnd := time.Now().AddDate(0, 0, 14)
-	s.CreateSubscription(context.Background(), store.CreateSubscriptionParams{
+	_, _ = s.CreateSubscription(context.Background(), store.CreateSubscriptionParams{
 		UserID:           u.ID,
 		StripeCustomerID: "cus_test",
 		Plan:             models.PlanTrial,

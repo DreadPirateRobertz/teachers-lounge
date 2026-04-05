@@ -11,12 +11,6 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// stubDB is a no-op Postgres stub for streak tests.
-type stubDB struct {
-	longestStreak int
-	currentStreak int
-}
-
 // We test the Redis-facing streak logic directly by replaying the same
 // HMGet / HMSet sequence the store uses, so we don't need a real Postgres.
 // Full integration tests (with Postgres) belong in the e2e suite.
@@ -138,8 +132,8 @@ func simulateCheckin(t *testing.T, rdb *redis.Client, userID string, at time.Tim
 	if vals[0] != nil && vals[1] != nil {
 		var prevCount int64
 		var lastTS int64
-		fmt.Sscan(vals[0].(string), &prevCount)
-		fmt.Sscan(vals[1].(string), &lastTS)
+		_, _ = fmt.Sscan(vals[0].(string), &prevCount)
+		_, _ = fmt.Sscan(vals[1].(string), &lastTS)
 
 		lastTime := time.Unix(lastTS, 0)
 		if at.Sub(lastTime) > resetWindow {

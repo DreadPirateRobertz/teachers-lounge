@@ -103,9 +103,9 @@ async def test_sse_stream_happy_path(client, auth_headers, user_id, session_id):
     fake_openai.chat.completions = fake_completions
 
     with (
-        patch("app.history.get_session", AsyncMock(return_value=fake_session)),
-        patch("app.history.get_history", AsyncMock(return_value=[])),
-        patch("app.history.append_message", AsyncMock()),
+        patch("app.chat.get_session", AsyncMock(return_value=fake_session)),
+        patch("app.chat.get_history", AsyncMock(return_value=[])),
+        patch("app.chat.append_message", AsyncMock()),
         patch("app.chat.get_gateway_client", return_value=fake_openai),
     ):
         resp = await client.post(
@@ -170,9 +170,9 @@ async def test_sse_stream_rag_emits_sources_event(client, auth_headers, user_id,
     fake_openai.chat.completions = fake_completions
 
     with (
-        patch("app.history.get_session", AsyncMock(return_value=fake_session)),
-        patch("app.history.get_history", AsyncMock(return_value=[])),
-        patch("app.history.append_message", AsyncMock()),
+        patch("app.chat.get_session", AsyncMock(return_value=fake_session)),
+        patch("app.chat.get_history", AsyncMock(return_value=[])),
+        patch("app.chat.append_message", AsyncMock()),
         patch("app.chat.get_gateway_client", return_value=fake_openai),
         patch("app.chat.build_rag_context", AsyncMock(return_value=("system prompt", [fake_chunk]))),
     ):
@@ -223,9 +223,9 @@ async def test_sse_stream_no_sources_event_when_chunks_empty(
     fake_openai.chat.completions = fake_completions
 
     with (
-        patch("app.history.get_session", AsyncMock(return_value=fake_session)),
-        patch("app.history.get_history", AsyncMock(return_value=[])),
-        patch("app.history.append_message", AsyncMock()),
+        patch("app.chat.get_session", AsyncMock(return_value=fake_session)),
+        patch("app.chat.get_history", AsyncMock(return_value=[])),
+        patch("app.chat.append_message", AsyncMock()),
         patch("app.chat.get_gateway_client", return_value=fake_openai),
         patch("app.chat.build_rag_context", AsyncMock(return_value=("system prompt", []))),
     ):

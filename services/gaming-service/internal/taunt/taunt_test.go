@@ -28,7 +28,7 @@ func TestLiteLLMGenerator_ReturnsGeneratedTaunt(t *testing.T) {
 	want := "Your algebra is as broken as your confidence!"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, completionsResponse(want))
+		_, _ = io.WriteString(w, completionsResponse(want))
 	}))
 	defer srv.Close()
 

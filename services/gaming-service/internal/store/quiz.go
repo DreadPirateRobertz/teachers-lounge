@@ -93,7 +93,7 @@ func (s *Store) RecordAnswer(ctx context.Context, sessionID, userID, questionID,
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Insert answer row.
 	const insertQ = `

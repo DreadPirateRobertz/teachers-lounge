@@ -199,7 +199,7 @@ func TestAttack_WrongAnswer_TauntServedFromCache(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 	var resp model.AttackResponse
-	json.NewDecoder(rr.Body).Decode(&resp)
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
 	if resp.Taunt != "Your algebra fails you, as expected!" {
 		t.Fatalf("expected cached taunt, got %q", resp.Taunt)
 	}
@@ -220,7 +220,7 @@ func TestAttack_WrongAnswer_TauntGeneratedAndSavedOnCacheMiss(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 	var resp model.AttackResponse
-	json.NewDecoder(rr.Body).Decode(&resp)
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
 	if resp.Taunt != "fresh generated taunt" {
 		t.Fatalf("expected generated taunt, got %q", resp.Taunt)
 	}
@@ -247,7 +247,7 @@ func TestAttack_CorrectAnswer_NoTauntInResponse(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 	var resp model.AttackResponse
-	json.NewDecoder(rr.Body).Decode(&resp)
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
 	if resp.Taunt != "" {
 		t.Fatalf("expected no taunt on correct answer, got %q", resp.Taunt)
 	}
