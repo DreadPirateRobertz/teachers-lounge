@@ -373,7 +373,7 @@ func TestGenerateFlashcards_IdempotentSkipsExisting(t *testing.T) {
 		t.Fatalf("expected 201 got %d", rr.Code)
 	}
 	var resp model.GenerateFlashcardsResponse
-	json.NewDecoder(rr.Body).Decode(&resp)
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
 	if resp.Created != 0 {
 		t.Errorf("expected 0 new cards (all skipped), got %d", resp.Created)
 	}
@@ -402,7 +402,7 @@ func TestListFlashcards_HappyPath(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", rr.Code, rr.Body)
 	}
 	var resp model.ListFlashcardsResponse
-	json.NewDecoder(rr.Body).Decode(&resp)
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
 	if resp.Total != 2 {
 		t.Errorf("expected 2 total, got %d", resp.Total)
 	}
@@ -445,7 +445,7 @@ func TestDueFlashcards_ReturnsDueOnly(t *testing.T) {
 		t.Fatalf("expected 200 got %d", rr.Code)
 	}
 	var resp model.ListFlashcardsResponse
-	json.NewDecoder(rr.Body).Decode(&resp)
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
 	if resp.DueCount != 1 {
 		t.Errorf("expected 1 due card, got %d", resp.DueCount)
 	}
@@ -477,7 +477,7 @@ func TestReviewFlashcard_HappyPath(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", rr.Code, rr.Body)
 	}
 	var resp model.ReviewFlashcardResponse
-	json.NewDecoder(rr.Body).Decode(&resp)
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
 	if resp.Card == nil {
 		t.Error("expected card in response, got nil")
 	}
