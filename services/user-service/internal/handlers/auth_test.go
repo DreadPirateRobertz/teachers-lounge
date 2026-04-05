@@ -312,10 +312,6 @@ func (m *mockCache) IncrWithTTL(_ context.Context, key string, _ time.Duration) 
 	return m.attempts[key], nil
 }
 
-func (m *mockCache) IncrWithTTL(_ context.Context, _ string, _ time.Duration) (int64, error) {
-	return 1, nil
-}
-
 // ============================================================
 // HELPERS
 // ============================================================
