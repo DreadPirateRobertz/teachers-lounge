@@ -2,8 +2,7 @@
  * @jest-environment jsdom
  */
 import React from 'react'
-import { render, screen, act } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
+import { render, screen, act, fireEvent } from '@testing-library/react'
 import LootRevealOverlay, { type LootDrop } from './LootRevealOverlay'
 
 jest.useFakeTimers()
@@ -105,11 +104,13 @@ describe('LootRevealOverlay', () => {
     expect(btn).not.toBeDisabled()
   })
 
-  it('calls onClaim when Claim button is clicked', async () => {
+  it('calls onClaim when Claim button is clicked', () => {
     const onClaim = jest.fn()
     render(<LootRevealOverlay loot={baseLoot} onClaim={onClaim} />)
     act(() => jest.advanceTimersByTime(3700))
-    await userEvent.click(screen.getByRole('button', { name: /claim/i }))
+    // Use fireEvent instead of userEvent to avoid fake-timer conflicts
+    // (userEvent v14 uses real timers internally).
+    fireEvent.click(screen.getByRole('button', { name: /claim/i }))
     expect(onClaim).toHaveBeenCalledTimes(1)
   })
 

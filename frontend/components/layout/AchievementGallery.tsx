@@ -103,11 +103,7 @@ export default function AchievementGallery({ userId, highlightType }: Achievemen
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           {achievements.map((a) => (
-            <BadgeCard
-              key={a.id}
-              achievement={a}
-              isNew={a.achievement_type === highlightType}
-            />
+            <BadgeCard key={a.id} achievement={a} isNew={a.achievement_type === highlightType} />
           ))}
         </div>
       )}
@@ -143,9 +139,7 @@ function BadgeCard({ achievement, isNew }: BadgeCardProps) {
         >
           {achievement.badge_name}
         </div>
-        <div className="text-[10px] text-text-dim mt-0.5">
-          {formatDate(achievement.earned_at)}
-        </div>
+        <div className="text-[10px] text-text-dim mt-0.5">{formatDate(achievement.earned_at)}</div>
       </div>
       {isNew ? (
         <span className="text-[9px] font-bold text-bg-deep bg-neon-gold px-1.5 py-0.5 rounded-full uppercase tracking-wider">

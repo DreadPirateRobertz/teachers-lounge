@@ -6,7 +6,10 @@ import { generateSmiles } from './MoleculeBuilder'
 
 // ── Fixtures ──────────────────────────────────────────────────────────────────
 
-function atom(id: string, symbol: string): { id: string; symbol: string; x: number; y: number; valence: number } {
+function atom(
+  id: string,
+  symbol: string,
+): { id: string; symbol: string; x: number; y: number; valence: number } {
   return { id, symbol, x: 0, y: 0, valence: 4 }
 }
 
@@ -73,7 +76,7 @@ describe('generateSmiles', () => {
     const bonds = [
       bond('b1', 'a', 'b'),
       bond('b2', 'b', 'c'),
-      bond('b3', 'c', 'a'),  // back-edge
+      bond('b3', 'c', 'a'), // back-edge
     ]
     const smiles = generateSmiles(atoms, bonds)
     // Ring closure should include a digit
@@ -92,12 +95,7 @@ describe('generateSmiles', () => {
 
   it('generates branched structure with parentheses', () => {
     // isobutane: C with 3 methyl branches
-    const atoms = [
-      atom('center', 'C'),
-      atom('m1', 'C'),
-      atom('m2', 'C'),
-      atom('m3', 'C'),
-    ]
+    const atoms = [atom('center', 'C'), atom('m1', 'C'), atom('m2', 'C'), atom('m3', 'C')]
     const bonds = [
       bond('b1', 'center', 'm1'),
       bond('b2', 'center', 'm2'),
