@@ -14,19 +14,18 @@ function makeParams(cardId: string): Params {
   return { params: Promise.resolve({ cardId }) }
 }
 
-function makeRequest(opts: { cardId?: string; body?: unknown; token?: string | null } = {}): NextRequest {
+function makeRequest(
+  opts: { cardId?: string; body?: unknown; token?: string | null } = {},
+): NextRequest {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (opts.token !== null) {
     headers['Authorization'] = `Bearer ${opts.token ?? MOCK_TOKEN}`
   }
-  return new NextRequest(
-    `http://localhost/api/flashcards/${opts.cardId ?? 'card-1'}/review`,
-    {
-      method: 'POST',
-      headers,
-      body: JSON.stringify(opts.body ?? { quality: 4 }),
-    },
-  )
+  return new NextRequest(`http://localhost/api/flashcards/${opts.cardId ?? 'card-1'}/review`, {
+    method: 'POST',
+    headers,
+    body: JSON.stringify(opts.body ?? { quality: 4 }),
+  })
 }
 
 describe('POST /api/flashcards/{cardId}/review', () => {
@@ -98,7 +97,10 @@ describe('POST /api/flashcards/{cardId}/review', () => {
     global.fetch = jest.fn().mockImplementation((_url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>
       return Promise.resolve(
-        new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
       )
     })
 
@@ -114,7 +116,10 @@ describe('POST /api/flashcards/{cardId}/review', () => {
     global.fetch = jest.fn().mockImplementation((_url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>
       return Promise.resolve(
-        new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
       )
     })
 
@@ -145,7 +150,10 @@ describe('POST /api/flashcards/{cardId}/review', () => {
     global.fetch = jest.fn().mockImplementation((_url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>
       return Promise.resolve(
-        new Response(JSON.stringify({}), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        new Response(JSON.stringify({}), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
       )
     })
 
