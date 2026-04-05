@@ -101,6 +101,9 @@ services:
       REFRESH_TOKEN_EXPIRY_DAYS: "30"
       STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-sk_test_placeholder}
       STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-whsec_placeholder}
+      STRIPE_PRICE_MONTHLY: ${STRIPE_PRICE_MONTHLY:-price_placeholder_monthly}
+      STRIPE_PRICE_QUARTERLY: ${STRIPE_PRICE_QUARTERLY:-price_placeholder_quarterly}
+      STRIPE_PRICE_SEMESTERLY: ${STRIPE_PRICE_SEMESTERLY:-price_placeholder_semesterly}
       LOG_LEVEL: info
     ports:
       - "127.0.0.1:8080:8080"
