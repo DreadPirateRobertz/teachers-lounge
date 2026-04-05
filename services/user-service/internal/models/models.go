@@ -271,7 +271,7 @@ type AuditLogEntry struct {
 	IPAddress    string     `json:"ip_address"`
 }
 
-// FERPA audit action constants used across user-service and tutoring-service.
+// Audit action constants used across user-service and tutoring-service.
 const (
 	AuditActionReadProfile      = "READ_PROFILE"
 	AuditActionReadInteractions = "READ_INTERACTIONS"
@@ -280,6 +280,13 @@ const (
 	AuditActionDeleteAccount    = "DELETE_ACCOUNT"
 	AuditActionExportData       = "EXPORT_DATA"
 	AuditActionAdminAccess      = "ADMIN_ACCESS"
+	AuditActionReadSubscription = "read_subscription"
+	AuditActionExportRequest    = "export_request"
+	AuditActionExportView       = "export_view"
+	AuditActionAccountDelete    = "account_delete"
+	AuditActionTeacherView      = "teacher_progress_view"
+	AuditActionQueryAuditLog    = "query_audit_log"
+	AuditActionConsentGiven     = "guardian_consent_given"
 )
 
 // ============================================================
@@ -342,19 +349,6 @@ type AuditEntry struct {
 	Purpose      string     `json:"purpose"`
 	IPAddress    string     `json:"ip_address,omitempty"`
 }
-
-// Audit action constants used across user-service and tutoring-service.
-const (
-	AuditActionReadProfile      = "read_profile"
-	AuditActionReadInteractions = "read_interactions"
-	AuditActionReadSubscription = "read_subscription"
-	AuditActionExportRequest    = "export_request"
-	AuditActionExportView       = "export_view"
-	AuditActionAccountDelete    = "account_delete"
-	AuditActionTeacherView      = "teacher_progress_view"
-	AuditActionQueryAuditLog    = "query_audit_log"
-	AuditActionConsentGiven     = "guardian_consent_given"
-)
 
 // ============================================================
 // GDPR DATA EXPORT

@@ -581,6 +581,8 @@ func (s *Store) TickRivals(ctx context.Context, rivals []rival.Rival) error {
 	if _, err := pipe.Exec(ctx); err != nil {
 		return fmt.Errorf("tick rivals: %w", err)
 	}
+	// Invalidate the leaderboard snapshot so the next read reflects updated scores.
+	_ = s.rdb.Del(ctx, leaderboardSnapshotPrefix+leaderboardKey).Err()
 	return nil
 }
 
