@@ -1,5 +1,4 @@
-"""
-Hybrid search combiner — Reciprocal Rank Fusion (RRF) over dense and sparse results.
+"""Hybrid search combiner — Reciprocal Rank Fusion (RRF) over dense and sparse results.
 
 RRF formula (Cormack et al., 2009):
     rrf_score(d) = Σ  1 / (k + rank_i(d))   for each result list i
@@ -25,8 +24,7 @@ def combine_dense_sparse(
     sparse_results: list[ChunkResult],
     k: int = 60,
 ) -> list[ChunkResult]:
-    """
-    Fuse *dense_results* and *sparse_results* using Reciprocal Rank Fusion.
+    """Fuse *dense_results* and *sparse_results* using Reciprocal Rank Fusion.
 
     Returns a new list sorted by descending RRF score.  The ``score`` field
     on each returned ChunkResult is the RRF score (not the original Qdrant

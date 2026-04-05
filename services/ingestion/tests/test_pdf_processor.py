@@ -79,7 +79,7 @@ class TestBuildHierarchicalChunks:
         assert chunks[0]["content_type"] == "text"
 
     def test_chapter_and_section_tracking(self):
-        from unstructured.documents.elements import Title, NarrativeText
+        from unstructured.documents.elements import NarrativeText, Title
         meta = MagicMock(page_number=1)
         meta2 = MagicMock(page_number=2)
 
@@ -201,6 +201,7 @@ class TestProcessPdfPipeline:
         self, mock_download, mock_digital, mock_partition, mock_db, mock_embed, mock_qdrant
     ):
         from pathlib import Path
+
         from unstructured.documents.elements import NarrativeText
 
         job = _make_job()

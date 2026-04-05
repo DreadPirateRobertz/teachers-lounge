@@ -1,5 +1,4 @@
-"""
-Re-ranking service — calls AI Gateway (LiteLLM) /rerank endpoint.
+"""Re-ranking service — calls AI Gateway (LiteLLM) /rerank endpoint.
 
 Uses Cohere rerank-english-v3.0 (or configured model) via the gateway.
 Falls back to passthrough (original RRF order) if reranking is disabled

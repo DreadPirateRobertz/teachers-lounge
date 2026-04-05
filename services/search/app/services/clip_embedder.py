@@ -91,6 +91,7 @@ async def embed_text_clip(text: str) -> list[float]:
         return _random_unit_vector(seed)
 
     import asyncio
+
     import torch
 
     loop = asyncio.get_running_loop()

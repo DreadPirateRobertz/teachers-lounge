@@ -7,10 +7,10 @@ from fastapi import FastAPI
 from app.metrics import metrics_app
 from app.metrics_middleware import PrometheusMiddleware
 from app.routers import ingest
-from app.services.db import close_pool
-from app.services.pubsub import start_subscriber
 from app.services import embeddings as embeddings_svc
 from app.services import qdrant as qdrant_svc
+from app.services.db import close_pool
+from app.services.pubsub import start_subscriber
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 logger = logging.getLogger(__name__)
@@ -18,6 +18,14 @@ logger = logging.getLogger(__name__)
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    """Manage application lifespan: initialize clients on startup, close on shutdown.
+
+    Args:
+        app: The FastAPI application instance.
+
+    Yields:
+        Control to the running application between startup and shutdown.
+    """
     # Initialize embedding + vector store clients
     embeddings_svc.init_client()
     qdrant_svc.init_client()
@@ -50,4 +58,9 @@ app.include_router(ingest.router)
 
 @app.get("/healthz")
 async def healthz() -> dict:
+    """Return service liveness status.
+
+    Returns:
+        Dict with ``status`` key set to ``"ok"``.
+    """
     return {"status": "ok"}

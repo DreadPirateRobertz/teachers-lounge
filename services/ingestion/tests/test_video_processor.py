@@ -141,6 +141,7 @@ class TestTranscribeGoogleSync:
         with patch.dict("sys.modules", {"google.cloud.speech": mock_speech, "google.cloud": MagicMock()}):
             # Reimport inside patch context
             import importlib
+
             import app.processors.video_processor as vp
             with patch.object(vp, "_transcribe_google_sync", wraps=vp._transcribe_google_sync):
                 # Call directly with patched modules

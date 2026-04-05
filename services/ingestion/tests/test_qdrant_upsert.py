@@ -13,7 +13,6 @@ import pytest
 
 from app.services.qdrant import _tokenize, upsert_chunks, upsert_diagrams
 
-
 # ── _tokenize ─────────────────────────────────────────────────────────────────
 
 

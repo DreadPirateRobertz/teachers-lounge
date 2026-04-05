@@ -15,8 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 async def process_pdf(job: IngestJobMessage) -> dict:
-    """Full PDF processing pipeline:
+    """Run the full PDF processing pipeline.
 
+    Steps:
     1. Download from GCS to temp file
     2. Detect digital vs scanned via pdfminer heuristic
     3. Parse with unstructured.io (layout-aware)
@@ -391,6 +392,25 @@ def _classify_element(element) -> str:
     return "text"
 
 
+def _classify_figure_type(caption: str) -> str:
+    """Classify a figure by type based on caption keywords.
+
+    Args:
+        caption: The figure caption text (may be empty).
+
+    Returns:
+        One of ``"table"``, ``"equation_image"``, ``"chart"``, or ``"diagram"``.
+    """
+    caption_lower = caption.lower()
+    if any(w in caption_lower for w in ("table", "tbl.")):
+        return "table"
+    if any(w in caption_lower for w in ("equation", "eq.", "formula")):
+        return "equation_image"
+    if any(w in caption_lower for w in ("chart", "graph", "plot")):
+        return "chart"
+    return "diagram"
+
+
 async def _process_figures(
     elements: list,
     material_id: UUID,
@@ -434,6 +454,8 @@ async def _process_figures(
         from unstructured.documents.elements import (  # noqa: PLC0415
             FigureCaption,
             Image,
+        )
+        from unstructured.documents.elements import (
             Title as _Title,
         )
         if isinstance(element, _Title):
@@ -463,16 +485,7 @@ async def _process_figures(
             caption = pending_caption or element.text.strip() or ""
             pending_caption = None
 
-            # Determine figure type from caption heuristics
-            caption_lower = caption.lower()
-            if any(w in caption_lower for w in ("table", "tbl.")):
-                figure_type = "table"
-            elif any(w in caption_lower for w in ("equation", "eq.", "formula")):
-                figure_type = "equation_image"
-            elif any(w in caption_lower for w in ("chart", "graph", "plot")):
-                figure_type = "chart"
-            else:
-                figure_type = "diagram"
+            figure_type = _classify_figure_type(caption)
 
             try:
                 vector = await clip_embedder.embed_image(image_path)
