@@ -11,6 +11,3 @@ ignore = ["E501"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-
-[project]
-requires-python = ">=3.11,<3.14"

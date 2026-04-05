@@ -16,7 +16,7 @@ from uuid import UUID, uuid4
 from google.cloud import storage
 
 from app.config import settings
-from app.models import IngestJobMessage, ProcessingStatus
+from app.models import ProcessingStatus
 from app.services import db, embeddings, qdrant
 
 logger = logging.getLogger(__name__)

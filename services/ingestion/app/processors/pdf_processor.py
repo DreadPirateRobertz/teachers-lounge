@@ -185,9 +185,7 @@ def _build_hierarchical_chunks(
     """
     # Lazy imports — unstructured is only needed when actually processing a PDF
     from unstructured.documents.elements import (  # noqa: PLC0415
-        FigureCaption,
         Formula,
-        Image,
         Table,
         Title,
     )
@@ -409,7 +407,11 @@ async def _process_figures(
         if page is not None:
             current_page = page
 
-        from unstructured.documents.elements import Title as _Title
+        from unstructured.documents.elements import (  # noqa: PLC0415
+            FigureCaption,
+            Image,
+            Title as _Title,
+        )
         if isinstance(element, _Title):
             text = element.text.strip()
             if text and len(text) < 60 and text[0].isupper():
