@@ -2,36 +2,21 @@ import uuid
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, status
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+from fastapi import APIRouter, Depends, UploadFile, HTTPException, status
 
+from app.auth import require_auth
 from app.config import settings
 from app.models import ACCEPTED_MIME_TYPES, IngestJobMessage, ProcessingStatus, UploadResponse
 from app.services import db, gcs, pubsub
 
 router = APIRouter(prefix="/v1/ingest", tags=["ingest"])
-bearer = HTTPBearer()
-
-
-def _get_user_id(
-    credentials: Annotated[HTTPAuthorizationCredentials, Depends(bearer)],
-) -> uuid.UUID:
-    """
-    Stub auth: extract user_id from Bearer token.
-    Phase 2 full implementation: validate JWT, extract sub claim.
-    """
-    try:
-        return uuid.UUID(credentials.credentials)
-    except ValueError:
-        # In production this will be a real JWT decode
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="invalid token")
 
 
 @router.post("/upload", response_model=UploadResponse, status_code=status.HTTP_202_ACCEPTED)
 async def upload_file(
     file: UploadFile,
     course_id: uuid.UUID,
-    user_id: Annotated[uuid.UUID, Depends(_get_user_id)],
+    user_id: Annotated[uuid.UUID, Depends(require_auth)],
 ) -> UploadResponse:
     """
     Accept a course material upload, store in GCS, enqueue for processing.
