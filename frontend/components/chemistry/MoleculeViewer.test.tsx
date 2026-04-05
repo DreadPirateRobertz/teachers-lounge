@@ -36,8 +36,7 @@ jest.mock('@react-three/drei', () => ({
 // MoleculeViewer calls dynamic(() => import('./MoleculeViewerCanvas'), {ssr:false}).
 // We intercept and require MoleculeViewerCanvas directly.
 jest.mock('next/dynamic', () => {
-  // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const MoleculeViewerCanvas = require('./MoleculeViewerCanvas').default
+  const MoleculeViewerCanvas = require('./MoleculeViewerCanvas').default // jest mock — require is intentional
   return (_loader: unknown, _opts?: unknown) => MoleculeViewerCanvas
 })
 

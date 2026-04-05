@@ -37,7 +37,7 @@ qdrant-client==1.12.1
 PyMuPDF==1.24.3
 Pillow==10.4.0
 transformers==4.44.2
-torch==2.4.1
+torch==2.5.1
 
 # Test dependencies
 pytest==8.3.3
