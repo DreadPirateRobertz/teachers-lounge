@@ -37,14 +37,22 @@ func New(store NotifStore, pusher push.Pusher, logger *zap.Logger) *Handler {
 
 // RegisterToken handles POST /notify/push/token.
 // Registers or refreshes a device push token for the authenticated user.
+// The user ID is taken from the request context (set by auth middleware), not
+// the request body — the body only carries token + platform.
 func (h *Handler) RegisterToken(w http.ResponseWriter, r *http.Request) {
+	userID := middleware.UserIDFromContext(r.Context())
+	if userID == "" {
+		http.Error(w, "unauthorized", http.StatusUnauthorized)
+		return
+	}
+
 	var req model.RegisterTokenRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		http.Error(w, "invalid request body", http.StatusBadRequest)
 		return
 	}
-	if req.UserID == "" || req.Token == "" {
-		http.Error(w, "user_id and token are required", http.StatusBadRequest)
+	if req.Token == "" {
+		http.Error(w, "token is required", http.StatusBadRequest)
 		return
 	}
 	platform := req.Platform
@@ -52,17 +60,13 @@ func (h *Handler) RegisterToken(w http.ResponseWriter, r *http.Request) {
 		platform = "web"
 	}
 
-	if err := h.store.SavePushToken(r.Context(), req.UserID, req.Token, platform); err != nil {
+	if err := h.store.SavePushToken(r.Context(), userID, req.Token, platform); err != nil {
 		h.logger.Error("save push token", zap.Error(err))
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(map[string]string{"status": "registered"}); err != nil {
-		h.logger.Error("encode register-token response", zap.Error(err))
-	}
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // Push handles POST /notify/push.
