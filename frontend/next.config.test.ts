@@ -26,7 +26,7 @@ describe('next.config security headers', () => {
     expect(csp).toBeDefined()
     expect(csp!.value).toContain("default-src 'self'")
     expect(csp!.value).toContain("frame-ancestors 'none'")
-    expect(csp!.value).toContain('upgrade-insecure-requests')
+    expect(csp!.value).not.toContain('upgrade-insecure-requests')
     expect(csp!.value).toContain("form-action 'self'")
   })
 
@@ -40,10 +40,9 @@ describe('next.config security headers', () => {
     expect(h?.value).toBe('nosniff')
   })
 
-  it('sets HSTS with long max-age and includeSubDomains', () => {
+  it('does not set HSTS — handled by reverse proxy in production', () => {
     const h = headers.find((hdr) => hdr.key === 'Strict-Transport-Security')
-    expect(h?.value).toContain('max-age=63072000')
-    expect(h?.value).toContain('includeSubDomains')
+    expect(h).toBeUndefined()
   })
 
   it('sets Referrer-Policy', () => {

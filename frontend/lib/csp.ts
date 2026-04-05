@@ -38,10 +38,9 @@ export function buildCsp(nonce?: string): string {
     "form-action 'self'",
   ]
 
-  // Only upgrade to HTTPS in production — local dev runs over plain HTTP
-  if (process.env.NODE_ENV === 'production' && process.env.DISABLE_HSTS !== 'true') {
-    directives.push('upgrade-insecure-requests')
-  }
+  // upgrade-insecure-requests is handled by the reverse proxy (nginx/caddy)
+  // in production. Next.js standalone bakes CSP at build time, so we cannot
+  // toggle it with runtime env vars.
 
   return directives.join('; ')
 }
