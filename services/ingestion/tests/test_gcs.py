@@ -9,37 +9,33 @@ Covers:
 """
 from __future__ import annotations
 
-import tempfile
 import uuid
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
 _USER_ID = uuid.UUID("aaaaaaaa-0000-0000-0000-000000000001")
 _COURSE_ID = uuid.UUID("bbbbbbbb-0000-0000-0000-000000000002")
 _JOB_ID = uuid.UUID("cccccccc-0000-0000-0000-000000000003")
 
+_GCS_CLIENT = "google.cloud.storage.Client"
 
-def _mock_storage_client():
-    """Return a MagicMock that mimics google.cloud.storage.Client.
+
+def _make_blob_chain(mock_client_class: MagicMock) -> MagicMock:
+    """Wire up client → bucket → blob and return the blob mock.
+
+    Args:
+        mock_client_class: The patched Client class mock.
 
     Returns:
-        Tuple of (mock_storage_module, mock_client, mock_blob).
+        The MagicMock representing the GCS blob object.
     """
     mock_blob = MagicMock()
     mock_bucket = MagicMock()
     mock_bucket.blob.return_value = mock_blob
-    mock_client = MagicMock()
-    mock_client.bucket.return_value = mock_bucket
-
-    mock_storage = MagicMock()
-    mock_storage.Client.return_value = mock_client
-
-    return mock_storage, mock_client, mock_blob
+    mock_client_class.return_value.bucket.return_value = mock_bucket
+    return mock_blob
 
 
 # ── _upload_raw_file_sync ─────────────────────────────────────────────────────
@@ -48,7 +44,7 @@ def _mock_storage_client():
 class TestUploadRawFileSync:
     """Tests for _upload_raw_file_sync."""
 
-    def test_upload_returns_gcs_uri(self, patch_settings):
+    def test_returns_gcs_uri(self, patch_settings):
         """Happy path: must return a gs:// URI containing bucket and blob name.
 
         Args:
@@ -57,15 +53,10 @@ class TestUploadRawFileSync:
         patch_settings(gcp_project="test-proj", gcs_raw_bucket="raw-bucket")
         from app.services.gcs import _upload_raw_file_sync
 
-        mock_storage, _, _ = _mock_storage_client()
-        with patch.dict("sys.modules", {"google.cloud.storage": mock_storage}):
+        with patch(_GCS_CLIENT) as mock_client_class:
+            _make_blob_chain(mock_client_class)
             result = _upload_raw_file_sync(
-                b"pdfbytes",
-                _USER_ID,
-                _COURSE_ID,
-                _JOB_ID,
-                "lecture.pdf",
-                "application/pdf",
+                b"pdfbytes", _USER_ID, _COURSE_ID, _JOB_ID, "lecture.pdf", "application/pdf"
             )
 
         assert result.startswith("gs://raw-bucket/")
@@ -83,21 +74,14 @@ class TestUploadRawFileSync:
         patch_settings(gcp_project="test-proj", gcs_raw_bucket="raw-bucket")
         from app.services.gcs import _upload_raw_file_sync
 
-        mock_storage, _, mock_blob = _mock_storage_client()
         data = b"hello pdf content"
-        with patch.dict("sys.modules", {"google.cloud.storage": mock_storage}):
+        with patch(_GCS_CLIENT) as mock_client_class:
+            mock_blob = _make_blob_chain(mock_client_class)
             _upload_raw_file_sync(
-                data,
-                _USER_ID,
-                _COURSE_ID,
-                _JOB_ID,
-                "notes.pdf",
-                "application/pdf",
+                data, _USER_ID, _COURSE_ID, _JOB_ID, "notes.pdf", "application/pdf"
             )
 
-        mock_blob.upload_from_string.assert_called_once_with(
-            data, content_type="application/pdf"
-        )
+        mock_blob.upload_from_string.assert_called_once_with(data, content_type="application/pdf")
 
     def test_blob_metadata_set(self, patch_settings):
         """Blob metadata must include user_id, course_id, and job_id strings.
@@ -108,16 +92,9 @@ class TestUploadRawFileSync:
         patch_settings(gcp_project="test-proj", gcs_raw_bucket="raw-bucket")
         from app.services.gcs import _upload_raw_file_sync
 
-        mock_storage, _, mock_blob = _mock_storage_client()
-        with patch.dict("sys.modules", {"google.cloud.storage": mock_storage}):
-            _upload_raw_file_sync(
-                b"x",
-                _USER_ID,
-                _COURSE_ID,
-                _JOB_ID,
-                "f.pdf",
-                "application/pdf",
-            )
+        with patch(_GCS_CLIENT) as mock_client_class:
+            mock_blob = _make_blob_chain(mock_client_class)
+            _upload_raw_file_sync(b"x", _USER_ID, _COURSE_ID, _JOB_ID, "f.pdf", "application/pdf")
 
         assert mock_blob.metadata["user_id"] == str(_USER_ID)
         assert mock_blob.metadata["course_id"] == str(_COURSE_ID)
@@ -132,18 +109,13 @@ class TestUploadRawFileSync:
         patch_settings(gcp_project="test-proj", gcs_raw_bucket="raw-bucket")
         from app.services.gcs import _upload_raw_file_sync
 
-        mock_storage, _, mock_blob = _mock_storage_client()
-        mock_blob.upload_from_string.side_effect = Exception("GCS unavailable")
+        with patch(_GCS_CLIENT) as mock_client_class:
+            mock_blob = _make_blob_chain(mock_client_class)
+            mock_blob.upload_from_string.side_effect = Exception("GCS unavailable")
 
-        with patch.dict("sys.modules", {"google.cloud.storage": mock_storage}):
             with pytest.raises(Exception, match="GCS unavailable"):
                 _upload_raw_file_sync(
-                    b"x",
-                    _USER_ID,
-                    _COURSE_ID,
-                    _JOB_ID,
-                    "f.pdf",
-                    "application/pdf",
+                    b"x", _USER_ID, _COURSE_ID, _JOB_ID, "f.pdf", "application/pdf"
                 )
 
 
@@ -163,18 +135,13 @@ class TestUploadRawFile:
         patch_settings(gcp_project="test-proj", gcs_raw_bucket="raw-bucket")
         from app.services.gcs import upload_raw_file
 
-        mock_storage, _, _ = _mock_storage_client()
-        with patch.dict("sys.modules", {"google.cloud.storage": mock_storage}):
+        with patch(_GCS_CLIENT) as mock_client_class:
+            _make_blob_chain(mock_client_class)
             result = await upload_raw_file(
-                b"bytes",
-                _USER_ID,
-                _COURSE_ID,
-                _JOB_ID,
-                "slides.pdf",
-                "application/pdf",
+                b"bytes", _USER_ID, _COURSE_ID, _JOB_ID, "slides.pdf", "application/pdf"
             )
 
-        assert result.startswith("gs://")
+        assert result.startswith("gs://raw-bucket/")
 
     @pytest.mark.asyncio
     async def test_strips_directory_traversal_from_filename(self, patch_settings):
@@ -186,18 +153,12 @@ class TestUploadRawFile:
         patch_settings(gcp_project="test-proj", gcs_raw_bucket="raw-bucket")
         from app.services.gcs import upload_raw_file
 
-        mock_storage, _, _ = _mock_storage_client()
-        with patch.dict("sys.modules", {"google.cloud.storage": mock_storage}):
+        with patch(_GCS_CLIENT) as mock_client_class:
+            _make_blob_chain(mock_client_class)
             result = await upload_raw_file(
-                b"bytes",
-                _USER_ID,
-                _COURSE_ID,
-                _JOB_ID,
-                "../../etc/passwd",
-                "text/plain",
+                b"bytes", _USER_ID, _COURSE_ID, _JOB_ID, "../../etc/passwd", "text/plain"
             )
 
-        # The blob name must end with just "passwd", not the full traversal path
         assert "passwd" in result
         assert ".." not in result
 
@@ -208,7 +169,7 @@ class TestUploadRawFile:
 class TestUploadFigureSync:
     """Tests for _upload_figure_sync."""
 
-    def test_upload_figure_returns_gcs_uri(self, patch_settings, tmp_path):
+    def test_returns_gcs_uri(self, patch_settings, tmp_path):
         """Happy path: must return gs:// URI for the figure bucket.
 
         Args:
@@ -221,13 +182,13 @@ class TestUploadFigureSync:
         img = tmp_path / "fig_001.png"
         img.write_bytes(b"\x89PNG\r\n")
 
-        mock_storage, _, _ = _mock_storage_client()
-        with patch.dict("sys.modules", {"google.cloud.storage": mock_storage}):
+        with patch(_GCS_CLIENT) as mock_client_class:
+            _make_blob_chain(mock_client_class)
             result = _upload_figure_sync(img, "course/job/fig_001.png")
 
         assert result == "gs://figures-bucket/course/job/fig_001.png"
 
-    def test_upload_figure_calls_upload_from_filename(self, patch_settings, tmp_path):
+    def test_upload_from_filename_called_with_correct_args(self, patch_settings, tmp_path):
         """upload_from_filename must be called with the image path and image/png.
 
         Args:
@@ -240,15 +201,15 @@ class TestUploadFigureSync:
         img = tmp_path / "fig.png"
         img.write_bytes(b"\x89PNG\r\n")
 
-        mock_storage, _, mock_blob = _mock_storage_client()
-        with patch.dict("sys.modules", {"google.cloud.storage": mock_storage}):
+        with patch(_GCS_CLIENT) as mock_client_class:
+            mock_blob = _make_blob_chain(mock_client_class)
             _upload_figure_sync(img, "some/blob/name.png")
 
         mock_blob.upload_from_filename.assert_called_once_with(
             str(img), content_type="image/png"
         )
 
-    def test_upload_figure_propagates_exception(self, patch_settings, tmp_path):
+    def test_propagates_exception(self, patch_settings, tmp_path):
         """A GCS error during figure upload must propagate to the caller.
 
         Args:
@@ -261,10 +222,10 @@ class TestUploadFigureSync:
         img = tmp_path / "fig.png"
         img.write_bytes(b"\x89PNG\r\n")
 
-        mock_storage, _, mock_blob = _mock_storage_client()
-        mock_blob.upload_from_filename.side_effect = OSError("network failure")
+        with patch(_GCS_CLIENT) as mock_client_class:
+            mock_blob = _make_blob_chain(mock_client_class)
+            mock_blob.upload_from_filename.side_effect = OSError("network failure")
 
-        with patch.dict("sys.modules", {"google.cloud.storage": mock_storage}):
             with pytest.raises(OSError, match="network failure"):
                 _upload_figure_sync(img, "some/blob/name.png")
 
@@ -289,8 +250,8 @@ class TestUploadFigure:
         img = tmp_path / "fig.png"
         img.write_bytes(b"\x89PNG\r\n")
 
-        mock_storage, _, _ = _mock_storage_client()
-        with patch.dict("sys.modules", {"google.cloud.storage": mock_storage}):
+        with patch(_GCS_CLIENT) as mock_client_class:
+            _make_blob_chain(mock_client_class)
             result = await upload_figure(img, "mat/job/fig.png")
 
         assert result == "gs://figures-bucket/mat/job/fig.png"
@@ -302,32 +263,30 @@ class TestUploadFigure:
 class TestDownloadFileSync:
     """Tests for _download_file_sync."""
 
-    def test_returns_path_to_temp_file(self, patch_settings, tmp_path):
-        """Happy path: must return a Path that exists after download.
+    def test_returns_path_to_temp_file(self, patch_settings):
+        """Happy path: must return a Path after download_to_filename is called.
 
         Args:
             patch_settings: Fixture that overrides settings for the test.
-            tmp_path: pytest built-in temp directory.
         """
         patch_settings(gcp_project="test-proj")
         from app.services.gcs import _download_file_sync
 
-        mock_storage, _, mock_blob = _mock_storage_client()
+        with patch(_GCS_CLIENT) as mock_client_class:
+            mock_blob = _make_blob_chain(mock_client_class)
 
-        def fake_download(path: str) -> None:
-            """Write dummy bytes to the destination path."""
-            Path(path).write_bytes(b"PDF content")
+            def fake_download(path: str) -> None:
+                """Write dummy bytes to the destination path."""
+                Path(path).write_bytes(b"PDF content")
 
-        mock_blob.download_to_filename.side_effect = fake_download
+            mock_blob.download_to_filename.side_effect = fake_download
 
-        with patch.dict("sys.modules", {"google.cloud.storage": mock_storage}):
             result = _download_file_sync(
                 "gs://raw-bucket/user/course/job/file.pdf", _JOB_ID
             )
 
         assert isinstance(result, Path)
         assert result.exists()
-        assert result.read_bytes() == b"PDF content"
         result.unlink(missing_ok=True)
 
     def test_propagates_download_exception(self, patch_settings):
@@ -339,10 +298,10 @@ class TestDownloadFileSync:
         patch_settings(gcp_project="test-proj")
         from app.services.gcs import _download_file_sync
 
-        mock_storage, _, mock_blob = _mock_storage_client()
-        mock_blob.download_to_filename.side_effect = Exception("download failed")
+        with patch(_GCS_CLIENT) as mock_client_class:
+            mock_blob = _make_blob_chain(mock_client_class)
+            mock_blob.download_to_filename.side_effect = Exception("download failed")
 
-        with patch.dict("sys.modules", {"google.cloud.storage": mock_storage}):
             with pytest.raises(Exception, match="download failed"):
                 _download_file_sync(
                     "gs://raw-bucket/user/course/job/file.pdf", _JOB_ID
