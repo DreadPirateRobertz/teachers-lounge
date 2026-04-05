@@ -80,6 +80,10 @@ describe('POST /api/user/auth/[action]', () => {
     const setCookieHeader = res.headers.get('Set-Cookie') ?? ''
     expect(setCookieHeader).toContain('tl_token')
     expect(setCookieHeader).toContain(MOCK_TOKEN)
+    expect(setCookieHeader).toMatch(/HttpOnly/i)
+    expect(setCookieHeader).toMatch(/Secure/i)
+    expect(setCookieHeader).toMatch(/SameSite=Strict/i)
+    expect(setCookieHeader).toContain('Max-Age=900')
   })
 
   it('does not set tl_token cookie when login fails', async () => {
