@@ -7,9 +7,9 @@ select = ["E", "F", "I", "W"]
 ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
-# Test imports are often used via pytest fixtures or conftest side-effects;
-# F401 false-positives are common in test files.
-"tests/**" = ["F401"]
+# Test files: F401 (conftest re-exports), F841 (assigned-but-unused mocks),
+# I001 (import ordering less critical in test files with inline imports).
+"tests/**" = ["F401", "F841", "I001"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
