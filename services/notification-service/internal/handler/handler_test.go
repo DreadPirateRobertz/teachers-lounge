@@ -162,16 +162,16 @@ func TestPush_NoTokens_Returns200WithoutSend(t *testing.T) {
 
 // ── Email tests ───────────────────────────────────────────────────────────────
 
-func TestEmail_ValidRequest_Returns200(t *testing.T) {
+func TestEmail_ValidRequest_Returns202(t *testing.T) {
 	h := newHandler()
-	body := jsonBody(model.EmailRequest{UserID: "u1", Template: "welcome"})
+	body := jsonBody(model.EmailRequest{UserID: "u1", To: "test@example.com", Template: "welcome"})
 	req := httptest.NewRequest(http.MethodPost, "/notify/email", body)
 	rr := httptest.NewRecorder()
 
 	h.Email(rr, req)
 
-	if rr.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	if rr.Code != http.StatusAccepted {
+		t.Fatalf("expected 202, got %d: %s", rr.Code, rr.Body.String())
 	}
 }
 
