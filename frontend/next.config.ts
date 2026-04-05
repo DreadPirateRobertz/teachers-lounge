@@ -1,40 +1,24 @@
 import type { NextConfig } from 'next'
+import { buildCsp } from './lib/csp'
 
 const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://user-service:8080'
 const TUTORING_SERVICE_URL = process.env.TUTORING_SERVICE_URL || 'http://tutoring-service:8000'
 
 /**
- * Content-Security-Policy header value.
+ * Static CSP fallback for routes that bypass middleware (API routes,
+ * static assets).  No nonce is included — script-src is 'self' only.
  *
- * Policy rationale:
- * - default-src 'self': block all unlisted origins by default
- * - script-src 'self' 'unsafe-inline': Next.js inline scripts required for hydration;
- *   'unsafe-inline' weakens XSS protection — tracked in tl-ixk for migration to
- *   per-request nonces via Next.js middleware + <Script nonce={nonce} />
- * - style-src 'self' 'unsafe-inline': Tailwind + emotion CSS-in-JS require inline styles
- * - img-src 'self' data: blob:: data: for canvas/Three.js screenshots, blob: for
- *   generated molecule renders
- * - font-src 'self': web fonts served from /public
- * - connect-src 'self': fetch/XHR only to same origin (API routes proxy to backends)
- * - media-src 'self' blob:: blob: for TTS audio player (Web Audio API)
+ * Page routes receive a per-request nonce injected by middleware.ts
+ * (tl-ixk), which overrides this header with `'nonce-<value>'` in
+ * script-src, enabling Next.js hydration scripts without unsafe-inline.
+ *
+ * Style rationale:
+ * - style-src 'self' 'unsafe-inline': Tailwind + CSS-in-JS require inline styles
+ * - img-src data: blob:: canvas/Three.js screenshots + molecule renders
+ * - media-src blob:: TTS audio via Web Audio API
  * - worker-src blob:: Three.js OffscreenCanvas workers
- * - frame-ancestors 'none': blocks clickjacking
- * - form-action 'self': prevents form POST hijacking
- * - upgrade-insecure-requests: force HTTPS in prod
  */
-const CSP = [
-  "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
-  "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
-  "font-src 'self'",
-  "connect-src 'self'",
-  "media-src 'self' blob:",
-  'worker-src blob:',
-  "frame-ancestors 'none'",
-  "form-action 'self'",
-  'upgrade-insecure-requests',
-].join('; ')
+const CSP = buildCsp()
 
 const SECURITY_HEADERS = [
   { key: 'Content-Security-Policy', value: CSP },
