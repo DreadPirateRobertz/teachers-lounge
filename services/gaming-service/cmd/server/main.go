@@ -17,6 +17,7 @@ import (
 
 	"github.com/teacherslounge/gaming-service/internal/handler"
 	"github.com/teacherslounge/gaming-service/internal/middleware"
+	"github.com/teacherslounge/gaming-service/internal/ratelimit"
 	"github.com/teacherslounge/gaming-service/internal/rival"
 	"github.com/teacherslounge/gaming-service/internal/store"
 )
@@ -47,6 +48,7 @@ func main() {
 
 	st := store.New(pool, rdb)
 	h := handler.New(st, logger)
+	rl := ratelimit.New(rdb)
 
 	// Seed simulated rivals into the leaderboard (idempotent — ZAddNX).
 	if err := st.SeedRivals(context.Background(), rival.Roster); err != nil {
@@ -67,7 +69,7 @@ func main() {
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Authenticate(cfg.jwtSecret))
 
-		r.Post("/gaming/xp", h.GainXP)
+		r.With(middleware.RateLimit(rl, ratelimit.BucketXP, logger)).Post("/gaming/xp", h.GainXP)
 		r.Get("/gaming/profile/{userId}", h.GetProfile)
 		r.Post("/gaming/streak/checkin", h.StreakCheckin)
 		r.Post("/gaming/leaderboard/update", h.LeaderboardUpdate)
@@ -77,9 +79,9 @@ func main() {
 		r.Get("/gaming/quotes/random", h.RandomQuote)
 
 		// Quiz system
-		r.Post("/gaming/quiz/start", h.StartQuiz)
+		r.With(middleware.RateLimit(rl, ratelimit.BucketQuizStart, logger)).Post("/gaming/quiz/start", h.StartQuiz)
 		r.Get("/gaming/quiz/sessions/{sessionId}", h.GetQuizSession)
-		r.Post("/gaming/quiz/sessions/{sessionId}/answer", h.SubmitAnswer)
+		r.With(middleware.RateLimit(rl, ratelimit.BucketQuizAnswer, logger)).Post("/gaming/quiz/sessions/{sessionId}/answer", h.SubmitAnswer)
 		r.Get("/gaming/quiz/sessions/{sessionId}/hint", h.GetHint)
 		r.Get("/gaming/quests/daily", h.GetDailyQuests)
 		r.Post("/gaming/quests/progress", h.UpdateQuestProgress)
