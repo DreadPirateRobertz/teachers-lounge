@@ -92,6 +92,7 @@ services:
       DB_NAME: teacherslounge
       DB_USER: tl_app
       DB_PASSWORD: ${POSTGRES_PASSWORD:-localdevpassword}
+      DATABASE_URL: "postgres://tl_app:${POSTGRES_PASSWORD:-localdevpassword}@postgres:5432/teacherslounge?sslmode=disable"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-localredispassword}
