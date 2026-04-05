@@ -1,0 +1,65 @@
+# Grafana dashboard — RAG Pipeline
+# Shows per-step latency, retrieval hit rate, and token usage trends.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-rag
+  namespace: {{ .Release.Namespace }}
+  labels:
+    grafana_dashboard: "1"
+    {{- include "tl-monitoring.labels" . | nindent 4 }}
+data:
+  rag-pipeline.json: |
+    {
+      "title": "TeachersLounge — RAG Pipeline",
+      "uid": "tl-rag",
+      "tags": ["teacherslounge", "rag", "tutoring"],
+      "refresh": "30s",
+      "schemaVersion": 38,
+      "panels": [
+        {
+          "id": 1,
+          "title": "RAG Step p95 Latency (ms)",
+          "type": "timeseries",
+          "gridPos": {"h": 9, "w": 24, "x": 0, "y": 0},
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(tl_rag_latency_seconds_bucket[5m])) by (le, step)) * 1000",
+              "legendFormat": "{{ "{{step}}" }}"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "title": "Tokens Used per Model (rate)",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 9},
+          "targets": [
+            {
+              "expr": "sum(rate(tl_tokens_used_total[5m])) by (model, token_type)",
+              "legendFormat": "{{ "{{model}}" }} {{ "{{token_type}}" }}"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "title": "SSE TTFB p50 / p95 / p99 (ms)",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 9},
+          "targets": [
+            {
+              "expr": "histogram_quantile(0.50, sum(rate(tl_stream_ttfb_seconds_bucket[5m])) by (le)) * 1000",
+              "legendFormat": "p50"
+            },
+            {
+              "expr": "histogram_quantile(0.95, sum(rate(tl_stream_ttfb_seconds_bucket[5m])) by (le)) * 1000",
+              "legendFormat": "p95"
+            },
+            {
+              "expr": "histogram_quantile(0.99, sum(rate(tl_stream_ttfb_seconds_bucket[5m])) by (le)) * 1000",
+              "legendFormat": "p99"
+            }
+          ]
+        }
+      ]
+    }

@@ -11,6 +11,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
+from .metrics import metrics_app
+from .metrics_middleware import PrometheusMiddleware
 from .routes.student import router as student_router
 
 logging.basicConfig(level=settings.log_level.upper())
@@ -22,12 +24,15 @@ app = FastAPI(
     description="Student learning analytics: XP progression, quiz breakdown, activity history.",
 )
 
+app.add_middleware(PrometheusMiddleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.allowed_origins.split(","),
     allow_methods=["GET"],
     allow_headers=["Authorization", "Content-Type"],
 )
+
+app.mount("/metrics", metrics_app)
 
 app.include_router(student_router)
 

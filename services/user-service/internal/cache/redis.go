@@ -157,4 +157,53 @@ func (c *Client) Delete(ctx context.Context, keys ...string) error {
 	return c.rdb.Del(ctx, keys...).Err()
 }
 
+// DeleteUserKeys removes all Redis keys scoped to a user ID.
+// Deletes fixed keys (session, streak, daily quests, xp today) and
+// scans for wildcard boss-state keys (boss:{userID}:*).
+func (c *Client) DeleteUserKeys(ctx context.Context, userID string) error {
+	// Fixed keys
+	fixed := []string{
+		fmt.Sprintf("session:%s", userID),
+		fmt.Sprintf("streak:%s", userID),
+		fmt.Sprintf("quests:daily:%s", userID),
+		fmt.Sprintf("xp:today:%s", userID),
+		fmt.Sprintf("quotes:seen:%s", userID),
+		fmt.Sprintf("ratelimit:%s:notif", userID),
+	}
+	if err := c.rdb.Del(ctx, fixed...).Err(); err != nil {
+		return err
+	}
+
+	// Wildcard boss-state keys: boss:{userID}:*
+	pattern := fmt.Sprintf("boss:%s:*", userID)
+	var cursor uint64
+	for {
+		keys, next, err := c.rdb.Scan(ctx, cursor, pattern, 100).Result()
+		if err != nil {
+			return err
+		}
+		if len(keys) > 0 {
+			if err := c.rdb.Del(ctx, keys...).Err(); err != nil {
+				return err
+			}
+		}
+		cursor = next
+		if cursor == 0 {
+			break
+		}
+	}
+	return nil
+}
+
+// IncrWithTTL atomically increments key and sets TTL if the key is new.
+func (c *Client) IncrWithTTL(ctx context.Context, key string, ttl time.Duration) (int64, error) {
+	pipe := c.rdb.Pipeline()
+	incr := pipe.Incr(ctx, key)
+	pipe.Expire(ctx, key, ttl)
+	if _, err := pipe.Exec(ctx); err != nil {
+		return 0, err
+	}
+	return incr.Val(), nil
+}
+
 var ErrCacheMiss = fmt.Errorf("cache miss")

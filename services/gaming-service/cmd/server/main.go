@@ -12,10 +12,12 @@ import (
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
 	"github.com/teacherslounge/gaming-service/internal/handler"
+	tlmetrics "github.com/teacherslounge/gaming-service/internal/metrics"
 	"github.com/teacherslounge/gaming-service/internal/middleware"
 	"github.com/teacherslounge/gaming-service/internal/ratelimit"
 	"github.com/teacherslounge/gaming-service/internal/rival"
@@ -76,8 +78,10 @@ func main() {
 	r.Use(chimw.RealIP)
 	r.Use(chimw.Recoverer)
 	r.Use(chimw.Timeout(30 * time.Second))
+	r.Use(tlmetrics.HTTPMiddleware)
 
 	r.Get("/health", h.Health)
+	r.Handle("/metrics", promhttp.Handler())
 
 	// Authenticated routes
 	r.Group(func(r chi.Router) {

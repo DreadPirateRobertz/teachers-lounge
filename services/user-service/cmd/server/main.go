@@ -12,11 +12,13 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimw "github.com/go-chi/chi/v5/middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/teacherslounge/user-service/internal/auth"
 	"github.com/teacherslounge/user-service/internal/billing"
 	"github.com/teacherslounge/user-service/internal/cache"
 	"github.com/teacherslounge/user-service/internal/config"
 	"github.com/teacherslounge/user-service/internal/handlers"
+	tlmetrics "github.com/teacherslounge/user-service/internal/metrics"
 	"github.com/teacherslounge/user-service/internal/middleware"
 	"github.com/teacherslounge/user-service/internal/models"
 	"github.com/teacherslounge/user-service/internal/store"
@@ -79,12 +81,16 @@ func main() {
 	r.Use(chimw.Logger)
 	r.Use(chimw.Recoverer)
 	r.Use(chimw.Timeout(30 * time.Second))
+	r.Use(tlmetrics.HTTPMiddleware)
 
 	// Health check (no auth)
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
 	})
+
+	// Prometheus metrics endpoint
+	r.Handle("/metrics", promhttp.Handler())
 
 	// Auth routes (no JWT required — these issue tokens)
 	r.Route("/auth", func(r chi.Router) {
@@ -110,6 +116,8 @@ func main() {
 		r.Post("/export", usersH.ExportData)
 		r.Get("/export/{jobID}", usersH.GetExport)
 		r.Delete("", usersH.DeleteAccount)
+		r.Get("/consent", usersH.GetConsent)
+		r.Patch("/consent", usersH.UpdateConsent)
 
 		r.With(middleware.AuditLog(db, models.AuditActionReadSubscription, "subscription", "billing_support")).
 			Get("/subscription", subsH.GetSubscription)

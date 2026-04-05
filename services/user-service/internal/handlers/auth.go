@@ -104,9 +104,10 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Bootstrap learning + gaming profiles
+	// Bootstrap learning + gaming profiles + consent records
 	_ = h.store.InitLearningProfile(r.Context(), user.ID)
 	_ = h.store.InitGamingProfile(r.Context(), user.ID)
+	_ = h.store.InitConsent(r.Context(), user.ID, realIP(r), r.UserAgent())
 
 	// Create Stripe customer + start trial (non-fatal — can be retried async)
 	var stripeCustomerID string
