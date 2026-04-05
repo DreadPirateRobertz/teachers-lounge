@@ -13,6 +13,10 @@ type Cacher interface {
 	AcquireRefreshLock(ctx context.Context, key, value string, ttl time.Duration) (bool, error)
 	ReleaseRefreshLock(ctx context.Context, key string) error
 	DeleteSession(ctx context.Context, key string) error
+	// DeleteUserKeys removes all user-scoped keys from Redis (called on account deletion).
+	DeleteUserKeys(ctx context.Context, userID string) error
+	// IncrWithTTL increments a counter and sets a TTL; used for endpoint rate limiting.
+	IncrWithTTL(ctx context.Context, key string, ttl time.Duration) (int64, error)
 }
 
 // Ensure *Client satisfies Cacher at compile time.

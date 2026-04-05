@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -290,6 +291,158 @@ func (s *Store) CreateExportJob(ctx context.Context, userID uuid.UUID) (uuid.UUI
 		`INSERT INTO export_jobs (user_id) VALUES ($1) RETURNING id`, userID,
 	).Scan(&id)
 	return id, err
+}
+
+// ============================================================
+// ERASURE JOBS
+// ============================================================
+
+// CreateErasureJob records an async job to clean up external stores after user deletion.
+// No FK to users — the user row is gone before this job is processed.
+func (s *Store) CreateErasureJob(ctx context.Context, userID uuid.UUID, metadata map[string]any) (uuid.UUID, error) {
+	metaJSON, err := json.Marshal(metadata)
+	if err != nil {
+		return uuid.Nil, fmt.Errorf("marshalling erasure metadata: %w", err)
+	}
+	var id uuid.UUID
+	err = s.pool.QueryRow(ctx,
+		`INSERT INTO erasure_jobs (user_id, metadata) VALUES ($1, $2) RETURNING id`,
+		userID, metaJSON,
+	).Scan(&id)
+	return id, err
+}
+
+// ============================================================
+// AUDIT LOG QUERY (admin / FERPA endpoint)
+// ============================================================
+
+// QueryAuditLog returns audit log entries filtered by student_id and date range.
+func (s *Store) QueryAuditLog(ctx context.Context, p AuditLogQueryParams) ([]*models.AuditLogEntry, error) {
+	limit := p.Limit
+	if limit <= 0 || limit > 500 {
+		limit = 200
+	}
+
+	const q = `
+		SELECT id, timestamp, accessor_id, student_id, action, data_accessed, purpose,
+		       COALESCE(ip_address::text, '')
+		FROM audit_log
+		WHERE ($1::uuid IS NULL OR student_id = $1)
+		  AND ($2::timestamptz IS NULL OR timestamp >= $2)
+		  AND ($3::timestamptz IS NULL OR timestamp <= $3)
+		ORDER BY timestamp DESC
+		LIMIT $4`
+
+	rows, err := s.pool.Query(ctx, q, p.StudentID, p.From, p.To, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []*models.AuditLogEntry
+	for rows.Next() {
+		e := &models.AuditLogEntry{}
+		if err := rows.Scan(
+			&e.ID, &e.Timestamp, &e.AccessorID, &e.StudentID,
+			&e.Action, &e.DataAccessed, &e.Purpose, &e.IPAddress,
+		); err != nil {
+			return nil, err
+		}
+		entries = append(entries, e)
+	}
+	return entries, rows.Err()
+}
+
+// ============================================================
+// CONSENT MANAGEMENT
+// ============================================================
+
+// InitConsent creates default (granted=false) consent records for a new user.
+func (s *Store) InitConsent(ctx context.Context, userID uuid.UUID, ip, userAgent string) error {
+	const q = `
+		INSERT INTO consent_records (user_id, consent_type, granted, ip_address, user_agent)
+		VALUES
+			($1, 'tutoring',  false, $2, $3),
+			($1, 'analytics', false, $2, $3),
+			($1, 'marketing', false, $2, $3)
+		ON CONFLICT (user_id, consent_type) DO NOTHING`
+	_, err := s.pool.Exec(ctx, q, userID, ip, userAgent)
+	return err
+}
+
+// GetConsent retrieves all consent records for a user as a ConsentBundle.
+func (s *Store) GetConsent(ctx context.Context, userID uuid.UUID) (*models.ConsentBundle, error) {
+	const q = `
+		SELECT id, user_id, consent_type, granted, granted_at,
+		       COALESCE(ip_address::text, ''), COALESCE(user_agent, '')
+		FROM consent_records WHERE user_id = $1`
+	rows, err := s.pool.Query(ctx, q, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	bundle := &models.ConsentBundle{}
+	for rows.Next() {
+		r := &models.ConsentRecord{}
+		var ct string
+		if err := rows.Scan(
+			&r.ID, &r.UserID, &ct, &r.Granted, &r.GrantedAt, &r.IPAddress, &r.UserAgent,
+		); err != nil {
+			return nil, err
+		}
+		r.ConsentType = models.ConsentType(ct)
+		switch r.ConsentType {
+		case models.ConsentTutoring:
+			bundle.Tutoring = r
+		case models.ConsentAnalytics:
+			bundle.Analytics = r
+		case models.ConsentMarketing:
+			bundle.Marketing = r
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return bundle, nil
+}
+
+// UpdateConsent upserts consent records for the given user.
+// Only the non-nil fields in p are written.
+func (s *Store) UpdateConsent(ctx context.Context, userID uuid.UUID, p UpdateConsentParams) error {
+	type update struct {
+		ctype   string
+		granted bool
+	}
+	var updates []update
+	if p.Tutoring != nil {
+		updates = append(updates, update{"tutoring", *p.Tutoring})
+	}
+	if p.Analytics != nil {
+		updates = append(updates, update{"analytics", *p.Analytics})
+	}
+	if p.Marketing != nil {
+		updates = append(updates, update{"marketing", *p.Marketing})
+	}
+	if len(updates) == 0 {
+		return nil
+	}
+
+	const q = `
+		INSERT INTO consent_records (user_id, consent_type, granted, granted_at, ip_address, user_agent)
+		VALUES ($1, $2, $3, CASE WHEN $3 THEN NOW() ELSE NULL END, $4, $5)
+		ON CONFLICT (user_id, consent_type) DO UPDATE SET
+			granted    = EXCLUDED.granted,
+			granted_at = CASE WHEN EXCLUDED.granted THEN NOW() ELSE NULL END,
+			ip_address = EXCLUDED.ip_address,
+			user_agent = EXCLUDED.user_agent`
+
+	for _, u := range updates {
+		if _, err := s.pool.Exec(ctx, q, userID, u.ctype, u.granted, p.IPAddress, p.UserAgent); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // ============================================================

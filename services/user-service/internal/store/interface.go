@@ -32,7 +32,14 @@ type Storer interface {
 	UpdateSubscriptionByUserID(ctx context.Context, userID uuid.UUID, p UpdateSubscriptionParams) error
 
 	WriteAuditLog(ctx context.Context, p AuditLogParams) error
+	QueryAuditLog(ctx context.Context, p AuditLogQueryParams) ([]*models.AuditLogEntry, error)
 	CreateExportJob(ctx context.Context, userID uuid.UUID) (uuid.UUID, error)
+	CreateErasureJob(ctx context.Context, userID uuid.UUID, metadata map[string]any) (uuid.UUID, error)
+
+	// Consent management
+	InitConsent(ctx context.Context, userID uuid.UUID, ip, userAgent string) error
+	GetConsent(ctx context.Context, userID uuid.UUID) (*models.ConsentBundle, error)
+	UpdateConsent(ctx context.Context, userID uuid.UUID, p UpdateConsentParams) error
 
 	// Teacher profiles
 	CreateTeacherProfile(ctx context.Context, p CreateTeacherProfileParams) (*models.TeacherProfile, error)

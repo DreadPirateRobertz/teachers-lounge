@@ -69,6 +69,7 @@ func main() {
 	subsH := handlers.NewSubscriptionsHandler(db, billingClient)
 	webhookH := handlers.NewWebhookHandler(billingClient)
 	teachersH := handlers.NewTeachersHandler(db)
+	complianceH := handlers.NewComplianceHandler(db, redisClient)
 
 	// ── Router ───────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -106,6 +107,8 @@ func main() {
 		r.Patch("/preferences", usersH.UpdatePreferences)
 		r.Post("/export", usersH.ExportData)
 		r.Delete("", usersH.DeleteAccount)
+		r.Get("/consent", usersH.GetConsent)
+		r.Patch("/consent", usersH.UpdateConsent)
 
 		r.Get("/subscription", subsH.GetSubscription)
 		r.Post("/subscription/cancel", subsH.CancelSubscription)
@@ -114,6 +117,13 @@ func main() {
 		// Teacher profile (self-only; no teacher profile required to create one)
 		r.Post("/teacher-profile", teachersH.CreateTeacherProfile)
 		r.Get("/teacher-profile", teachersH.GetTeacherProfile)
+	})
+
+	// Admin / FERPA compliance routes (JWT + teacher profile required)
+	r.Route("/admin", func(r chi.Router) {
+		r.Use(middleware.Authenticate(jwtManager))
+		r.Use(middleware.RequireTeacherProfile(db))
+		r.Get("/audit", complianceH.GetAuditLog)
 	})
 
 	// Teacher routes (JWT + self + teacher profile required)

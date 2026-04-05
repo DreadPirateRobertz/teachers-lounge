@@ -191,8 +191,23 @@ func (m *mockStore) UpdateSubscriptionByUserID(_ context.Context, _ uuid.UUID, _
 }
 
 func (m *mockStore) WriteAuditLog(_ context.Context, _ store.AuditLogParams) error { return nil }
+func (m *mockStore) QueryAuditLog(_ context.Context, _ store.AuditLogQueryParams) ([]*models.AuditLogEntry, error) {
+	return nil, nil
+}
 func (m *mockStore) CreateExportJob(_ context.Context, _ uuid.UUID) (uuid.UUID, error) {
 	return uuid.New(), nil
+}
+func (m *mockStore) CreateErasureJob(_ context.Context, _ uuid.UUID, _ map[string]any) (uuid.UUID, error) {
+	return uuid.New(), nil
+}
+
+// Consent stubs
+func (m *mockStore) InitConsent(_ context.Context, _ uuid.UUID, _, _ string) error { return nil }
+func (m *mockStore) GetConsent(_ context.Context, _ uuid.UUID) (*models.ConsentBundle, error) {
+	return &models.ConsentBundle{}, nil
+}
+func (m *mockStore) UpdateConsent(_ context.Context, _ uuid.UUID, _ store.UpdateConsentParams) error {
+	return nil
 }
 
 // Teacher profile stubs
@@ -286,7 +301,14 @@ func (m *mockCache) ReleaseRefreshLock(_ context.Context, key string) error {
 	return nil
 }
 
-func (m *mockCache) DeleteSession(_ context.Context, _ string) error { return nil }
+func (m *mockCache) DeleteSession(_ context.Context, _ string) error    { return nil }
+func (m *mockCache) DeleteUserKeys(_ context.Context, _ string) error  { return nil }
+func (m *mockCache) IncrWithTTL(_ context.Context, key string, _ time.Duration) (int64, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.attempts[key]++
+	return m.attempts[key], nil
+}
 
 // ============================================================
 // HELPERS
