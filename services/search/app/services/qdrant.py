@@ -33,27 +33,46 @@ def init_client() -> None:
 
 
 def get_client() -> AsyncQdrantClient:
+    """Return the initialized Qdrant client, raising if not yet initialized."""
     if _client is None:
         raise RuntimeError("Qdrant client not initialized — call init_client() at startup")
     return _client
 
 
 async def close_client() -> None:
+    """Close and release the Qdrant client. Safe to call if not initialized."""
     global _client
     if _client:
         await _client.close()
         _client = None
 
 
-def _build_filter(course_id: UUID, chapter: str | None = None) -> Filter:
-    """Build a Qdrant filter with required course_id and optional chapter."""
+def _build_filter(
+    course_id: UUID,
+    chapter: str | None = None,
+    section: str | None = None,
+    content_type: str | None = None,
+) -> Filter:
+    """Build a Qdrant filter scoped to a course with optional field narrowing.
+
+    Args:
+        course_id: Required — all results must belong to this course.
+        chapter: Optional chapter name to restrict results.
+        section: Optional section name to restrict results.
+        content_type: Optional content type (text, table, equation, figure, quiz).
+
+    Returns:
+        A Qdrant Filter with all active conditions joined via AND (must).
+    """
     conditions = [
         FieldCondition(key="course_id", match=MatchValue(value=str(course_id))),
     ]
     if chapter is not None:
-        conditions.append(
-            FieldCondition(key="chapter", match=MatchValue(value=chapter)),
-        )
+        conditions.append(FieldCondition(key="chapter", match=MatchValue(value=chapter)))
+    if section is not None:
+        conditions.append(FieldCondition(key="section", match=MatchValue(value=section)))
+    if content_type is not None:
+        conditions.append(FieldCondition(key="content_type", match=MatchValue(value=content_type)))
     return Filter(must=conditions)
 
 
@@ -62,11 +81,25 @@ async def dense_search(
     course_id: UUID,
     limit: int,
     chapter: str | None = None,
+    section: str | None = None,
+    content_type: str | None = None,
 ) -> list[ChunkResult]:
-    """Search curriculum collection with dense vector, filtered by course_id and optional chapter."""
+    """Search curriculum collection with dense vector, filtered by course_id and optional fields.
+
+    Args:
+        query_vector: Dense embedding of the query text.
+        course_id: Scope results to this course.
+        limit: Maximum number of results to return.
+        chapter: Optional chapter filter.
+        section: Optional section filter.
+        content_type: Optional content type filter (text, table, equation, figure, quiz).
+
+    Returns:
+        Ordered list of ChunkResult objects by descending cosine score.
+    """
     client = get_client()
 
-    query_filter = _build_filter(course_id, chapter)
+    query_filter = _build_filter(course_id, chapter, section, content_type)
 
     with _tracer.start_as_current_span("qdrant.search") as span:
         span.set_attribute("search_type", "dense")
@@ -106,8 +139,7 @@ async def dense_search(
 
 
 def _tokenize(text: str) -> dict[int, float]:
-    """
-    Produce a sparse term-frequency vector from *text*.
+    """Produce a sparse term-frequency vector from *text*.
 
     Each unique lowercase token is mapped to a deterministic integer index via
     hash(token) % VOCAB_SIZE.  Values are normalized term frequencies (TF),
@@ -115,6 +147,12 @@ def _tokenize(text: str) -> dict[int, float]:
 
     VOCAB_SIZE=30000 is intentionally larger than typical BM25 vocabularies to
     reduce hash collisions while staying within Qdrant's sparse vector limits.
+
+    Args:
+        text: Raw text to tokenize.
+
+    Returns:
+        Dict mapping token index → normalized TF weight. Empty if no tokens found.
     """
     _VOCAB_SIZE = 30_000
     tokens = re.findall(r"[a-z0-9]+", text.lower())
@@ -135,12 +173,25 @@ async def sparse_search(
     course_id: UUID,
     limit: int,
     chapter: str | None = None,
+    section: str | None = None,
+    content_type: str | None = None,
 ) -> list[ChunkResult]:
-    """Search curriculum collection with BM25 sparse vector, filtered by course_id and optional chapter.
+    """Search curriculum collection with BM25 sparse vector, filtered by course_id and optional fields.
 
     Returns an empty list if the collection has no sparse vector field yet
     (i.e. ingestion has not stored BM25 vectors) rather than raising an error.
     The hybrid combiner degrades gracefully to dense-only in that case.
+
+    Args:
+        query: Raw query string to tokenize into a sparse TF vector.
+        course_id: Scope results to this course.
+        limit: Maximum number of results to return.
+        chapter: Optional chapter filter.
+        section: Optional section filter.
+        content_type: Optional content type filter (text, table, equation, figure, quiz).
+
+    Returns:
+        Ordered list of ChunkResult objects by descending BM25 score, or [] on failure.
     """
     client = get_client()
 
@@ -152,7 +203,7 @@ async def sparse_search(
     indices = list(sparse_tf.keys())
     values = [sparse_tf[i] for i in indices]
 
-    query_filter = _build_filter(course_id, chapter)
+    query_filter = _build_filter(course_id, chapter, section, content_type)
 
     with _tracer.start_as_current_span("qdrant.search") as span:
         span.set_attribute("search_type", "sparse")

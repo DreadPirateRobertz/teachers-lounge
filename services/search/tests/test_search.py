@@ -219,3 +219,54 @@ class TestCourseIdFiltering:
         client.get(f"/v1/search?q=entropy&course_id={cid}")
         _, kwargs = mock_dense.call_args
         assert kwargs["course_id"] == cid
+
+
+class TestSectionFiltering:
+    def test_section_none_by_default(self, client):
+        """section is None when not provided."""
+        with _patch_pipeline() as mocks:
+            client.get(f"/v1/search?q=entropy&course_id={COURSE_ID}")
+            _, kwargs = mocks["dense"].call_args
+            assert kwargs["section"] is None
+            _, kwargs = mocks["sparse"].call_args
+            assert kwargs["section"] is None
+
+    def test_section_forwarded_to_searches(self, client):
+        """section param is passed to both dense and sparse search."""
+        with _patch_pipeline() as mocks:
+            client.get(f"/v1/search?q=entropy&course_id={COURSE_ID}&section=1.2")
+            _, dense_kwargs = mocks["dense"].call_args
+            assert dense_kwargs["section"] == "1.2"
+            _, sparse_kwargs = mocks["sparse"].call_args
+            assert sparse_kwargs["section"] == "1.2"
+
+    def test_section_filter_accepted(self, client):
+        with _patch_pipeline():
+            resp = client.get(f"/v1/search?q=entropy&course_id={COURSE_ID}&section=Introduction")
+            assert resp.status_code == 200
+
+
+class TestContentTypeFiltering:
+    def test_content_type_none_by_default(self, client):
+        """content_type is None when not provided."""
+        with _patch_pipeline() as mocks:
+            client.get(f"/v1/search?q=entropy&course_id={COURSE_ID}")
+            _, kwargs = mocks["dense"].call_args
+            assert kwargs["content_type"] is None
+
+    def test_content_type_forwarded_to_searches(self, client):
+        """content_type param is passed to both dense and sparse search."""
+        with _patch_pipeline() as mocks:
+            client.get(f"/v1/search?q=formula&course_id={COURSE_ID}&content_type=equation")
+            _, dense_kwargs = mocks["dense"].call_args
+            assert dense_kwargs["content_type"] == "equation"
+            _, sparse_kwargs = mocks["sparse"].call_args
+            assert sparse_kwargs["content_type"] == "equation"
+
+    def test_content_type_filter_accepted(self, client):
+        for ct in ("text", "table", "equation", "figure", "quiz"):
+            with _patch_pipeline():
+                resp = client.get(
+                    f"/v1/search?q=entropy&course_id={COURSE_ID}&content_type={ct}"
+                )
+                assert resp.status_code == 200, f"expected 200 for content_type={ct}"

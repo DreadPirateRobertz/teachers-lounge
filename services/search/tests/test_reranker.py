@@ -137,3 +137,23 @@ class TestReranker:
         payload = mock_client.post.call_args.kwargs.get("json") or mock_client.post.call_args[1].get("json")
         assert payload["top_n"] == 10  # default rerank_top_n
         assert len(out) == 10
+
+    @pytest.mark.asyncio
+    async def test_fallback_on_malformed_json(self):
+        """Malformed/unexpected gateway JSON falls back to original order."""
+        results = [_chunk("a", score=0.5), _chunk("b", score=0.3)]
+
+        mock_response = MagicMock()
+        mock_response.raise_for_status = MagicMock()
+        # Gateway returns a completely unexpected shape
+        mock_response.json.return_value = {"unexpected": "structure"}
+
+        mock_client = AsyncMock()
+        mock_client.__aenter__ = AsyncMock(return_value=mock_client)
+        mock_client.__aexit__ = AsyncMock(return_value=False)
+        mock_client.post = AsyncMock(return_value=mock_response)
+
+        with patch("app.services.reranker.httpx.AsyncClient", return_value=mock_client):
+            out = await rerank("query", results)
+
+        assert out == results
