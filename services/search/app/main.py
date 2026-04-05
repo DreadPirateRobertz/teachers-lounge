@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
-from app.routers import search
+from app.routers import diagrams, search
 from app.services.qdrant import close_client, init_client
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -24,6 +24,7 @@ app = FastAPI(
 )
 
 app.include_router(search.router)
+app.include_router(diagrams.router)
 
 
 @app.get("/healthz")

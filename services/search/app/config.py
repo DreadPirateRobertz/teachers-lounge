@@ -32,5 +32,12 @@ class Settings(BaseSettings):
     # Number of candidates fetched per signal before RRF fusion + final limit
     sparse_rerank_limit: int = 20
 
+    # Diagram (CLIP) collection — Phase 6 multi-modal RAG
+    diagrams_collection: str = "diagrams"
+    clip_model: str = "openai/clip-vit-base-patch32"
+    clip_embedding_dim: int = 768
+    default_diagram_limit: int = 3
+    max_diagram_limit: int = 10
+
 
 settings = Settings()

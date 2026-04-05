@@ -43,5 +43,13 @@ class Settings(BaseSettings):
     # RAG pipeline
     rag_chunk_limit: int = 8   # max curriculum chunks retrieved per query
 
+    # Diagram retrieval (Phase 6 CLIP search)
+    diagram_limit: int = 1     # diagrams embedded per tutor response
+    # GCS signed URL expiry in seconds (used when generating pre-signed URLs)
+    gcs_signed_url_expiry: int = 3600
+
+    # GCP project for signing GCS URLs
+    gcp_project: str = "tvtutor-prod"
+
 
 settings = Settings()

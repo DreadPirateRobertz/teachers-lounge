@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useRef, useEffect, useCallback } from 'react'
-import ChatMessage, { type Message } from './ChatMessage'
+import ChatMessage, { type DiagramAttachment, type Message } from './ChatMessage'
 import ChatInput from './ChatInput'
+import MoleculeBuilder from './MoleculeBuilder'
 
 const WELCOME_MESSAGE: Message = {
   id: 'welcome',
@@ -19,10 +20,35 @@ function newId() {
   return `msg-${++msgCounter}-${Date.now()}`
 }
 
+// SSE event shapes emitted by the tutoring service
+interface SseEvent {
+  type: 'delta' | 'sources' | 'done' | 'error' | 'diagram' | 'molecule_builder'
+  content?: string
+  message_id?: string
+  sources?: unknown[]
+  diagram?: DiagramAttachment
+}
+
+// Felder-Silverman dials from the user service
+interface FelderDials {
+  active_reflective: number
+  sensing_intuitive: number
+  visual_verbal: number
+  sequential_global: number
+}
+
+/** active_reflective < -0.2 → kinesthetic/active learner → show molecule builder */
+function isKinesthetic(dials: FelderDials | null): boolean {
+  return (dials?.active_reflective ?? 0) < -0.2
+}
+
 export default function ChatPanel() {
   const [messages, setMessages] = useState<Message[]>([WELCOME_MESSAGE])
   const [input, setInput] = useState('')
   const [isStreaming, setIsStreaming] = useState(false)
+  const [dials, setDials] = useState<FelderDials | null>(null)
+  const [showMoleculeBuilder, setShowMoleculeBuilder] = useState(false)
+  const [moleculeHint, setMoleculeHint] = useState<string | undefined>(undefined)
   const bottomRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -31,11 +57,19 @@ export default function ChatPanel() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  /**
+   * Parse SSE lines from the streaming response.
+   *
+   * Each line has the form ``data: <json>``.  Accumulates delta tokens into
+   * the message content and appends diagrams when ``diagram`` events arrive.
+   * Shows the molecule builder when ``active_reflective < -0.2``.
+   */
   const sendMessage = useCallback(async () => {
     const content = input.trim()
     if (!content || isStreaming) return
 
     setInput('')
+    setShowMoleculeBuilder(false)
 
     const userMsg: Message = { id: newId(), role: 'user', content }
     const assistantId = newId()
@@ -44,6 +78,7 @@ export default function ChatPanel() {
       role: 'assistant',
       content: '',
       streaming: true,
+      diagrams: [],
     }
 
     setMessages((prev) => [...prev, userMsg, assistantMsg])
@@ -71,22 +106,59 @@ export default function ChatPanel() {
 
       const reader = res.body.getReader()
       const decoder = new TextDecoder()
-      let buffer = ''
+      let rawBuffer = ''
 
       while (true) {
         const { done, value } = await reader.read()
         if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        const current = buffer
-        setMessages((prev) =>
-          prev.map((m) => (m.id === assistantId ? { ...m, content: current } : m)),
-        )
+
+        rawBuffer += decoder.decode(value, { stream: true })
+        const lines = rawBuffer.split('\n')
+        rawBuffer = lines.pop() ?? ''  // last (possibly incomplete) line stays in buffer
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue
+          const json = line.slice(6).trim()
+          if (!json) continue
+
+          let event: SseEvent
+          try {
+            event = JSON.parse(json) as SseEvent
+          } catch {
+            continue
+          }
+
+          if (event.type === 'delta') {
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId
+                  ? { ...m, content: m.content + (event.content ?? '') }
+                  : m,
+              ),
+            )
+          } else if (event.type === 'diagram' && event.diagram) {
+            const diagram = event.diagram
+            setMessages((prev) =>
+              prev.map((m) =>
+                m.id === assistantId
+                  ? { ...m, diagrams: [...(m.diagrams ?? []), diagram] }
+                  : m,
+              ),
+            )
+          }
+        }
       }
 
       // Mark streaming done
       setMessages((prev) =>
         prev.map((m) => (m.id === assistantId ? { ...m, streaming: false } : m)),
       )
+
+      // Show molecule builder for kinesthetic learners asking structural questions
+      if (isKinesthetic(dials) && _isStructuralQuestion(content)) {
+        setMoleculeHint(`Draw the structure described in your question.`)
+        setShowMoleculeBuilder(true)
+      }
     } catch (err: unknown) {
       if (err instanceof Error && err.name === 'AbortError') return
       setMessages((prev) =>
@@ -100,7 +172,28 @@ export default function ChatPanel() {
       setIsStreaming(false)
       abortRef.current = null
     }
-  }, [input, messages, isStreaming])
+  }, [input, messages, isStreaming, dials])
+
+  const handleMoleculeSubmit = useCallback(async (smiles: string) => {
+    setShowMoleculeBuilder(false)
+    // Post the SMILES answer to the quiz endpoint and add a user message showing it
+    const userMsg: Message = {
+      id: newId(),
+      role: 'user',
+      content: `[Molecule answer] \`${smiles}\``,
+    }
+    setMessages((prev) => [...prev, userMsg])
+
+    try {
+      await fetch('/api/quiz/answer', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ smiles_answer: smiles }),
+      })
+    } catch {
+      // Non-fatal — the tutor will respond in the next turn
+    }
+  }, [])
 
   return (
     <div className="flex flex-col h-full bg-bg-deep">
@@ -141,6 +234,14 @@ export default function ChatPanel() {
             </div>
           </div>
         )}
+
+        {/* Molecule builder — shown after a structural question for kinesthetic learners */}
+        {showMoleculeBuilder && (
+          <div className="animate-slide-up">
+            <MoleculeBuilder onSubmit={handleMoleculeSubmit} hint={moleculeHint} />
+          </div>
+        )}
+
         <div ref={bottomRef} />
       </div>
 
@@ -148,4 +249,9 @@ export default function ChatPanel() {
       <ChatInput value={input} onChange={setInput} onSubmit={sendMessage} disabled={isStreaming} />
     </div>
   )
+}
+
+/** True when the user's question is likely about molecular/chemical structure. */
+function _isStructuralQuestion(text: string): boolean {
+  return /\b(structure|molecule|draw|benzene|ring|bond|formula|compound|organic|atom)\b/i.test(text)
 }

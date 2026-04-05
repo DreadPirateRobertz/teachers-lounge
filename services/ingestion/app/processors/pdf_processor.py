@@ -17,7 +17,7 @@ from unstructured.documents.elements import (
 
 from app.config import settings
 from app.models import IngestJobMessage, ProcessingStatus
-from app.services import db, embeddings, qdrant
+from app.services import clip_embedder, db, embeddings, qdrant
 
 logger = logging.getLogger(__name__)
 
@@ -94,16 +94,28 @@ async def process_pdf(job: IngestJobMessage) -> dict:
         # 7. Write chunk metadata to Postgres
         await db.insert_chunks(chunks)
 
-        # 8. Update material status
+        # 8. Extract figures and generate CLIP embeddings for diagram search
+        diagram_count = await _process_figures(
+            elements=elements,
+            material_id=job.material_id,
+            course_id=job.course_id,
+            job_id=job.job_id,
+            local_pdf_path=local_path,
+        )
+        logger.info("job_id=%s diagram_count=%d", job.job_id, diagram_count)
+
+        # 9. Update material status
         await db.update_material_status(
             job.material_id, ProcessingStatus.COMPLETE, chunk_count=len(chunks)
         )
 
-        logger.info("pdf_processor: complete job_id=%s chunks=%d", job.job_id, len(chunks))
+        logger.info("pdf_processor: complete job_id=%s chunks=%d diagrams=%d",
+                    job.job_id, len(chunks), diagram_count)
         return {
             "status": "complete",
             "job_id": str(job.job_id),
             "chunk_count": len(chunks),
+            "diagram_count": diagram_count,
             "processor": "pdf",
         }
 
@@ -341,3 +353,114 @@ def _classify_element(element) -> str:
     if isinstance(element, (FigureCaption, Image)):
         return "figure"
     return "text"
+
+
+async def _process_figures(
+    elements: list,
+    material_id: UUID,
+    course_id: UUID,
+    job_id: UUID,
+    local_pdf_path: Path,
+) -> int:
+    """Extract figures from parsed PDF elements, generate CLIP embeddings, and upsert.
+
+    Iterates over elements looking for Image/FigureCaption pairs.  For each
+    figure that has a saved image path in its metadata (unstructured hi_res
+    mode writes these to a temp dir), embeds the image with CLIP and upserts
+    the vector into the diagrams Qdrant collection.
+
+    Degrades gracefully — any per-figure error is logged and skipped so that
+    the main ingestion pipeline is not interrupted.
+
+    Args:
+        elements: Parsed unstructured elements from the PDF.
+        material_id: UUID of the material record.
+        course_id: UUID of the course this material belongs to.
+        job_id: UUID of the ingest job (used for logging).
+        local_pdf_path: Path to the local PDF (used for context only).
+
+    Returns:
+        Number of diagrams successfully upserted.
+    """
+    diagram_ids: list[UUID] = []
+    vectors: list[list[float]] = []
+    payloads: list[dict] = []
+
+    current_chapter: str | None = None
+    current_page: int | None = None
+    pending_caption: str | None = None
+
+    for element in elements:
+        page = _get_page_number(element)
+        if page is not None:
+            current_page = page
+
+        from unstructured.documents.elements import Title as _Title
+        if isinstance(element, _Title):
+            text = element.text.strip()
+            if text and len(text) < 60 and text[0].isupper():
+                current_chapter = text
+            continue
+
+        if isinstance(element, FigureCaption):
+            pending_caption = element.text.strip()
+            continue
+
+        if isinstance(element, Image):
+            meta = getattr(element, "metadata", None)
+            image_path_str = getattr(meta, "image_path", None) if meta else None
+
+            if not image_path_str:
+                pending_caption = None
+                continue
+
+            image_path = Path(image_path_str)
+            if not image_path.exists():
+                logger.debug("job_id=%s figure image not found: %s", job_id, image_path)
+                pending_caption = None
+                continue
+
+            caption = pending_caption or element.text.strip() or ""
+            pending_caption = None
+
+            # Determine figure type from caption heuristics
+            caption_lower = caption.lower()
+            if any(w in caption_lower for w in ("table", "tbl.")):
+                figure_type = "table"
+            elif any(w in caption_lower for w in ("equation", "eq.", "formula")):
+                figure_type = "equation_image"
+            elif any(w in caption_lower for w in ("chart", "graph", "plot")):
+                figure_type = "chart"
+            else:
+                figure_type = "diagram"
+
+            try:
+                vector = await clip_embedder.embed_image(image_path)
+            except Exception as exc:
+                logger.warning("job_id=%s CLIP embed failed for %s: %s", job_id, image_path, exc)
+                continue
+
+            diagram_id = uuid4()
+            # GCS path: figures are stored alongside the raw upload
+            gcs_path = (
+                f"gs://{settings.gcs_figures_bucket}/"
+                f"{course_id}/{material_id}/figures/{diagram_id}.png"
+            )
+
+            diagram_ids.append(diagram_id)
+            vectors.append(vector)
+            payloads.append({
+                "diagram_id": str(diagram_id),
+                "material_id": str(material_id),
+                "course_id": str(course_id),
+                "gcs_path": gcs_path,
+                "caption": caption,
+                "figure_type": figure_type,
+                "chapter": current_chapter,
+                "page": current_page,
+            })
+
+    if diagram_ids:
+        await qdrant.upsert_diagrams(diagram_ids, vectors, payloads)
+
+    return len(diagram_ids)

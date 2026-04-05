@@ -17,6 +17,7 @@ from .chat_simple import router as chat_simple_router
 from .concepts import router as concepts_router
 from .config import settings
 from .database import Base, engine
+from .quiz import router as quiz_router
 from .reviews import router as reviews_router
 from .sessions import router as sessions_router
 
@@ -41,6 +42,7 @@ app.include_router(chat_router, prefix="/v1")
 app.include_router(chat_simple_router, prefix="/v1")
 app.include_router(reviews_router, prefix="/v1")
 app.include_router(concepts_router, prefix="/v1")
+app.include_router(quiz_router, prefix="/v1")
 
 
 @app.on_event("startup")
