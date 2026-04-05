@@ -33,10 +33,12 @@ afterEach(() => {
 describe('QuestBoard — happy path', () => {
   it('fetches quests from /api/gaming/quests on mount', async () => {
     render(<QuestBoard />)
-    await waitFor(() => expect(fetchMock).toHaveBeenCalledWith(
-      '/api/gaming/quests',
-      expect.objectContaining({ cache: 'no-store' }),
-    ))
+    await waitFor(() =>
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/gaming/quests',
+        expect.objectContaining({ cache: 'no-store' }),
+      ),
+    )
   })
 
   it('renders quest title after load', async () => {
@@ -46,7 +48,9 @@ describe('QuestBoard — happy path', () => {
 
   it('renders quest description', async () => {
     render(<QuestBoard />)
-    await waitFor(() => expect(screen.getByText('Ask Prof Nova 5 questions today.')).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByText('Ask Prof Nova 5 questions today.')).toBeInTheDocument(),
+    )
   })
 
   it('renders progress fraction', async () => {
@@ -85,7 +89,9 @@ describe('QuestBoard — error state', () => {
   it('shows error message when fetch throws', async () => {
     fetchMock.mockRejectedValueOnce(new Error('Network error'))
     render(<QuestBoard />)
-    await waitFor(() => expect(screen.getByText(/Network error|Failed to load/i)).toBeInTheDocument())
+    await waitFor(() =>
+      expect(screen.getByText(/Network error|Failed to load/i)).toBeInTheDocument(),
+    )
   })
 })
 

@@ -37,10 +37,14 @@ describe('QuizBreakdownChart — with data', () => {
   })
 
   it('renders multiple topics', () => {
-    render(<QuizBreakdownChart topics={[
-      topic({ topic: 'Algebra' }),
-      topic({ topic: 'Geometry', accuracy_pct: 65, correct: 6 }),
-    ]} />)
+    render(
+      <QuizBreakdownChart
+        topics={[
+          topic({ topic: 'Algebra' }),
+          topic({ topic: 'Geometry', accuracy_pct: 65, correct: 6 }),
+        ]}
+      />,
+    )
     expect(screen.getByText('Algebra')).toBeInTheDocument()
     expect(screen.getByText('Geometry')).toBeInTheDocument()
   })

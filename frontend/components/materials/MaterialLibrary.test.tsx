@@ -61,10 +61,14 @@ describe('MaterialLibrary — with materials', () => {
   })
 
   it('renders multiple materials', () => {
-    render(<MaterialLibrary materials={[
-      makeMaterial({ jobId: 'j1', filename: 'file-a.pdf' }),
-      makeMaterial({ jobId: 'j2', filename: 'file-b.docx', fileType: 'DOCX' }),
-    ]} />)
+    render(
+      <MaterialLibrary
+        materials={[
+          makeMaterial({ jobId: 'j1', filename: 'file-a.pdf' }),
+          makeMaterial({ jobId: 'j2', filename: 'file-b.docx', fileType: 'DOCX' }),
+        ]}
+      />,
+    )
     expect(screen.getByText('file-a.pdf')).toBeInTheDocument()
     expect(screen.getByText('file-b.docx')).toBeInTheDocument()
   })
