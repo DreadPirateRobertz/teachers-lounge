@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -144,3 +144,36 @@ class Interaction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     session: Mapped["Session"] = relationship(back_populates="interactions")
+
+
+class InteractionQuality(Base):
+    """LLM judge scores for sampled tutor interactions — written nightly by eval CronJob.
+
+    Each row records a Claude Haiku evaluation of one tutor response on three
+    dimensions (1–5 scale each):
+      - directness:  did the response directly address the student's question?
+      - pace:        was it appropriately paced for the student's level?
+      - grounding:   was it grounded in the source material?
+
+    The composite judge_score is the average of the three dimension scores.
+    """
+
+    __tablename__ = "interaction_quality"
+    __table_args__ = (
+        UniqueConstraint("interaction_id", name="uq_interaction_quality_interaction"),
+    )
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    interaction_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("interactions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    judge_score: Mapped[int] = mapped_column(Integer, nullable=False)      # 1–5 composite
+    judge_reasoning: Mapped[str] = mapped_column(Text, nullable=False)
+    score_directness: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1–5
+    score_pace: Mapped[int | None] = mapped_column(Integer, nullable=True)        # 1–5
+    score_grounding: Mapped[int | None] = mapped_column(Integer, nullable=True)   # 1–5
+    judged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    judge_model: Mapped[str] = mapped_column(String(64), nullable=False, default="claude-haiku-4-5-20251001")

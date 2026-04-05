@@ -35,6 +35,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from openai import APIConnectionError, APIStatusError, APITimeoutError
+from opentelemetry import trace
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import JWTClaims, require_auth
@@ -57,6 +58,7 @@ _VISUAL_QUERY_PATTERNS = re.compile(
 )
 
 logger = logging.getLogger(__name__)
+_tracer = trace.get_tracer("tutoring-service.chat")
 
 router = APIRouter(prefix="/sessions", tags=["chat"])
 
@@ -188,6 +190,11 @@ async def send_message(
     async def stream_generator():
         full_response: list[str] = []
         start_ms = int(time.time() * 1000)
+
+        with _tracer.start_as_current_span("llm.generate") as span:
+            span.set_attribute("model", settings.tutor_primary_model)
+            span.set_attribute("has_rag", session.course_id is not None)
+            span.set_attribute("message_count", len(messages))
 
         try:
             stream = await client.chat.completions.create(

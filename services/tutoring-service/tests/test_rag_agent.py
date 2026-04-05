@@ -375,3 +375,61 @@ class TestBuildRagContext:
             )
 
         mock_detect.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Phase 7 OTel span — build_rag_context
+# ---------------------------------------------------------------------------
+
+class TestBuildRagContextOtelSpan:
+    """Verify that build_rag_context emits a correctly-attributed OTel span."""
+
+    @pytest.mark.asyncio
+    async def test_span_created_with_correct_attributes(self):
+        """build_rag_context starts a span named 'rag_agent.build_context'
+        and sets chunk_count, gap_count, course_id attributes."""
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry import trace
+
+        exporter = InMemorySpanExporter()
+        provider = TracerProvider()
+        provider.add_span_processor(SimpleSpanProcessor(exporter))
+        trace.set_tracer_provider(provider)
+
+        # Re-import to pick up the new tracer provider
+        import importlib
+        import app.rag_agent as ra_mod
+        importlib.reload(ra_mod)
+        from app.rag_agent import build_rag_context as _build
+
+        mock_db = AsyncMock()
+        course_id = uuid.uuid4()
+        chunks = [_make_chunk()]
+
+        with (
+            patch("app.rag_agent.get_history", AsyncMock(return_value=[])),
+            patch("app.rag_agent.get_course_concepts", AsyncMock(return_value=[])),
+            patch("app.rag_agent.fetch_curriculum_chunks", AsyncMock(return_value=chunks)),
+        ):
+            await _build(
+                student_id=uuid.uuid4(),
+                session_id=uuid.uuid4(),
+                question="What is a chiral center?",
+                course_id=course_id,
+                db=mock_db,
+            )
+
+        spans = exporter.get_finished_spans()
+        rag_spans = [s for s in spans if s.name == "rag_agent.build_context"]
+        assert len(rag_spans) == 1
+
+        attrs = rag_spans[0].attributes
+        assert attrs.get("chunk_count") == 1
+        assert attrs.get("gap_count") == 0
+        assert attrs.get("course_id") == str(course_id)
+
+        # Restore default no-op provider so other tests aren't affected
+        trace.set_tracer_provider(trace.NoOpTracerProvider())
+        importlib.reload(ra_mod)
