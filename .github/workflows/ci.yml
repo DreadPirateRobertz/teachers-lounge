@@ -133,10 +133,12 @@ jobs:
         if: steps.check.outputs.exists == 'true'
       - run: go vet ./...
         if: steps.check.outputs.exists == 'true'
-      - run: |
-          if command -v golangci-lint &>/dev/null; then golangci-lint run ./...; fi
+      - name: Install golangci-lint
         if: steps.check.outputs.exists == 'true'
-        continue-on-error: true
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: latest
+          working-directory: services/${{ matrix.service }}
       - run: go test ./... -race -timeout 60s -coverprofile=coverage.out -covermode=atomic
         if: steps.check.outputs.exists == 'true'
       - name: Upload coverage to Codecov
@@ -191,11 +193,11 @@ jobs:
         if: steps.check.outputs.exists == 'true'
       - run: if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt --quiet; fi
         if: steps.check.outputs.exists == 'true'
-      - run: ruff check . || true
+      - run: ruff check .
         if: steps.check.outputs.exists == 'true'
       - run: pip install pytest-cov --quiet
         if: steps.check.outputs.exists == 'true'
-      - run: pytest --tb=short -q --cov=app --cov-report=xml:coverage.xml 2>/dev/null || echo "No tests yet"
+      - run: pytest --tb=short -q --cov=app --cov-report=xml:coverage.xml
         if: steps.check.outputs.exists == 'true'
       - name: Upload coverage to Codecov
         if: steps.check.outputs.exists == 'true'
