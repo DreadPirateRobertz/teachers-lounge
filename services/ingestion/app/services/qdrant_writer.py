@@ -11,6 +11,15 @@ import asyncio
 import logging
 from uuid import UUID
 
+from qdrant_client import QdrantClient  # type: ignore[import-untyped]
+from qdrant_client.models import (  # type: ignore[import-untyped]
+    Distance,
+    PointStruct,
+    VectorParams,
+)
+
+from app.config import settings
+
 logger = logging.getLogger(__name__)
 
 
@@ -37,15 +46,6 @@ def _upsert_diagram_sync(
         image_b64_thumb: Base64-encoded PNG thumbnail (<= 256px).
         clip_vector: 768-dimensional CLIP embedding.
     """
-    from qdrant_client import QdrantClient  # type: ignore[import-untyped]
-    from qdrant_client.models import (  # type: ignore[import-untyped]
-        Distance,
-        PointStruct,
-        VectorParams,
-    )
-
-    from app.config import settings
-
     client = QdrantClient(host=settings.qdrant_host, port=settings.qdrant_port)
     try:
         existing = {c.name for c in client.get_collections().collections}
