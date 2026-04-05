@@ -34,22 +34,6 @@ def _make_token(
     audience=AUDIENCE,
     extra: dict | None = None,
 ) -> str:
-    """Build and sign an HS256 JWT with the User Service claim structure.
-
-    Args:
-        uid: Subject UUID string placed in the ``uid`` custom claim.
-        email: Email address placed in the ``email`` claim.
-        acct: Account type (``"standard"`` or ``"minor"``).
-        sub_status: Subscription status string.
-        exp_offset: Seconds from now until expiry; negative values produce
-            already-expired tokens.
-        secret: HMAC signing secret.
-        audience: Value for the ``aud`` claim.
-        extra: Additional claims merged into the payload after defaults.
-
-    Returns:
-        Signed JWT string.
-    """
     payload = {
         "aud": audience,
         "uid": uid,
@@ -64,15 +48,7 @@ def _make_token(
 
 
 def _make_credentials(token: str):
-    """Wrap a raw token string in a minimal HTTPAuthorizationCredentials stand-in.
-
-    Args:
-        token: Signed JWT string to embed in the credentials object.
-
-    Returns:
-        An object with a ``credentials`` attribute, matching the interface
-        expected by ``require_auth``.
-    """
+    """Minimal stand-in for HTTPAuthorizationCredentials."""
     class _Creds:
         credentials = token
     return _Creds()
@@ -86,7 +62,6 @@ def _patch_jwt_secret(patch_settings):
 # ── happy path ────────────────────────────────────────────────────────────────
 
 def test_valid_token_returns_claims():
-    """A well-formed token with the correct audience must return parsed JWTClaims."""
     token = _make_token()
     claims = require_auth(_make_credentials(token))
     assert isinstance(claims, JWTClaims)
@@ -161,7 +136,6 @@ def test_missing_uid_and_sub_raises_401():
 
 
 def test_wrong_audience_raises_401():
-    """A token whose aud claim does not match the expected audience must be rejected."""
     token = _make_token(audience="wrong-service")
     with pytest.raises(HTTPException) as exc_info:
         require_auth(_make_credentials(token))
@@ -169,7 +143,6 @@ def test_wrong_audience_raises_401():
 
 
 def test_missing_audience_raises_401():
-    """A token with no aud claim must be rejected even if the signature is valid."""
     payload = {
         "uid": USER_ID,
         "email": "nova@test.com",
