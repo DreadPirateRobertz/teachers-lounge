@@ -42,6 +42,10 @@ func NewJWTManager(secret string, accessDur, refreshDur time.Duration) *JWTManag
 	}
 }
 
+// Audience is the expected "aud" claim value set on every access token.
+// All services that validate tokens must check for this value.
+const Audience = "teacherslounge-services"
+
 // IssueAccessToken creates a short-lived JWT (15 min) for API authentication.
 func (m *JWTManager) IssueAccessToken(user *models.User, subStatus string) (string, error) {
 	now := time.Now()
@@ -51,6 +55,7 @@ func (m *JWTManager) IssueAccessToken(user *models.User, subStatus string) (stri
 			IssuedAt:  jwt.NewNumericDate(now),
 			ExpiresAt: jwt.NewNumericDate(now.Add(m.accessDuration)),
 			Issuer:    "teacherslounge-user-service",
+			Audience:  jwt.ClaimStrings{Audience},
 		},
 		UserID:      user.ID.String(),
 		Email:       user.Email,
@@ -62,13 +67,19 @@ func (m *JWTManager) IssueAccessToken(user *models.User, subStatus string) (stri
 }
 
 // ValidateAccessToken parses and validates a JWT, returning the claims.
+// Validates signature, expiry, and audience claim.
 func (m *JWTManager) ValidateAccessToken(tokenStr string) (*Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenStr, &Claims{}, func(t *jwt.Token) (any, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
-		}
-		return m.secret, nil
-	})
+	token, err := jwt.ParseWithClaims(
+		tokenStr,
+		&Claims{},
+		func(t *jwt.Token) (any, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+			}
+			return m.secret, nil
+		},
+		jwt.WithAudience(Audience),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("invalid token: %w", err)
 	}

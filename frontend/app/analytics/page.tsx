@@ -72,9 +72,9 @@ export default function AnalyticsPage() {
     setUserId(uid)
 
     Promise.all([
-      fetch(`/api/analytics/student/${uid}/overview`).then(r => r.json()),
-      fetch(`/api/analytics/student/${uid}/quiz-breakdown`).then(r => r.json()),
-      fetch(`/api/analytics/student/${uid}/activity`).then(r => r.json()),
+      fetch(`/api/analytics/student/${uid}/overview`).then((r) => r.json()),
+      fetch(`/api/analytics/student/${uid}/quiz-breakdown`).then((r) => r.json()),
+      fetch(`/api/analytics/student/${uid}/activity`).then((r) => r.json()),
     ])
       .then(([ov, qb, ac]) => {
         if (ov.error) throw new Error(ov.error)
@@ -149,18 +149,16 @@ export default function AnalyticsPage() {
                 label="Accuracy"
                 value={`${overview.accuracy_pct}%`}
                 sub={`${overview.correct_answers}/${overview.total_questions} correct`}
-                color={overview.accuracy_pct >= 80 ? 'green' : overview.accuracy_pct >= 60 ? 'gold' : 'pink'}
+                color={
+                  overview.accuracy_pct >= 80
+                    ? 'green'
+                    : overview.accuracy_pct >= 60
+                      ? 'gold'
+                      : 'pink'
+                }
               />
-              <StatCard
-                label="Bosses Defeated"
-                value={overview.bosses_defeated}
-                color="pink"
-              />
-              <StatCard
-                label="Gems"
-                value={overview.gems.toLocaleString()}
-                color="pink"
-              />
+              <StatCard label="Bosses Defeated" value={overview.bosses_defeated} color="pink" />
+              <StatCard label="Gems" value={overview.gems.toLocaleString()} color="pink" />
               <StatCard
                 label="Sessions"
                 value={overview.total_sessions}

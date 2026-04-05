@@ -5,10 +5,7 @@ const USER_SERVICE_URL = process.env.USER_SERVICE_URL || 'http://user-service:80
 const ALLOWED_ACTIONS = new Set(['login', 'register', 'logout', 'refresh'])
 
 // Proxy auth requests to User Service, manage tl_token cookie
-export async function POST(
-  req: NextRequest,
-  { params }: { params: Promise<{ action: string }> }
-) {
+export async function POST(req: NextRequest, { params }: { params: Promise<{ action: string }> }) {
   const { action } = await params
 
   if (!ALLOWED_ACTIONS.has(action)) {
@@ -21,7 +18,7 @@ export async function POST(
       'Content-Type': 'application/json',
       'X-Real-IP': req.headers.get('x-forwarded-for') || '127.0.0.1',
       // Forward refresh token cookie to User Service for refresh/logout
-      'Cookie': req.headers.get('cookie') || '',
+      Cookie: req.headers.get('cookie') || '',
     },
     body: action === 'logout' ? undefined : await req.text(),
   })

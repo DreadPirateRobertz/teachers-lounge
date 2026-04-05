@@ -41,9 +41,21 @@ export default function MaterialsSidebar() {
     <aside className="w-[280px] flex-shrink-0 flex flex-col bg-bg-panel overflow-hidden">
       {/* Tab bar */}
       <div className="flex border-b border-border-dim flex-shrink-0">
-        <SidebarTab label="Mastery" active={activeTab === 'mastery'} onClick={() => setActiveTab('mastery')} />
-        <SidebarTab label="Rankings" active={activeTab === 'rankings'} onClick={() => setActiveTab('rankings')} />
-        <SidebarTab label="Power-ups" active={activeTab === 'powerups'} onClick={() => setActiveTab('powerups')} />
+        <SidebarTab
+          label="Mastery"
+          active={activeTab === 'mastery'}
+          onClick={() => setActiveTab('mastery')}
+        />
+        <SidebarTab
+          label="Rankings"
+          active={activeTab === 'rankings'}
+          onClick={() => setActiveTab('rankings')}
+        />
+        <SidebarTab
+          label="Power-ups"
+          active={activeTab === 'powerups'}
+          onClick={() => setActiveTab('powerups')}
+        />
       </div>
 
       {/* Tab content */}
@@ -92,7 +104,10 @@ function PowerupsPanel() {
       </div>
       <div className="flex flex-col gap-1.5">
         {POWERUPS.map((p) => (
-          <div key={p.name} className="flex items-center gap-2 bg-bg-card border border-border-dim rounded p-2">
+          <div
+            key={p.name}
+            className="flex items-center gap-2 bg-bg-card border border-border-dim rounded p-2"
+          >
             <span className="text-lg leading-none">{p.icon}</span>
             <div className="flex-1 min-w-0">
               <div className="text-xs text-text-base font-medium">{p.name}</div>
@@ -109,7 +124,15 @@ function PowerupsPanel() {
   )
 }
 
-function SidebarTab({ label, active, onClick }: { label: string; active: boolean; onClick: () => void }) {
+function SidebarTab({
+  label,
+  active,
+  onClick,
+}: {
+  label: string
+  active: boolean
+  onClick: () => void
+}) {
   return (
     <button
       onClick={onClick}

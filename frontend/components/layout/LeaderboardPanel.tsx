@@ -93,9 +93,7 @@ export default function LeaderboardPanel() {
     }
   }, [friendsOnly, fetchLeaderboard, fetchFriends])
 
-  const entries = friendsOnly
-    ? friendData?.friends ?? []
-    : data?.top_10 ?? []
+  const entries = friendsOnly ? (friendData?.friends ?? []) : (data?.top_10 ?? [])
   const userRank = friendsOnly ? friendData?.user_rank : data?.user_rank
 
   return (
@@ -135,7 +133,10 @@ export default function LeaderboardPanel() {
       {loading && (
         <div className="flex flex-col gap-1">
           {Array.from({ length: 5 }).map((_, i) => (
-            <div key={i} className="h-8 bg-bg-card border border-border-dim rounded animate-pulse" />
+            <div
+              key={i}
+              className="h-8 bg-bg-card border border-border-dim rounded animate-pulse"
+            />
           ))}
         </div>
       )}
@@ -151,9 +152,7 @@ export default function LeaderboardPanel() {
       {!loading && !error && (
         <div className="flex flex-col gap-1">
           {entries.length === 0 && (
-            <div className="text-xs text-text-dim text-center py-4">
-              No rankings yet
-            </div>
+            <div className="text-xs text-text-dim text-center py-4">No rankings yet</div>
           )}
           {entries.map((entry) => {
             const isMe = userRank?.user_id === entry.user_id
@@ -205,23 +204,22 @@ export default function LeaderboardPanel() {
           })}
 
           {/* User rank footer (if not in top 10) */}
-          {userRank &&
-            !entries.some((e) => e.user_id === userRank.user_id) && (
-              <div className="mt-1 pt-1 border-t border-border-dim">
-                <div className="flex items-center gap-2 px-2 py-1.5 rounded text-xs bg-neon-blue/10 border border-neon-blue/30">
-                  <span className="font-mono font-bold w-5 flex-shrink-0 text-right text-text-dim">
-                    {userRank.rank}
-                  </span>
-                  <RankDelta delta={rankDelta(userRank.rank, prevRanks.get(userRank.user_id))} />
-                  <span className="flex-1 truncate text-neon-blue font-medium">
-                    {userRank.display_name || userRank.user_id.slice(0, 8)} (you)
-                  </span>
-                  <span className="font-mono text-[10px] text-text-dim flex-shrink-0">
-                    {userRank.xp.toLocaleString()} xp
-                  </span>
-                </div>
+          {userRank && !entries.some((e) => e.user_id === userRank.user_id) && (
+            <div className="mt-1 pt-1 border-t border-border-dim">
+              <div className="flex items-center gap-2 px-2 py-1.5 rounded text-xs bg-neon-blue/10 border border-neon-blue/30">
+                <span className="font-mono font-bold w-5 flex-shrink-0 text-right text-text-dim">
+                  {userRank.rank}
+                </span>
+                <RankDelta delta={rankDelta(userRank.rank, prevRanks.get(userRank.user_id))} />
+                <span className="flex-1 truncate text-neon-blue font-medium">
+                  {userRank.display_name || userRank.user_id.slice(0, 8)} (you)
+                </span>
+                <span className="font-mono text-[10px] text-text-dim flex-shrink-0">
+                  {userRank.xp.toLocaleString()} xp
+                </span>
               </div>
-            )}
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -233,7 +231,10 @@ function RankDelta({ delta }: { delta: number | null }) {
 
   if (delta > 0) {
     return (
-      <span className="w-3 flex-shrink-0 text-[10px] text-neon-green font-mono" title={`Up ${delta}`}>
+      <span
+        className="w-3 flex-shrink-0 text-[10px] text-neon-green font-mono"
+        title={`Up ${delta}`}
+      >
         +{delta}
       </span>
     )
@@ -241,7 +242,10 @@ function RankDelta({ delta }: { delta: number | null }) {
 
   if (delta < 0) {
     return (
-      <span className="w-3 flex-shrink-0 text-[10px] text-red-400 font-mono" title={`Down ${Math.abs(delta)}`}>
+      <span
+        className="w-3 flex-shrink-0 text-[10px] text-red-400 font-mono"
+        title={`Down ${Math.abs(delta)}`}
+      >
         {delta}
       </span>
     )

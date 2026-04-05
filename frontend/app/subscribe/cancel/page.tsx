@@ -5,9 +5,7 @@ export default function SubscribeCancelPage() {
     <div className="min-h-screen bg-bg-deep flex flex-col items-center justify-center px-4 text-center">
       <div className="text-6xl mb-6 opacity-70">🌀</div>
 
-      <h1 className="font-mono text-xl font-bold text-text-bright mb-2">
-        No worries.
-      </h1>
+      <h1 className="font-mono text-xl font-bold text-text-bright mb-2">No worries.</h1>
       <p className="text-sm text-text-dim mb-8 max-w-xs">
         You can subscribe whenever you&apos;re ready. Your account is waiting.
       </p>

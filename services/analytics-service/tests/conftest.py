@@ -29,7 +29,11 @@ def make_token(user_id: str = TEST_USER_ID) -> str:
     Returns:
         A JWT string signed with the test JWT_SECRET.
     """
-    return jwt.encode({"sub": user_id}, settings.jwt_secret, algorithm=settings.jwt_algorithm)
+    return jwt.encode(
+        {"sub": user_id, "aud": settings.jwt_audience},
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
 
 
 def auth_headers(user_id: str = TEST_USER_ID) -> dict[str, str]:
