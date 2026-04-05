@@ -1,7 +1,8 @@
 import asyncio
 import logging
 
-from google.cloud import pubsub_v1
+# google-cloud-pubsub imported lazily inside functions
+
 
 from app.config import settings
 from app.models import IngestJobMessage
@@ -12,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 def _publish_ingest_job_sync(message: IngestJobMessage) -> None:
     """Synchronous Pub/Sub publish. Called via run_in_executor — never call directly from async code."""
+    from google.cloud import pubsub_v1  # lazy
+
     publisher = pubsub_v1.PublisherClient()
     topic_path = publisher.topic_path(settings.gcp_project, settings.pubsub_ingest_topic)
     data = message.model_dump_json().encode()
@@ -27,6 +30,8 @@ async def publish_ingest_job(message: IngestJobMessage) -> None:
 
 def start_subscriber() -> None:
     """Start a blocking Pub/Sub pull subscriber. Run in a background thread."""
+    from google.cloud import pubsub_v1  # lazy
+
     subscriber = pubsub_v1.SubscriberClient()
     subscription_path = subscriber.subscription_path(
         settings.gcp_project, settings.pubsub_ingest_subscription

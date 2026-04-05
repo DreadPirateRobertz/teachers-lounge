@@ -40,5 +40,15 @@ class Settings(BaseSettings):
     clip_embedding_dim: int = 768
     gcs_figures_bucket: str = "tvtutor-raw-uploads"  # figures extracted to same bucket
 
+    # Whisper (self-hosted on GKE GPU node)
+    whisper_endpoint: str = "http://whisper-service.whisper.svc.cluster.local:9000"
+    whisper_timeout_seconds: int = 600  # long audio takes time
+
+    # Google Document AI (OCR / image processing)
+    document_ai_location: str = "us"
+    document_ai_ocr_processor_id: str = ""    # Document AI OCR processor
+    document_ai_form_processor_id: str = ""   # Document AI Form Parser (handwriting)
+    document_ai_low_confidence_threshold: float = 0.7
+
 
 settings = Settings()
