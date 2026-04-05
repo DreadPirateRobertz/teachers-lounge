@@ -2,10 +2,26 @@ import { NextRequest, NextResponse } from 'next/server'
 
 const INGESTION_SERVICE_URL = process.env.INGESTION_SERVICE_URL
 
+/** Maximum upload size enforced at the Next.js boundary (500 MB). */
+const MAX_UPLOAD_BYTES = 500 * 1024 * 1024
+
+/** UUID v4 pattern — validates course_id before forwarding to the ingestion service. */
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i
+
 export async function POST(req: NextRequest): Promise<NextResponse> {
   const courseId = req.nextUrl.searchParams.get('course_id')
   if (!courseId) {
     return NextResponse.json({ detail: 'course_id is required' }, { status: 400 })
+  }
+  // Validate course_id is a UUID before forwarding to avoid path-injection.
+  if (!UUID_RE.test(courseId)) {
+    return NextResponse.json({ detail: 'course_id must be a valid UUID' }, { status: 400 })
+  }
+
+  // Reject oversized requests early before reading the body.
+  const contentLength = Number(req.headers.get('content-length') ?? 0)
+  if (contentLength > MAX_UPLOAD_BYTES) {
+    return NextResponse.json({ detail: 'file too large' }, { status: 413 })
   }
 
   // Phase 1: ingestion service not yet wired — return a mock 202 response so
