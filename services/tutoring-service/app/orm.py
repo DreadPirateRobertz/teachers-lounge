@@ -144,3 +144,48 @@ class Interaction(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     session: Mapped["Session"] = relationship(back_populates="interactions")
+
+
+# ── Flashcard decks + cards ────────────────────────────────────────────────────
+
+class FlashcardDeck(Base):
+    """A named collection of flashcards owned by a student."""
+
+    __tablename__ = "flashcard_decks"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Optional: deck was created from a specific chat session
+    session_id: Mapped[UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
+
+    cards: Mapped[list["Flashcard"]] = relationship(
+        back_populates="deck",
+        cascade="all, delete-orphan",
+        order_by="Flashcard.created_at",
+        lazy="selectin",
+    )
+
+
+class Flashcard(Base):
+    """A single question/answer flashcard belonging to a deck."""
+
+    __tablename__ = "flashcards"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    deck_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("flashcard_decks.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    front: Mapped[str] = mapped_column(Text, nullable=False)   # question / term
+    back: Mapped[str] = mapped_column(Text, nullable=False)    # answer / definition
+    # Optional: which tutor interaction generated this card
+    source_interaction_id: Mapped[UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+    deck: Mapped["FlashcardDeck"] = relationship(back_populates="cards")

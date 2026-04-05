@@ -227,3 +227,78 @@ class MasteryUpdateResponse(BaseModel):
     mastery_updated: float        # final stored value (the new score)
     decay_rate: float
     last_reviewed_at: datetime
+
+
+# ── Flashcard DTOs ────────────────────────────────────────────────────────────
+
+class FlashcardCreate(BaseModel):
+    """Request body for manually adding a card to a deck."""
+
+    front: str = Field(..., min_length=1, max_length=300, description="Question / term")
+    back: str = Field(..., min_length=1, max_length=800, description="Answer / definition")
+    source_interaction_id: UUID | None = Field(
+        default=None,
+        description="Optional: interaction that this card was generated from",
+    )
+
+
+class FlashcardResponse(BaseModel):
+    """A single flashcard as returned by the API."""
+
+    id: UUID
+    deck_id: UUID
+    front: str
+    back: str
+    source_interaction_id: UUID | None = None
+    created_at: datetime
+
+
+class DeckCreate(BaseModel):
+    """Request body for creating a new flashcard deck."""
+
+    name: str = Field(..., min_length=1, max_length=255)
+    description: str = Field(default="", max_length=2000)
+    session_id: UUID | None = Field(
+        default=None,
+        description="Optional: associate the deck with a chat session",
+    )
+
+
+class DeckResponse(BaseModel):
+    """Deck summary without card contents (for list endpoints)."""
+
+    id: UUID
+    name: str
+    description: str
+    session_id: UUID | None = None
+    card_count: int
+    created_at: datetime
+
+
+class DeckWithCards(DeckResponse):
+    """Deck with full card list (for single-deck GET endpoint)."""
+
+    cards: list[FlashcardResponse] = []
+
+
+class GenerateFlashcardsRequest(BaseModel):
+    """Request body for auto-generating flashcards from a session."""
+
+    deck_id: UUID | None = Field(
+        default=None,
+        description="Append to this existing deck instead of creating a new one",
+    )
+    deck_name: str | None = Field(
+        default=None,
+        max_length=255,
+        description="Name for the new deck (ignored if deck_id is provided)",
+    )
+
+
+class GenerateFlashcardsResponse(BaseModel):
+    """Result of auto-generating flashcards from a session."""
+
+    deck_id: UUID
+    deck_name: str
+    generated_count: int
+    cards: list[FlashcardResponse]
