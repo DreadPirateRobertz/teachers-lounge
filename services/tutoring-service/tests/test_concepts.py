@@ -8,6 +8,7 @@ from app.graph import (
     ADEQUATE_THRESHOLD,
     MASTERY_THRESHOLD,
     _build_prereq_graph,
+    _build_remediation_steps,
     _get_all_prerequisites,
     detect_gaps,
     generate_remediation_path,
@@ -241,6 +242,55 @@ class TestRemediationPath:
         for step in path:
             assert "reason" in step
             assert "mastery" in step["reason"].lower() or "prerequisite" in step["reason"].lower()
+
+
+# ── Tests: _build_remediation_steps ─────────────────────────────────────────
+
+class TestBuildRemediationSteps:
+    """Tests for the _build_remediation_steps helper extracted from generate_remediation_path."""
+
+    def test_skips_order_entries_missing_from_concept_map(self):
+        """A UUID in order that has no entry in concept_map must be silently skipped."""
+        ghost_id = uuid4()
+        target_id = uuid4()
+        steps = _build_remediation_steps(
+            order=[ghost_id],
+            concept_map={},       # ghost_id not present
+            mastery={},
+            graph={},
+            target_concept_id=target_id,
+        )
+        assert steps == []
+
+    def test_direct_prereq_reason_label(self):
+        """A concept that is a direct prerequisite of the target gets a 'Direct' reason."""
+        a = FakeConcept(name="A", prerequisites=[])
+        target_id = uuid4()
+        graph = {target_id: [(a.id, 1.0)]}
+        steps = _build_remediation_steps(
+            order=[a.id],
+            concept_map={a.id: a},
+            mastery={},
+            graph=graph,
+            target_concept_id=target_id,
+        )
+        assert len(steps) == 1
+        assert "Direct" in steps[0]["reason"]
+
+    def test_transitive_prereq_reason_label(self):
+        """A concept that is NOT a direct prereq gets a 'Transitive' reason."""
+        a = FakeConcept(name="A", prerequisites=[])
+        target_id = uuid4()
+        graph = {}  # a is not directly connected to target
+        steps = _build_remediation_steps(
+            order=[a.id],
+            concept_map={a.id: a},
+            mastery={},
+            graph=graph,
+            target_concept_id=target_id,
+        )
+        assert len(steps) == 1
+        assert "Transitive" in steps[0]["reason"]
 
 
 # ── Tests: API endpoint response shapes (unit, no DB) ───────────────────────
