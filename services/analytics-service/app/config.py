@@ -24,6 +24,7 @@ class Settings(BaseSettings):
 
     jwt_secret: str = "REPLACE_ME"
     jwt_algorithm: str = "HS256"
+    jwt_audience: str = "teacherslounge-services"
 
     allowed_origins: str = "http://localhost:3000"
 

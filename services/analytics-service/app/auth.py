@@ -38,6 +38,7 @@ def require_auth(
             credentials.credentials,
             settings.jwt_secret,
             algorithms=[settings.jwt_algorithm],
+            audience=settings.jwt_audience,
         )
         user_id: str | None = payload.get("sub")
         if not user_id:
