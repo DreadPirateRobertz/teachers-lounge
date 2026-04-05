@@ -264,7 +264,7 @@ class TestBuildRemediationSteps:
 
     def test_direct_prereq_reason_label(self):
         """A concept that is a direct prerequisite of the target gets a 'Direct' reason."""
-        a = FakeConcept(name="A", prerequisites=[])
+        a = FakeConcept(id=uuid4(), course_id=COURSE_ID, name="A", prerequisites=[])
         target_id = uuid4()
         graph = {target_id: [(a.id, 1.0)]}
         steps = _build_remediation_steps(
@@ -279,7 +279,7 @@ class TestBuildRemediationSteps:
 
     def test_transitive_prereq_reason_label(self):
         """A concept that is NOT a direct prereq gets a 'Transitive' reason."""
-        a = FakeConcept(name="A", prerequisites=[])
+        a = FakeConcept(id=uuid4(), course_id=COURSE_ID, name="A", prerequisites=[])
         target_id = uuid4()
         graph = {}  # a is not directly connected to target
         steps = _build_remediation_steps(
