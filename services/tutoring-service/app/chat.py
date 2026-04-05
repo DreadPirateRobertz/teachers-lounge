@@ -27,6 +27,7 @@ content_type, score.
 """
 import json
 import logging
+import re
 import time
 import uuid
 from uuid import UUID
@@ -43,8 +44,17 @@ from .gateway import get_gateway_client
 from .history import append_message, get_history, get_session
 from .models import MessageRequest
 from .rag_agent import PROFESSOR_NOVA_SYSTEM_PROMPT, build_rag_context
+from .search_client import fetch_diagram_chunks
 from .style_detector import DEFAULT_DIALS, build_style_prompt_section, detect_signals, update_dials
 from .user_client import UserServiceClient
+
+# Keywords that suggest the student is asking about something visual / structural.
+# When matched, we fetch a diagram from the CLIP index to embed in the response.
+_VISUAL_QUERY_PATTERNS = re.compile(
+    r"\b(diagram|structure|molecule|formula|look like|draw|figure|"
+    r"benzene|ring|bond|orbital|cell|anatomy|circuit|graph|chart)\b",
+    re.IGNORECASE,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -72,14 +82,22 @@ def _history_to_messages(interactions) -> list[dict]:
     ]
 
 
-def _sse(event_type: str, content: str = "", message_id: str = "", sources=None) -> str:
+def _sse(
+    event_type: str,
+    content: str = "",
+    message_id: str = "",
+    sources=None,
+    diagram=None,
+) -> str:
     """Serialise a single SSE frame.
 
     Args:
-        event_type: One of ``"delta"``, ``"sources"``, ``"done"``, ``"error"``.
+        event_type: One of ``"delta"``, ``"sources"``, ``"done"``, ``"error"``,
+            ``"diagram"``.
         content: Token text for delta events; empty string for others.
         message_id: UUID string of the tutor turn being streamed.
         sources: List of source dicts; included only on ``"sources"`` events.
+        diagram: Single diagram dict; included only on ``"diagram"`` events.
 
     Returns:
         SSE-formatted string ready to ``yield`` from the stream generator.
@@ -87,6 +105,8 @@ def _sse(event_type: str, content: str = "", message_id: str = "", sources=None)
     payload: dict = {"type": event_type, "content": content, "message_id": message_id}
     if sources is not None:
         payload["sources"] = sources
+    if diagram is not None:
+        payload["diagram"] = diagram
     return f"data: {json.dumps(payload)}\n\n"
 
 
@@ -121,6 +141,7 @@ async def send_message(
 
     # --- Step 2: Build system prompt + retrieve grounding chunks ---
     source_chunks = []
+    diagram_results = []
     if session.course_id is not None:
         base_prompt, source_chunks = await build_rag_context(
             student_id=user.user_id,
@@ -129,6 +150,13 @@ async def send_message(
             course_id=session.course_id,
             db=db,
         )
+        # Fetch diagrams when the question is visually-oriented (non-fatal)
+        if _VISUAL_QUERY_PATTERNS.search(body.content):
+            diagram_results = await fetch_diagram_chunks(
+                query=body.content,
+                course_id=session.course_id,
+                limit=settings.diagram_limit,
+            )
     else:
         base_prompt = PROFESSOR_NOVA_SYSTEM_PROMPT
 
@@ -189,6 +217,20 @@ async def send_message(
 
             if sources_payload:
                 yield _sse("sources", message_id=tutor_msg_id, sources=sources_payload)
+
+            # Emit diagram events — one per result (frontend renders inline)
+            for diagram in diagram_results:
+                yield _sse(
+                    "diagram",
+                    message_id=tutor_msg_id,
+                    diagram={
+                        "diagram_id": diagram.diagram_id,
+                        "gcs_path": diagram.gcs_path,
+                        "caption": diagram.caption,
+                        "figure_type": diagram.figure_type,
+                        "score": round(diagram.score, 4),
+                    },
+                )
 
             yield _sse("done", message_id=tutor_msg_id)
 

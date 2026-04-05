@@ -90,11 +90,45 @@ class ReviewStatsResponse(BaseModel):
 
 class SSEEvent(BaseModel):
     """Single token/chunk emitted over the SSE stream."""
-    type: str   # "delta" | "sources" | "done" | "error"
+    type: str   # "delta" | "sources" | "done" | "error" | "diagram" | "molecule_builder"
     content: str = ""
     message_id: str = ""
     # Populated on "sources" events — list of curriculum chunks used for grounding
     sources: list[dict] | None = None
+    # Populated on "diagram" events — a single diagram result
+    diagram: dict | None = None
+
+
+# ── Quiz answer DTOs (Phase 6 molecule builder) ───────────────────────────────
+
+class QuizAnswerRequest(BaseModel):
+    """Request body for POST /v1/quiz/answer.
+
+    Supports both multiple-choice (chosen_key) and molecule-builder (smiles_answer)
+    answer types.  At least one of the two fields must be provided.
+    """
+    chosen_key: str | None = Field(
+        default=None,
+        description="Answer key for multiple-choice questions (e.g. 'A', 'B').",
+    )
+    smiles_answer: str | None = Field(
+        default=None,
+        max_length=4096,
+        description="SMILES string submitted from the molecule builder canvas.",
+    )
+    expected_smiles: str | None = Field(
+        default=None,
+        max_length=4096,
+        description="Expected SMILES for server-side evaluation (sent by tutor in quiz prompt).",
+    )
+
+
+class QuizAnswerResponse(BaseModel):
+    """Result of evaluating a quiz answer."""
+    correct: bool
+    feedback: str
+    answer_type: str   # "multiple_choice" | "smiles"
+    submitted: str     # the value that was evaluated
 
 
 # ── Concept Dependency Graph DTOs ────────────────────────────────────────────

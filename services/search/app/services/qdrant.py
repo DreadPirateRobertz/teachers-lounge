@@ -13,7 +13,7 @@ from qdrant_client.models import (
 )
 
 from app.config import settings
-from app.models import ChunkResult
+from app.models import ChunkResult, DiagramResult
 
 logger = logging.getLogger(__name__)
 
@@ -188,4 +188,58 @@ async def sparse_search(
         limit,
         len(results),
     )
+    return results
+
+
+async def diagram_search(
+    query_vector: list[float],
+    course_id: UUID,
+    limit: int,
+) -> list[DiagramResult]:
+    """Search the diagrams collection with a CLIP text vector.
+
+    Args:
+        query_vector: 768-d CLIP text embedding of the query.
+        course_id: Scopes results to a single course.
+        limit: Maximum number of results to return.
+
+    Returns:
+        Ordered list of DiagramResult objects, or [] if the collection is empty
+        or unavailable.
+    """
+    client = get_client()
+    query_filter = Filter(
+        must=[FieldCondition(key="course_id", match=MatchValue(value=str(course_id)))]
+    )
+
+    try:
+        hits = await client.search(
+            collection_name=settings.diagrams_collection,
+            query_vector=query_vector,
+            query_filter=query_filter,
+            limit=limit,
+            with_payload=True,
+            with_vectors=False,
+        )
+    except Exception as exc:
+        logger.debug("diagram_search unavailable (collection missing?): %s", exc)
+        return []
+
+    results = []
+    for hit in hits:
+        payload = hit.payload or {}
+        results.append(
+            DiagramResult(
+                diagram_id=str(payload.get("diagram_id", hit.id)),
+                course_id=course_id,
+                gcs_path=payload.get("gcs_path", ""),
+                caption=payload.get("caption", ""),
+                figure_type=payload.get("figure_type", "diagram"),
+                page=payload.get("page"),
+                chapter=payload.get("chapter"),
+                score=hit.score,
+            )
+        )
+
+    logger.info("diagram_search course_id=%s limit=%d → %d results", course_id, limit, len(results))
     return results

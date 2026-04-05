@@ -34,5 +34,11 @@ class Settings(BaseSettings):
     chunk_max_tokens: int = 512
     chunk_overlap_tokens: int = 64
 
+    # CLIP diagram embeddings (Phase 6)
+    diagrams_collection: str = "diagrams"
+    clip_model: str = "openai/clip-vit-base-patch32"
+    clip_embedding_dim: int = 768
+    gcs_figures_bucket: str = "tvtutor-raw-uploads"  # figures extracted to same bucket
+
 
 settings = Settings()

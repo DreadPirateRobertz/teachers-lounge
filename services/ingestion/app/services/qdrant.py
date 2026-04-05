@@ -68,3 +68,46 @@ async def upsert_chunks(
 
     logger.info("upserted %d points to collection=%s",
                 len(points), settings.curriculum_collection)
+
+
+async def upsert_diagrams(
+    diagram_ids: list,
+    vectors: list[list[float]],
+    payloads: list[dict],
+) -> None:
+    """Upsert diagram CLIP vectors into the diagrams collection.
+
+    Each payload should contain: diagram_id, course_id, gcs_path,
+    caption, figure_type, chapter, page.
+
+    Args:
+        diagram_ids: List of diagram IDs (UUID or str).
+        vectors: Corresponding 768-d CLIP image vectors.
+        payloads: Metadata dicts for each diagram.
+    """
+    if not diagram_ids:
+        return
+
+    client = _make_client()
+    points = [
+        PointStruct(
+            id=str(did),
+            vector=vector,
+            payload=payload,
+        )
+        for did, vector, payload in zip(diagram_ids, vectors, payloads)
+    ]
+
+    batch_size = 100
+    try:
+        for i in range(0, len(points), batch_size):
+            batch = points[i:i + batch_size]
+            await client.upsert(
+                collection_name=settings.diagrams_collection,
+                points=batch,
+            )
+    finally:
+        await client.close()
+
+    logger.info("upserted %d diagrams to collection=%s",
+                len(points), settings.diagrams_collection)
