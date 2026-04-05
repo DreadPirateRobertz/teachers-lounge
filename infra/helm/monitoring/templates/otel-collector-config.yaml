@@ -1,0 +1,40 @@
+# OpenTelemetry Collector configuration
+# Receives OTLP (gRPC + HTTP), exports to Google Cloud Trace.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: otel-collector-config
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tl-monitoring.labels" . | nindent 4 }}
+data:
+  otel-config.yaml: |
+    receivers:
+      otlp:
+        protocols:
+          grpc:
+            endpoint: 0.0.0.0:4317
+          http:
+            endpoint: 0.0.0.0:4318
+
+    processors:
+      batch:
+        timeout: 5s
+        send_batch_size: 512
+      memory_limiter:
+        check_interval: 1s
+        limit_mib: 400
+        spike_limit_mib: 100
+
+    exporters:
+      googlecloud:
+        project: "${GOOGLE_CLOUD_PROJECT}"
+        log:
+          default_log_name: "opentelemetry.io/collector-exported-log"
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp]
+          processors: [memory_limiter, batch]
+          exporters: [googlecloud]

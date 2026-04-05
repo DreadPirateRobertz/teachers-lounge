@@ -1,0 +1,25 @@
+# ServiceMonitor resources for each TeachersLounge service.
+# kube-prometheus-stack's Prometheus picks these up automatically.
+{{ $ns := .Release.Namespace }}
+{{- range list "tutoring-service" "user-service" "gaming-service" "notification-service" "analytics-service" "ingestion-service" }}
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ . }}
+  namespace: {{ $ns }}
+  labels:
+    app: {{ . }}
+    release: {{ $.Release.Name }}
+spec:
+  selector:
+    matchLabels:
+      app: {{ . }}
+  namespaceSelector:
+    matchNames:
+      - teacherslounge
+  endpoints:
+    - port: http
+      path: /metrics
+      interval: 15s
+{{- end }}

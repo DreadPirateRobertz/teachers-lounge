@@ -1,0 +1,118 @@
+# TeachersLounge monitoring stack values
+# Wraps kube-prometheus-stack with TL-specific Grafana dashboards,
+# PrometheusRules for SLO alerting, and PagerDuty routing.
+
+kube-prometheus-stack:
+  # ── Prometheus ─────────────────────────────────────────────────────────────
+  prometheus:
+    prometheusSpec:
+      # Scrape all pods with prometheus.io/scrape: "true" annotation.
+      podMonitorSelectorNilUsesHelmValues: false
+      serviceMonitorSelectorNilUsesHelmValues: false
+      retention: 15d
+      storageSpec:
+        volumeClaimTemplate:
+          spec:
+            storageClassName: standard-rwo
+            accessModes: ["ReadWriteOnce"]
+            resources:
+              requests:
+                storage: 50Gi
+
+  # ── Grafana ────────────────────────────────────────────────────────────────
+  grafana:
+    enabled: true
+    adminPassword: "${GRAFANA_ADMIN_PASSWORD}"
+    sidecar:
+      dashboards:
+        enabled: true
+        label: grafana_dashboard
+        labelValue: "1"
+    grafana.ini:
+      server:
+        root_url: "%(protocol)s://%(domain)s/grafana"
+        serve_from_sub_path: true
+
+  # ── Alertmanager ───────────────────────────────────────────────────────────
+  alertmanager:
+    alertmanagerSpec:
+      secrets:
+        - alertmanager-pagerduty-secret
+    config:
+      global:
+        resolve_timeout: 5m
+      route:
+        group_by: ["alertname", "service"]
+        group_wait: 30s
+        group_interval: 5m
+        repeat_interval: 4h
+        receiver: slack-low-severity
+        routes:
+          # High-severity SLO breaches → PagerDuty (pages on-call)
+          - matchers:
+              - name: severity
+                value: critical
+            receiver: pagerduty-high-severity
+          - matchers:
+              - name: severity
+                value: warning
+            receiver: slack-low-severity
+
+      receivers:
+        - name: slack-low-severity
+          slack_configs:
+            - api_url_secret:
+                name: alertmanager-slack-secret
+                key: url
+              channel: "#alerts"
+              title: "[{{ .Status | toUpper }}] {{ .GroupLabels.alertname }}"
+              text: >-
+                {{ range .Alerts }}
+                *Alert:* {{ .Annotations.summary }}
+                *Service:* {{ .Labels.service }}
+                {{ end }}
+
+        - name: pagerduty-high-severity
+          pagerduty_configs:
+            - routing_key_secret:
+                name: alertmanager-pagerduty-secret
+                key: routingKey
+              description: >-
+                {{ .GroupLabels.alertname }} — {{ .CommonAnnotations.summary }}
+              severity: critical
+
+  # ── Default scrape annotations ─────────────────────────────────────────────
+  prometheus:
+    prometheusSpec:
+      additionalScrapeConfigs:
+        - job_name: teacherslounge-services
+          kubernetes_sd_configs:
+            - role: pod
+              namespaces:
+                names: ["teacherslounge"]
+          relabel_configs:
+            - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+              action: keep
+              regex: "true"
+            - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+              action: replace
+              target_label: __metrics_path__
+              regex: (.+)
+            - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+              action: replace
+              regex: ([^:]+)(?::\d+)?;(\d+)
+              replacement: $1:$2
+              target_label: __address__
+            - source_labels: [__meta_kubernetes_pod_label_app]
+              target_label: service
+
+# ── OTel collector (DaemonSet → Google Cloud Trace) ────────────────────────
+otelCollector:
+  image: otel/opentelemetry-collector-contrib:0.105.0
+  resources:
+    requests:
+      cpu: 100m
+      memory: 128Mi
+    limits:
+      cpu: 500m
+      memory: 512Mi

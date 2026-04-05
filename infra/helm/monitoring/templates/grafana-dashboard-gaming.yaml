@@ -1,0 +1,57 @@
+# Grafana dashboard — Gaming
+# Shows DAU, XP distribution, boss battle win rate, streak health.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-gaming
+  namespace: {{ .Release.Namespace }}
+  labels:
+    grafana_dashboard: "1"
+    {{- include "tl-monitoring.labels" . | nindent 4 }}
+data:
+  gaming.json: |
+    {
+      "title": "TeachersLounge — Gaming",
+      "uid": "tl-gaming",
+      "tags": ["teacherslounge", "gaming"],
+      "refresh": "1m",
+      "schemaVersion": 38,
+      "panels": [
+        {
+          "id": 1,
+          "title": "XP Granted Rate (XP/min)",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "targets": [
+            {
+              "expr": "rate(tl_xp_granted_total[5m]) * 60",
+              "legendFormat": "XP/min"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "title": "Boss Battles — Win / Loss / Forfeit Rate",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "targets": [
+            {
+              "expr": "sum(rate(tl_boss_battles_total[5m])) by (result)",
+              "legendFormat": "{{ "{{result}}" }}"
+            }
+          ]
+        },
+        {
+          "id": 3,
+          "title": "Active Streaks",
+          "type": "stat",
+          "gridPos": {"h": 4, "w": 6, "x": 0, "y": 8},
+          "targets": [
+            {
+              "expr": "tl_active_streaks_gauge",
+              "legendFormat": "Active Streaks"
+            }
+          ]
+        }
+      ]
+    }

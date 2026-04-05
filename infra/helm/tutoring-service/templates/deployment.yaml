@@ -15,6 +15,10 @@ spec:
     metadata:
       labels:
         {{- include "tutoring-service.selectorLabels" . | nindent 8 }}
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/port: "{{ .Values.service.port }}"
+        prometheus.io/path: "/metrics"
     spec:
       containers:
         - name: tutoring-service

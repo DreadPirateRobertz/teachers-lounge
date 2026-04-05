@@ -1,0 +1,39 @@
+# OpenTelemetry Collector DaemonSet
+# Runs on every GKE node; receives OTLP traces from services and exports to
+# Google Cloud Trace via the GCP exporter.
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: otel-collector
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: otel-collector
+    {{- include "tl-monitoring.labels" . | nindent 4 }}
+spec:
+  selector:
+    matchLabels:
+      app: otel-collector
+  template:
+    metadata:
+      labels:
+        app: otel-collector
+    spec:
+      serviceAccountName: otel-collector
+      containers:
+        - name: otel-collector
+          image: {{ .Values.otelCollector.image }}
+          args: ["--config=/conf/otel-config.yaml"]
+          resources:
+            {{- toYaml .Values.otelCollector.resources | nindent 12 }}
+          volumeMounts:
+            - name: otel-config
+              mountPath: /conf
+          ports:
+            - containerPort: 4317
+              name: otlp-grpc
+            - containerPort: 4318
+              name: otlp-http
+      volumes:
+        - name: otel-config
+          configMap:
+            name: otel-collector-config

@@ -1,0 +1,24 @@
+# ClusterIP Service so any pod can reach the DaemonSet collector via DNS.
+# Services use the node-local address through the DaemonSet's hostNetwork
+# or via the ClusterIP; tutoring-service points OTEL_EXPORTER_OTLP_ENDPOINT
+# here.
+apiVersion: v1
+kind: Service
+metadata:
+  name: otel-collector
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: otel-collector
+    {{- include "tl-monitoring.labels" . | nindent 4 }}
+spec:
+  selector:
+    app: otel-collector
+  ports:
+    - name: otlp-grpc
+      port: 4317
+      targetPort: 4317
+      protocol: TCP
+    - name: otlp-http
+      port: 4318
+      targetPort: 4318
+      protocol: TCP

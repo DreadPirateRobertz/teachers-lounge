@@ -1,0 +1,11 @@
+apiVersion: v2
+name: tl-monitoring
+description: TeachersLounge observability stack — Prometheus, Grafana, Alertmanager, OTel collector
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+
+dependencies:
+  - name: kube-prometheus-stack
+    version: "61.7.2"
+    repository: "https://prometheus-community.github.io/helm-charts"

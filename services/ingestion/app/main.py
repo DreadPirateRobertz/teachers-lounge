@@ -4,6 +4,8 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.metrics import metrics_app
+from app.metrics_middleware import PrometheusMiddleware
 from app.routers import ingest
 from app.services.db import close_pool
 from app.services.pubsub import start_subscriber
@@ -39,6 +41,9 @@ app = FastAPI(
     description="Accepts course material uploads, stores in GCS, dispatches to processing pipeline.",
     lifespan=lifespan,
 )
+
+app.add_middleware(PrometheusMiddleware)
+app.mount("/metrics", metrics_app)
 
 app.include_router(ingest.router)
 

@@ -1,0 +1,118 @@
+# PrometheusRule CRDs for TeachersLounge SLO alerting.
+#
+# SLOs (from Phase 8 spec):
+#   - TTFB SLO: 95% of first SSE tokens < 2s; alert if rolling 1h p95 > 3s
+#   - Error rate SLO: <1% 5xx; alert if rolling 5m rate > 2%
+#   - RAG latency SLO: full context build <500ms; alert if p95 > 1s
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: tl-slo-alerts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "tl-monitoring.labels" . | nindent 4 }}
+    # This label causes kube-prometheus-stack to load the rule file.
+    release: {{ .Release.Name }}
+spec:
+  groups:
+    # ── TTFB SLO ──────────────────────────────────────────────────────────────
+    - name: tl.slo.ttfb
+      rules:
+        - alert: TutorStreamTTFBHigh
+          # p95 TTFB over the last 1 h > 3 s  (SLO threshold: 2 s, alert at 3 s)
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(tl_stream_ttfb_seconds_bucket[1h])) by (le)
+            ) > 3
+          for: 5m
+          labels:
+            severity: critical
+            service: tutoring-service
+          annotations:
+            summary: "Tutoring SSE p95 TTFB > 3 s (SLO: 2 s)"
+            description: >-
+              The 95th-percentile time-to-first-byte for SSE chat streams has
+              exceeded 3 seconds for 5 consecutive minutes.  The TTFB SLO is 2 s.
+              Check AI gateway latency and RAG pipeline step timings.
+            runbook_url: "https://github.com/DreadPirateRobertz/teachers-lounge/blob/main/docs/runbooks/ttfb-slo.md"
+
+        - alert: TutorStreamTTFBWarning
+          # p95 TTFB > 2 s (SLO boundary — early warning)
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(tl_stream_ttfb_seconds_bucket[1h])) by (le)
+            ) > 2
+          for: 10m
+          labels:
+            severity: warning
+            service: tutoring-service
+          annotations:
+            summary: "Tutoring SSE p95 TTFB at SLO boundary (> 2 s)"
+            description: >-
+              p95 TTFB is at or above the 2 s SLO threshold for 10 minutes.
+              Investigate before it pages.
+
+    # ── Error rate SLO ────────────────────────────────────────────────────────
+    - name: tl.slo.error_rate
+      rules:
+        - alert: ServiceHighErrorRate
+          # 5xx rate > 2% over the last 5 min across any service
+          expr: |
+            sum(rate(http_requests_total{status=~"5.."}[5m])) by (service)
+            /
+            sum(rate(http_requests_total[5m])) by (service)
+            > 0.02
+          for: 2m
+          labels:
+            severity: critical
+          annotations:
+            summary: "{{ $labels.service }} 5xx error rate > 2%"
+            description: >-
+              Service {{ $labels.service }} has a 5xx error rate above 2% over
+              the last 5 minutes.  The SLO is < 1%.  Investigate immediately.
+            runbook_url: "https://github.com/DreadPirateRobertz/teachers-lounge/blob/main/docs/runbooks/error-rate-slo.md"
+
+        - alert: ServiceErrorRateWarning
+          expr: |
+            sum(rate(http_requests_total{status=~"5.."}[5m])) by (service)
+            /
+            sum(rate(http_requests_total[5m])) by (service)
+            > 0.01
+          for: 5m
+          labels:
+            severity: warning
+          annotations:
+            summary: "{{ $labels.service }} 5xx error rate at SLO boundary (> 1%)"
+
+    # ── RAG latency SLO ───────────────────────────────────────────────────────
+    - name: tl.slo.rag_latency
+      rules:
+        - alert: RAGContextBuildLatencyHigh
+          # p95 total RAG build > 1 s (SLO: 500 ms)
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(tl_rag_latency_seconds_bucket[10m])) by (le, step)
+            ) > 1
+          for: 5m
+          labels:
+            severity: critical
+            service: tutoring-service
+          annotations:
+            summary: "RAG pipeline p95 latency > 1 s (SLO: 500 ms)"
+            description: >-
+              RAG pipeline step {{ $labels.step }} p95 latency is above 1 second.
+              The SLO is 500 ms for the full context build.
+              Check search-service latency and Qdrant query times.
+            runbook_url: "https://github.com/DreadPirateRobertz/teachers-lounge/blob/main/docs/runbooks/rag-latency-slo.md"
+
+        - alert: RAGContextBuildLatencyWarning
+          expr: |
+            histogram_quantile(0.95,
+              sum(rate(tl_rag_latency_seconds_bucket[10m])) by (le, step)
+            ) > 0.5
+          for: 10m
+          labels:
+            severity: warning
+            service: tutoring-service
+          annotations:
+            summary: "RAG pipeline p95 latency at SLO boundary (> 500 ms)"

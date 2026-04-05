@@ -1,0 +1,45 @@
+# Grafana dashboard — Business Metrics
+# Shows trial conversions, subscription status distribution, revenue.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: grafana-dashboard-business
+  namespace: {{ .Release.Namespace }}
+  labels:
+    grafana_dashboard: "1"
+    {{- include "tl-monitoring.labels" . | nindent 4 }}
+data:
+  business.json: |
+    {
+      "title": "TeachersLounge — Business",
+      "uid": "tl-business",
+      "tags": ["teacherslounge", "business"],
+      "refresh": "5m",
+      "schemaVersion": 38,
+      "panels": [
+        {
+          "id": 1,
+          "title": "Auth Requests by Status",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 0, "y": 0},
+          "targets": [
+            {
+              "expr": "sum(rate(tl_auth_requests_total[5m])) by (operation, status)",
+              "legendFormat": "{{ "{{operation}}" }} {{ "{{status}}" }}"
+            }
+          ]
+        },
+        {
+          "id": 2,
+          "title": "Subscription Revenue (cumulative USD)",
+          "type": "timeseries",
+          "gridPos": {"h": 8, "w": 12, "x": 12, "y": 0},
+          "targets": [
+            {
+              "expr": "sum(tl_subscription_revenue_total) by (plan) / 100",
+              "legendFormat": "{{ "{{plan}}" }}"
+            }
+          ]
+        }
+      ]
+    }
