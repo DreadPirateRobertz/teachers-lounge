@@ -95,6 +95,7 @@ services:
       DATABASE_URL: "postgres://tl_app:${POSTGRES_PASSWORD:-localdevpassword}@postgres:5432/teacherslounge?sslmode=disable"
       REDIS_HOST: redis
       REDIS_PORT: "6379"
+      REDIS_ADDR: "redis:6379"
       REDIS_PASSWORD: ${REDIS_PASSWORD:-localredispassword}
       JWT_SECRET: ${JWT_SECRET:-localdevjwtsecret-replace-in-prod}
       JWT_EXPIRY_MINUTES: "15"
