@@ -10,10 +10,15 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libmagic1 \
     ffmpeg \
     libxml2-dev libxslt1-dev \
+    cmake \
+    build-essential \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Pre-install build tools + modern onnx wheel to prevent pip from backtracking
+# to old onnx source-only versions whose sdists lack requirements.txt.
+RUN pip install --no-cache-dir setuptools wheel grpcio-tools "onnx>=1.16.0" "onnxruntime>=1.18.0"
+RUN pip install --no-cache-dir --no-build-isolation -r requirements.txt
 
 COPY app/ ./app/
 
