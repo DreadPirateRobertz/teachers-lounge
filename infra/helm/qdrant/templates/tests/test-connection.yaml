@@ -1,0 +1,51 @@
+## Helm test — validates that the Qdrant HTTP API is reachable after deployment.
+## Run with: helm test <release-name> -n <namespace>
+##
+## The test pod hits GET /healthz on the ClusterIP service and expects HTTP 200.
+## It also checks that the cluster info endpoint returns "ok" for all peers,
+## confirming that all replicas have joined the distributed cluster.
+apiVersion: v1
+kind: Pod
+metadata:
+  name: {{ include "qdrant.fullname" . }}-test-connection
+  labels:
+    {{- include "qdrant.labels" . | nindent 4 }}
+    app.kubernetes.io/component: test
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: test
+      image: curlimages/curl:8.7.1
+      command: ["sh", "-c"]
+      args:
+        - |
+          set -euo pipefail
+          BASE="http://{{ include "qdrant.fullname" . }}:{{ .Values.service.httpPort }}"
+
+          echo "--- health check ---"
+          curl -sf "${BASE}/healthz" | grep -q '"status":"ok"'
+          echo "healthz: OK"
+
+          echo "--- cluster status ---"
+          STATUS=$(curl -sf "${BASE}/cluster")
+          echo "$STATUS" | grep -q '"status":"enabled"'
+          echo "cluster enabled: OK"
+
+          ## Verify all peers are reported as online (may not be instant; retry up to 30s).
+          EXPECTED={{ .Values.replicaCount }}
+          for i in $(seq 1 6); do
+            PEERS=$(echo "$STATUS" | grep -o '"state":"Active"' | wc -l)
+            if [ "$PEERS" -ge "$EXPECTED" ]; then
+              echo "all ${EXPECTED} peers online: OK"
+              exit 0
+            fi
+            echo "waiting for peers (${PEERS}/${EXPECTED})…"
+            sleep 5
+            STATUS=$(curl -sf "${BASE}/cluster")
+          done
+
+          echo "ERROR: only ${PEERS}/${EXPECTED} peers online after 30s"
+          exit 1

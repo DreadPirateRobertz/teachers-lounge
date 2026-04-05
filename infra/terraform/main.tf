@@ -55,3 +55,23 @@ module "monitoring" {
 
   depends_on = [module.gke]
 }
+
+## Qdrant GCS snapshot bucket + Workload Identity IAM.
+## The bucket name and GCP SA email are output for use in the Helm values-prod.yaml.
+module "qdrant_gcs" {
+  source = "./modules/qdrant-gcs"
+
+  project_id  = var.project_id
+  region      = var.region
+  environment = var.environment
+  bucket_name = "teachers-lounge-qdrant-snapshots-${var.environment}"
+
+  ## Rotate out snapshots after 30 days in prod, 7 in dev.
+  retention_days = var.environment == "prod" ? 30 : 7
+
+  ## Must match the namespace and SA name used by the Helm release.
+  k8s_namespace = "qdrant"
+  k8s_sa_name   = "qdrant"
+
+  depends_on = [module.gke]
+}
