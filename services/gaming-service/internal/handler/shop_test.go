@@ -14,6 +14,7 @@ import (
 	"github.com/teacherslounge/gaming-service/internal/handler"
 	"github.com/teacherslounge/gaming-service/internal/middleware"
 	"github.com/teacherslounge/gaming-service/internal/model"
+	"github.com/teacherslounge/gaming-service/internal/store"
 	"github.com/teacherslounge/gaming-service/internal/taunt"
 )
 
@@ -117,7 +118,7 @@ func TestBuyPowerUp_Success(t *testing.T) {
 }
 
 func TestBuyPowerUp_InsufficientGems(t *testing.T) {
-	st := &shopStore{buyErr: errors.New("not enough gems")}
+	st := &shopStore{buyErr: store.ErrNoGems}
 	h := newShopHandler(st)
 
 	req := httptest.NewRequest(http.MethodPost, "/gaming/shop/buy", buyBody("user1", model.PowerUpCritical))
@@ -128,6 +129,21 @@ func TestBuyPowerUp_InsufficientGems(t *testing.T) {
 
 	if rec.Code != http.StatusUnprocessableEntity {
 		t.Errorf("expected 422, got %d", rec.Code)
+	}
+}
+
+func TestBuyPowerUp_UnexpectedStoreError(t *testing.T) {
+	st := &shopStore{buyErr: errors.New("db connection lost")}
+	h := newShopHandler(st)
+
+	req := httptest.NewRequest(http.MethodPost, "/gaming/shop/buy", buyBody("user1", model.PowerUpShield))
+	req = withUser(req, "user1")
+	rec := httptest.NewRecorder()
+
+	h.BuyPowerUp(rec, req)
+
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rec.Code)
 	}
 }
 

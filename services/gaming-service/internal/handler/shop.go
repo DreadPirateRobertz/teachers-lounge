@@ -2,11 +2,13 @@ package handler
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 
 	"github.com/teacherslounge/gaming-service/internal/battle"
 	"github.com/teacherslounge/gaming-service/internal/middleware"
 	"github.com/teacherslounge/gaming-service/internal/model"
+	"github.com/teacherslounge/gaming-service/internal/store"
 	"go.uber.org/zap"
 )
 
@@ -73,8 +75,12 @@ func (h *Handler) BuyPowerUp(w http.ResponseWriter, r *http.Request) {
 
 	gemsLeft, newCount, err := h.store.BuyPowerUp(r.Context(), callerID, req.PowerUp, cost)
 	if err != nil {
+		if errors.Is(err, store.ErrNoGems) {
+			writeError(w, http.StatusUnprocessableEntity, "not enough gems")
+			return
+		}
 		h.logger.Error("buy power-up", zap.String("user_id", callerID), zap.String("power_up", string(req.PowerUp)), zap.Error(err))
-		writeError(w, http.StatusUnprocessableEntity, "not enough gems")
+		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
 
