@@ -1,5 +1,4 @@
-"""
-JWT validation — validates access tokens issued by the User Service (tl-38s).
+"""JWT validation — validates access tokens issued by the User Service (tl-38s).
 
 User Service signs HS256 JWTs with the following claims:
   aud        — audience: "teacherslounge-services"  (validated here)
@@ -26,6 +25,8 @@ _bearer = HTTPBearer(auto_error=True)
 
 
 class JWTClaims(BaseModel):
+    """Validated claims extracted from a Bearer JWT issued by the User Service."""
+
     user_id: UUID
     email: str
     account_type: str   # "standard" | "minor"

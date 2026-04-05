@@ -194,7 +194,10 @@ jobs:
         if: steps.check.outputs.exists == 'true'
       - run: if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt --quiet; fi
         if: steps.check.outputs.exists == 'true'
-      - run: ruff check .
+      # Lint gate: enforces pycodestyle (E/W), Pyflakes (F), import-order (I),
+      # Google-style docstrings (D), and McCabe complexity (C90) via ruff.toml.
+      - name: Ruff lint
+        run: ruff check --output-format=github .
         if: steps.check.outputs.exists == 'true'
       - run: pip install pytest-cov --quiet
         if: steps.check.outputs.exists == 'true'

@@ -15,8 +15,9 @@ logger = logging.getLogger(__name__)
 
 
 async def process_pdf(job: IngestJobMessage) -> dict:
-    """Full PDF processing pipeline:
+    """Run the full PDF processing pipeline.
 
+    Steps:
     1. Download from GCS to temp file
     2. Detect digital vs scanned via pdfminer heuristic
     3. Parse with unstructured.io (layout-aware)
@@ -130,6 +131,15 @@ async def _download_from_gcs(gcs_path: str, job_id: UUID) -> Path:
 
 
 def _download_from_gcs_sync(gcs_path: str, job_id: UUID) -> Path:
+    """Synchronous GCS download called via run_in_executor.
+
+    Args:
+        gcs_path: Full GCS URI, e.g. ``gs://bucket/path/to/file.pdf``.
+        job_id: UUID of the ingest job, used to prefix the temp file name.
+
+    Returns:
+        Path to the downloaded local temporary file.
+    """
     # gcs_path is like gs://bucket/path/to/file.pdf
     from google.cloud import storage  # lazy import — avoids heavy dep at module load
 
@@ -328,6 +338,21 @@ def _make_chunk(
     page: int | None,
     content_type: str,
 ) -> dict:
+    """Build a chunk dict ready for Postgres and Qdrant insertion.
+
+    Args:
+        content: Extracted text content for this chunk.
+        material_id: UUID of the parent material.
+        course_id: UUID of the course this material belongs to.
+        chapter: Chapter heading, if detected.
+        section: Section heading, if detected.
+        page: Source page number, if available.
+        content_type: One of ``text``, ``table``, ``equation``, ``figure``.
+
+    Returns:
+        Dict with keys id, material_id, course_id, content, chapter, section,
+        page, content_type, metadata.
+    """
     return {
         "id": uuid4(),
         "material_id": material_id,
@@ -365,6 +390,25 @@ def _classify_element(element) -> str:
     if isinstance(element, (FigureCaption, Image)):
         return "figure"
     return "text"
+
+
+def _classify_figure_type(caption: str) -> str:
+    """Classify a figure by type based on caption keywords.
+
+    Args:
+        caption: The figure caption text (may be empty).
+
+    Returns:
+        One of ``"table"``, ``"equation_image"``, ``"chart"``, or ``"diagram"``.
+    """
+    caption_lower = caption.lower()
+    if any(w in caption_lower for w in ("table", "tbl.")):
+        return "table"
+    if any(w in caption_lower for w in ("equation", "eq.", "formula")):
+        return "equation_image"
+    if any(w in caption_lower for w in ("chart", "graph", "plot")):
+        return "chart"
+    return "diagram"
 
 
 async def _process_figures(
@@ -410,6 +454,8 @@ async def _process_figures(
         from unstructured.documents.elements import (  # noqa: PLC0415
             FigureCaption,
             Image,
+        )
+        from unstructured.documents.elements import (
             Title as _Title,
         )
         if isinstance(element, _Title):
@@ -439,16 +485,7 @@ async def _process_figures(
             caption = pending_caption or element.text.strip() or ""
             pending_caption = None
 
-            # Determine figure type from caption heuristics
-            caption_lower = caption.lower()
-            if any(w in caption_lower for w in ("table", "tbl.")):
-                figure_type = "table"
-            elif any(w in caption_lower for w in ("equation", "eq.", "formula")):
-                figure_type = "equation_image"
-            elif any(w in caption_lower for w in ("chart", "graph", "plot")):
-                figure_type = "chart"
-            else:
-                figure_type = "diagram"
+            figure_type = _classify_figure_type(caption)
 
             try:
                 vector = await clip_embedder.embed_image(image_path)

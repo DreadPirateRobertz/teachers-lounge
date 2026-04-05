@@ -12,6 +12,15 @@ ADEQUATE_THRESHOLD = 0.6  # lower bar used for prerequisite chain adequacy check
 
 
 async def get_course_concepts(db: AsyncSession, course_id: UUID) -> list[Concept]:
+    """Fetch all concepts for a course, ordered by name.
+
+    Args:
+        db: Async SQLAlchemy session.
+        course_id: UUID of the course.
+
+    Returns:
+        List of Concept ORM objects ordered alphabetically.
+    """
     result = await db.execute(
         select(Concept).where(Concept.course_id == course_id).order_by(Concept.name)
     )
@@ -19,6 +28,15 @@ async def get_course_concepts(db: AsyncSession, course_id: UUID) -> list[Concept
 
 
 async def get_concept(db: AsyncSession, concept_id: UUID) -> Concept | None:
+    """Fetch a single concept by primary key.
+
+    Args:
+        db: Async SQLAlchemy session.
+        concept_id: UUID of the concept.
+
+    Returns:
+        Concept ORM object, or ``None`` if not found.
+    """
     result = await db.execute(select(Concept).where(Concept.id == concept_id))
     return result.scalar_one_or_none()
 
@@ -26,6 +44,16 @@ async def get_concept(db: AsyncSession, concept_id: UUID) -> Concept | None:
 async def get_student_mastery(
     db: AsyncSession, user_id: UUID, course_id: UUID
 ) -> dict[UUID, StudentConceptMastery]:
+    """Load all mastery records for a student in a given course, keyed by concept_id.
+
+    Args:
+        db: Async SQLAlchemy session.
+        user_id: UUID of the student.
+        course_id: UUID of the course.
+
+    Returns:
+        Dict mapping concept UUID to StudentConceptMastery ORM object.
+    """
     result = await db.execute(
         select(StudentConceptMastery)
         .join(Concept, Concept.id == StudentConceptMastery.concept_id)
@@ -36,7 +64,7 @@ async def get_student_mastery(
 
 
 def _build_prereq_graph(concepts: list[Concept]) -> dict[UUID, list[tuple[UUID, float]]]:
-    """Build adjacency list: concept_id -> [(prerequisite_id, weight), ...]"""
+    """Build adjacency list: concept_id -> [(prerequisite_id, weight), ...]."""
     graph: dict[UUID, list[tuple[UUID, float]]] = defaultdict(list)
     for c in concepts:
         graph.setdefault(c.id, [])
@@ -158,6 +186,46 @@ def detect_gaps(
     return gaps
 
 
+def _build_remediation_steps(
+    order: list[UUID],
+    concept_map: dict[UUID, "Concept"],
+    mastery: dict[UUID, StudentConceptMastery],
+    graph: dict[UUID, list[tuple[UUID, float]]],
+    target_concept_id: UUID,
+) -> list[dict]:
+    """Build ordered remediation step dicts from a topological sort result.
+
+    Args:
+        order: Concept UUIDs in study order (topologically sorted).
+        concept_map: Map from concept UUID to Concept ORM object.
+        mastery: Student mastery records keyed by concept_id.
+        graph: Prerequisite adjacency list (concept → list of prereq edges).
+        target_concept_id: The learning target concept.
+
+    Returns:
+        List of step dicts with order, concept_id, concept_name, mastery_score, reason.
+    """
+    direct_prereqs_of_target = {p for p, _ in graph.get(target_concept_id, [])}
+    steps = []
+    for i, cid in enumerate(order):
+        concept = concept_map.get(cid)
+        if not concept:
+            continue
+        score = mastery[cid].mastery_score if cid in mastery else 0.0
+        if cid in direct_prereqs_of_target:
+            reason = f"Direct prerequisite of target (mastery: {score:.0%})"
+        else:
+            reason = f"Transitive prerequisite (mastery: {score:.0%})"
+        steps.append({
+            "order": i + 1,
+            "concept_id": cid,
+            "concept_name": concept.name,
+            "mastery_score": score,
+            "reason": reason,
+        })
+    return steps
+
+
 def generate_remediation_path(
     target_concept_id: UUID,
     concepts: list[Concept],
@@ -204,25 +272,4 @@ def generate_remediation_path(
             if in_degree[dependent] == 0:
                 queue.append(dependent)
 
-    # Build steps
-    steps = []
-    for i, cid in enumerate(order):
-        concept = concept_map.get(cid)
-        if not concept:
-            continue
-        score = mastery[cid].mastery_score if cid in mastery else 0.0
-        # Determine reason
-        direct_prereqs_of_target = {p for p, _ in graph.get(target_concept_id, [])}
-        if cid in direct_prereqs_of_target:
-            reason = f"Direct prerequisite of target (mastery: {score:.0%})"
-        else:
-            reason = f"Transitive prerequisite (mastery: {score:.0%})"
-        steps.append({
-            "order": i + 1,
-            "concept_id": cid,
-            "concept_name": concept.name,
-            "mastery_score": score,
-            "reason": reason,
-        })
-
-    return steps
+    return _build_remediation_steps(order, concept_map, mastery, graph, target_concept_id)

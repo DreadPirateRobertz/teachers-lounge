@@ -9,15 +9,14 @@ Covers:
 import pytest
 
 from app.style_detector import (
-    DEFAULT_DIALS,
     ALPHA,
+    DEFAULT_DIALS,
     THRESHOLD,
     StyleSignal,
     build_style_prompt_section,
     detect_signals,
     update_dials,
 )
-
 
 # ── detect_signals ────────────────────────────────────────────────────────────
 

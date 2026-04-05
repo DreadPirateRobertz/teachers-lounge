@@ -2,8 +2,6 @@ import asyncio
 import logging
 
 # google-cloud-pubsub imported lazily inside functions
-
-
 from app.config import settings
 from app.models import IngestJobMessage
 from app.processors import route_to_processor

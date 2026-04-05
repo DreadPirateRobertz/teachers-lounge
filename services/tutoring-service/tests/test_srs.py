@@ -14,7 +14,6 @@ from app.srs import (
     sm2_update,
 )
 
-
 # ── sm2_update ────────────────────────────────────────────────────────────────
 
 class TestSm2Update:

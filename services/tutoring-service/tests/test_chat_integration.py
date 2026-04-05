@@ -365,3 +365,194 @@ async def test_simple_chat_requires_auth(client):
         json={"messages": [{"role": "user", "content": "Hello"}]},
     )
     assert resp.status_code == 403
+
+
+# ── _chat_stream_generator error paths ──────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_sse_stream_api_connection_error_yields_fallback(
+    client, auth_headers, user_id, session_id
+):
+    """APIConnectionError from the gateway must yield a fallback delta+done, not crash."""
+    from openai import APIConnectionError
+
+    fake_session = MagicMock()
+    fake_session.user_id = uuid.UUID(user_id)
+    fake_session.course_id = None
+
+    fake_completions = AsyncMock()
+    fake_completions.create = AsyncMock(
+        side_effect=APIConnectionError(request=MagicMock())
+    )
+    fake_openai = MagicMock()
+    fake_openai.chat.completions = fake_completions
+
+    with (
+        patch("app.chat.get_session", AsyncMock(return_value=fake_session)),
+        patch("app.chat.get_history", AsyncMock(return_value=[])),
+        patch("app.chat.append_message", AsyncMock()),
+        patch("app.chat.get_gateway_client", return_value=fake_openai),
+        patch("app.chat.get_dials", AsyncMock(return_value={})),
+    ):
+        resp = await client.post(
+            f"/v1/sessions/{session_id}/messages",
+            json={"content": "What is entropy?"},
+            headers=auth_headers,
+        )
+
+    assert resp.status_code == 200
+    events = [
+        json.loads(line[len("data: "):])
+        for line in resp.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    types = [e["type"] for e in events]
+    assert "delta" in types
+    assert types[-1] == "done"
+    assert "error" not in types
+
+
+@pytest.mark.asyncio
+async def test_sse_stream_api_status_error_yields_fallback(
+    client, auth_headers, user_id, session_id
+):
+    """APIStatusError from the gateway must yield a fallback delta+done, not crash."""
+    from openai import APIStatusError
+
+    fake_session = MagicMock()
+    fake_session.user_id = uuid.UUID(user_id)
+    fake_session.course_id = None
+
+    fake_completions = AsyncMock()
+    fake_completions.create = AsyncMock(
+        side_effect=APIStatusError(
+            message="rate limited",
+            response=MagicMock(status_code=429),
+            body={},
+        )
+    )
+    fake_openai = MagicMock()
+    fake_openai.chat.completions = fake_completions
+
+    with (
+        patch("app.chat.get_session", AsyncMock(return_value=fake_session)),
+        patch("app.chat.get_history", AsyncMock(return_value=[])),
+        patch("app.chat.append_message", AsyncMock()),
+        patch("app.chat.get_gateway_client", return_value=fake_openai),
+        patch("app.chat.get_dials", AsyncMock(return_value={})),
+    ):
+        resp = await client.post(
+            f"/v1/sessions/{session_id}/messages",
+            json={"content": "What is entropy?"},
+            headers=auth_headers,
+        )
+
+    assert resp.status_code == 200
+    events = [
+        json.loads(line[len("data: "):])
+        for line in resp.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    types = [e["type"] for e in events]
+    assert "delta" in types
+    assert types[-1] == "done"
+    assert "error" not in types
+
+
+@pytest.mark.asyncio
+async def test_sse_stream_unexpected_exception_yields_error_event(
+    client, auth_headers, user_id, session_id
+):
+    """An unexpected exception must yield an error SSE event instead of a 500."""
+    fake_session = MagicMock()
+    fake_session.user_id = uuid.UUID(user_id)
+    fake_session.course_id = None
+
+    fake_completions = AsyncMock()
+    fake_completions.create = AsyncMock(side_effect=RuntimeError("boom"))
+    fake_openai = MagicMock()
+    fake_openai.chat.completions = fake_completions
+
+    with (
+        patch("app.chat.get_session", AsyncMock(return_value=fake_session)),
+        patch("app.chat.get_history", AsyncMock(return_value=[])),
+        patch("app.chat.append_message", AsyncMock()),
+        patch("app.chat.get_gateway_client", return_value=fake_openai),
+        patch("app.chat.get_dials", AsyncMock(return_value={})),
+    ):
+        resp = await client.post(
+            f"/v1/sessions/{session_id}/messages",
+            json={"content": "What is entropy?"},
+            headers=auth_headers,
+        )
+
+    assert resp.status_code == 200
+    events = [
+        json.loads(line[len("data: "):])
+        for line in resp.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert any(e["type"] == "error" for e in events)
+
+
+@pytest.mark.asyncio
+async def test_sse_stream_emits_diagram_events(
+    client, auth_headers, user_id, session_id
+):
+    """When fetch_diagram_chunks returns results, diagram events are emitted."""
+    from app.search_client import DiagramResult
+
+    fake_session = MagicMock()
+    fake_session.user_id = uuid.UUID(user_id)
+    fake_session.course_id = uuid.uuid4()
+
+    diagram_id = str(uuid.uuid4())
+    fake_diagram = DiagramResult(
+        diagram_id=diagram_id,
+        course_id=str(fake_session.course_id),
+        gcs_path="gs://bucket/fig1.png",
+        caption="Figure 1. Benzene ring structure",
+        figure_type="diagram",
+        score=0.88,
+        chapter="Chapter 3",
+        page=42,
+    )
+
+    async def _fake_stream():
+        yield _make_chunk("The benzene ring")
+        yield _make_chunk(None)
+
+    fake_completions = AsyncMock()
+    fake_completions.create = AsyncMock(return_value=_fake_stream())
+    fake_openai = MagicMock()
+    fake_openai.chat.completions = fake_completions
+
+    with (
+        patch("app.chat.get_session", AsyncMock(return_value=fake_session)),
+        patch("app.chat.get_history", AsyncMock(return_value=[])),
+        patch("app.chat.append_message", AsyncMock()),
+        patch("app.chat.get_gateway_client", return_value=fake_openai),
+        patch("app.chat.build_rag_context", AsyncMock(return_value=("sys", []))),
+        patch("app.chat.fetch_diagram_chunks", AsyncMock(return_value=[fake_diagram])),
+        patch("app.chat._VISUAL_QUERY_PATTERNS") as mock_re,
+        patch("app.chat.get_dials", AsyncMock(return_value={})),
+        patch("app.chat.update_learning_profile_dials", AsyncMock()),
+        patch("app.chat.get_due_review_prompt", AsyncMock(return_value=None)),
+    ):
+        mock_re.search.return_value = True  # force visual path
+        resp = await client.post(
+            f"/v1/sessions/{session_id}/messages",
+            json={"content": "Draw the benzene ring structure"},
+            headers=auth_headers,
+        )
+
+    assert resp.status_code == 200
+    events = [
+        json.loads(line[len("data: "):])
+        for line in resp.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    diagram_events = [e for e in events if e["type"] == "diagram"]
+    assert len(diagram_events) == 1
+    assert diagram_events[0]["diagram"]["diagram_id"] == diagram_id
+    assert diagram_events[0]["diagram"]["figure_type"] == "diagram"

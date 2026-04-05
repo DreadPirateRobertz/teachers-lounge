@@ -1,4 +1,4 @@
-"""Tutoring Service — Phase 1 + Phase 8 Observability
+"""Tutoring Service — Phase 1 + Phase 8 Observability.
 
 FastAPI application entry point.
 
@@ -86,6 +86,7 @@ app.include_router(profile_router, prefix="/v1")
 
 @app.on_event("startup")
 async def on_startup():
+    """Initialise database tables and Redis cache on application startup."""
     # Create tables if they don't exist (dev only — production uses Alembic migrations)
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -95,15 +96,26 @@ async def on_startup():
 
 @app.on_event("shutdown")
 async def on_shutdown():
+    """Close Redis cache connection on application shutdown."""
     await close_cache()
 
 
 @app.get("/health", tags=["ops"])
 async def health():
+    """Return service liveness status.
+
+    Returns:
+        Dict with ``status`` key set to ``"ok"``.
+    """
     return {"status": "ok"}
 
 
 @app.get("/health/readiness", tags=["ops"])
 async def readiness():
+    """Return service readiness status.
+
+    Returns:
+        Dict with ``status`` key set to ``"ready"``.
+    """
     # Phase 2+: check DB connection and AI gateway reachability
     return {"status": "ready"}

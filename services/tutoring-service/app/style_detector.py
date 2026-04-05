@@ -1,5 +1,4 @@
-"""
-Behavioral learning-style detection for the tutoring service.
+"""Behavioral learning-style detection for the tutoring service.
 
 Implements the Felder-Silverman Learning Styles Model with four bipolar dimensions:
   active/reflective  — preference for trying things vs. thinking things through

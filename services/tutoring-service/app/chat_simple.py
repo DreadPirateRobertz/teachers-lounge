@@ -1,5 +1,4 @@
-"""
-Stateless chat endpoint — accepts a messages array and streams a plain-text response.
+"""Stateless chat endpoint — accepts a messages array and streams a plain-text response.
 
 Used by the frontend when it manages its own conversation history (e.g., Neon Arcade UI).
 No session, no DB writes — pure pass-through to the AI Gateway.
@@ -56,11 +55,15 @@ FALLBACK_TEXT = (
 
 
 class ChatMessage(BaseModel):
+    """A single message in a simple chat request."""
+
     role: Literal["user", "assistant", "system"]
     content: str
 
 
 class SimpleChatRequest(BaseModel):
+    """Request body for the simple (non-session) chat endpoint."""
+
     messages: list[ChatMessage]
 
 

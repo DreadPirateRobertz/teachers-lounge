@@ -12,6 +12,16 @@ async def create_session(
     user_id: UUID,
     course_id: UUID | None = None,
 ) -> Session:
+    """Create a new tutoring session row and return the persisted object.
+
+    Args:
+        db: Async SQLAlchemy session.
+        user_id: UUID of the authenticated student.
+        course_id: Optional UUID of the course this session is for.
+
+    Returns:
+        Newly created and refreshed Session ORM object.
+    """
     session = Session(id=uuid4(), user_id=user_id, course_id=course_id)
     db.add(session)
     await db.commit()
@@ -20,6 +30,15 @@ async def create_session(
 
 
 async def get_session(db: AsyncSession, session_id: UUID) -> Session | None:
+    """Fetch a single tutoring session by primary key.
+
+    Args:
+        db: Async SQLAlchemy session.
+        session_id: UUID of the tutoring session.
+
+    Returns:
+        Session ORM object, or ``None`` if not found.
+    """
     result = await db.execute(select(Session).where(Session.id == session_id))
     return result.scalar_one_or_none()
 
@@ -58,6 +77,19 @@ async def append_message(
     content: str,
     response_time_ms: int | None = None,
 ) -> Interaction:
+    """Append a message to a tutoring session and return the persisted row.
+
+    Args:
+        db: Async SQLAlchemy session.
+        session_id: UUID of the tutoring session.
+        user_id: UUID of the message author.
+        role: Message role — ``"student"`` or ``"tutor"``.
+        content: Text content of the message.
+        response_time_ms: Optional latency in milliseconds (for tutor messages).
+
+    Returns:
+        Newly created and refreshed Interaction ORM object.
+    """
     msg = Interaction(
         id=uuid4(),
         session_id=session_id,

@@ -28,8 +28,8 @@ class TestEmbedderStub:
     @pytest.mark.asyncio
     async def test_returns_correct_dimension(self):
         """Stub embedding dimension matches settings.embedding_dim (default 1536)."""
-        from app.services.embedder import embed_query
         from app.config import settings
+        from app.services.embedder import embed_query
         vec = await embed_query("what is entropy?")
         assert len(vec) == settings.embedding_dim
 
@@ -173,6 +173,7 @@ class TestRRFCombiner:
             patch("app.routers.search.rerank", new_callable=AsyncMock, side_effect=lambda q, r: r),
         ):
             from fastapi.testclient import TestClient
+
             from app.main import app
 
             with TestClient(app) as client:
@@ -197,6 +198,7 @@ class TestPipelineIntegration:
             patch("app.routers.search.rerank", new_callable=AsyncMock, side_effect=lambda q, r: r),
         ):
             from fastapi.testclient import TestClient
+
             from app.main import app
 
             with TestClient(app) as client:

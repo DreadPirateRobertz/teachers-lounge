@@ -1,5 +1,4 @@
-"""
-Embedder — wraps OpenAI text-embedding-3-large API (Phase 2).
+"""Embedder — wraps OpenAI text-embedding-3-large API (Phase 2).
 
 Phase 2: OpenAI API with in-process LRU cache for repeated queries.
 Phase 4+: migrate to self-hosted e5-large-v2. See docs/embedding-model-decision.md.

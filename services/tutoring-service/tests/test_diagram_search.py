@@ -1,6 +1,7 @@
 """Tests for diagram search integration in the chat flow (Phase 6)."""
-import pytest
 from unittest.mock import AsyncMock, patch
+
+import pytest
 
 from app.chat import _sse
 from app.search_client import DiagramResult, fetch_diagram_chunks

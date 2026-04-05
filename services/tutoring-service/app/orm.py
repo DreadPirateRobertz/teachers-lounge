@@ -5,13 +5,15 @@ from uuid import uuid4
 from sqlalchemy import (
     Boolean,
     DateTime,
-    Enum as SAEnum,
     Float,
     ForeignKey,
     Integer,
     String,
     Text,
     UniqueConstraint,
+)
+from sqlalchemy import (
+    Enum as SAEnum,
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -127,6 +129,8 @@ class ReviewRecord(Base):
 # ── Chat sessions + interactions ──────────────────────────────────────────────
 
 class Session(Base):
+    """ORM model for the chat_sessions table."""
+
     __tablename__ = "chat_sessions"
 
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)

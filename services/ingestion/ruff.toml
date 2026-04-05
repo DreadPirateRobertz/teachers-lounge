@@ -1,0 +1,40 @@
+# ruff.toml — ingestion service
+#
+# Enforces pycodestyle (E/W), Pyflakes (F), import-order (I),
+# Google-style docstrings (D), and McCabe complexity (C90).
+# Ruff reads this file in preference to [tool.ruff] in pyproject.toml.
+line-length = 100
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort import ordering
+    "D",   # pydocstyle — Google convention (see [lint.pydocstyle])
+    "C90", # McCabe complexity
+]
+ignore = [
+    # Module/package docstrings are encouraged but not required.
+    "D100",
+    "D104",
+    # Magic methods and __init__ inherit documentation from the class docstring.
+    "D105",
+    "D107",
+    # Line-length is handled by the formatter; E501 produces noise here.
+    "E501",
+]
+
+[lint.pydocstyle]
+# Google-style docstrings: Args/Returns/Raises sections, no blank line
+# before class docstring, summary on first line.
+convention = "google"
+
+[lint.mccabe]
+# Functions exceeding complexity 12 should be refactored.
+max-complexity = 12
+
+[lint.per-file-ignores]
+# Tests: relax docstring rules, allow unused imports (conftest patterns)
+# and unused assignments (mock-capture idioms).
+"tests/**" = ["D", "F401", "F841"]

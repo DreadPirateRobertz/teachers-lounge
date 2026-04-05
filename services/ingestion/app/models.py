@@ -5,6 +5,8 @@ from pydantic import BaseModel
 
 
 class ProcessingStatus(StrEnum):
+    """Lifecycle states for a material ingestion job."""
+
     PENDING = "pending"
     PROCESSING = "processing"
     COMPLETE = "complete"
@@ -12,6 +14,8 @@ class ProcessingStatus(StrEnum):
 
 
 class UploadResponse(BaseModel):
+    """Response body returned to the client after a successful material upload."""
+
     job_id: UUID
     material_id: UUID
     status: ProcessingStatus

@@ -29,8 +29,8 @@ from datetime import datetime, timezone
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
-from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
 
 from .orm import (
     ExplanationPreference,

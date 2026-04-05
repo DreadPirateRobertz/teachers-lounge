@@ -388,10 +388,10 @@ class TestBuildRagContextOtelSpan:
     async def test_span_created_with_correct_attributes(self):
         """build_rag_context starts a span named 'rag_agent.build_context'
         and sets chunk_count, gap_count, course_id attributes."""
-        from opentelemetry.sdk.trace import TracerProvider
-        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
-        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
         from opentelemetry import trace
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import SimpleSpanProcessor
+        from opentelemetry.sdk.trace.export.in_memory_span_exporter import InMemorySpanExporter
 
         exporter = InMemorySpanExporter()
         provider = TracerProvider()
@@ -400,6 +400,7 @@ class TestBuildRagContextOtelSpan:
 
         # Re-import to pick up the new tracer provider
         import importlib
+
         import app.rag_agent as ra_mod
         importlib.reload(ra_mod)
         from app.rag_agent import build_rag_context as _build
