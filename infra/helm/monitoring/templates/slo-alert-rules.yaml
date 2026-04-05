@@ -66,9 +66,9 @@ spec:
           labels:
             severity: critical
           annotations:
-            summary: "{{ $labels.service }} 5xx error rate > 2%"
+            summary: "{{"{{"}} $labels.service {{"}}"}} 5xx error rate > 2%"
             description: >-
-              Service {{ $labels.service }} has a 5xx error rate above 2% over
+              Service {{"{{"}} $labels.service {{"}}"}} has a 5xx error rate above 2% over
               the last 5 minutes.  The SLO is < 1%.  Investigate immediately.
             runbook_url: "https://github.com/DreadPirateRobertz/teachers-lounge/blob/main/docs/runbooks/error-rate-slo.md"
 
@@ -82,7 +82,7 @@ spec:
           labels:
             severity: warning
           annotations:
-            summary: "{{ $labels.service }} 5xx error rate at SLO boundary (> 1%)"
+            summary: "{{"{{"}} $labels.service {{"}}"}} 5xx error rate at SLO boundary (> 1%)"
 
     # ── RAG latency SLO ───────────────────────────────────────────────────────
     - name: tl.slo.rag_latency
@@ -100,7 +100,7 @@ spec:
           annotations:
             summary: "RAG pipeline p95 latency > 1 s (SLO: 500 ms)"
             description: >-
-              RAG pipeline step {{ $labels.step }} p95 latency is above 1 second.
+              RAG pipeline step {{"{{"}} $labels.step {{"}}"}} p95 latency is above 1 second.
               The SLO is 500 ms for the full context build.
               Check search-service latency and Qdrant query times.
             runbook_url: "https://github.com/DreadPirateRobertz/teachers-lounge/blob/main/docs/runbooks/rag-latency-slo.md"
