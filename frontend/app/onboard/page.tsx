@@ -94,11 +94,7 @@ export default async function OnboardPage() {
 
   return (
     <main className="min-h-screen bg-bg-deep flex flex-col items-center justify-center px-4 py-12">
-      <OnboardingWizard
-        userId={userId}
-        displayName={displayName}
-        avatarEmoji={avatarEmoji}
-      />
+      <OnboardingWizard userId={userId} displayName={displayName} avatarEmoji={avatarEmoji} />
     </main>
   )
 }
