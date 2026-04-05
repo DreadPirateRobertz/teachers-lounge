@@ -58,9 +58,9 @@ describe('GET /api/flashcards/export/anki', () => {
   })
 
   it('uses fallback Content-Type when upstream does not set it', async () => {
-    global.fetch = jest.fn().mockResolvedValue(
-      new Response(new ArrayBuffer(0), { status: 200, headers: {} }),
-    )
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(new Response(new ArrayBuffer(0), { status: 200, headers: {} }))
 
     const { GET } = await import('./route')
     const req = new NextRequest('http://localhost/api/flashcards/export/anki', { method: 'GET' })
@@ -114,9 +114,9 @@ describe('GET /api/flashcards/export/anki', () => {
   })
 
   it('propagates upstream error status', async () => {
-    global.fetch = jest.fn().mockResolvedValue(
-      new Response(new ArrayBuffer(0), { status: 500, headers: {} }),
-    )
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(new Response(new ArrayBuffer(0), { status: 500, headers: {} }))
 
     const { GET } = await import('./route')
     const req = new NextRequest('http://localhost/api/flashcards/export/anki', { method: 'GET' })
