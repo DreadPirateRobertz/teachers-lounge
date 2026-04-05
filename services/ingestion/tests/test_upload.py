@@ -271,3 +271,68 @@ class TestAuth:
                 files={"file": ("notes.pdf", BytesIO(b"data"), "application/pdf")},
             )
         assert resp.status_code == 202
+
+
+class TestMaterialStatus:
+    """Tests for GET /v1/ingest/{material_id}/status."""
+
+    def test_returns_status_for_known_material(self, client):
+        """Known material_id returns 200 with status and chunk_count."""
+        material_id = uuid.uuid4()
+        with patch(
+            "app.routers.ingest.db.get_material_status",
+            new_callable=AsyncMock,
+            return_value={"processing_status": "complete", "chunk_count": 42},
+        ):
+            resp = client.get(
+                f"/v1/ingest/{material_id}/status",
+                headers=AUTH_HEADERS,
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["material_id"] == str(material_id)
+        assert body["processing_status"] == "complete"
+        assert body["chunk_count"] == 42
+
+    def test_returns_404_for_unknown_material(self, client):
+        """Unknown material_id returns 404."""
+        with patch(
+            "app.routers.ingest.db.get_material_status",
+            new_callable=AsyncMock,
+            return_value=None,
+        ):
+            resp = client.get(
+                f"/v1/ingest/{uuid.uuid4()}/status",
+                headers=AUTH_HEADERS,
+            )
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "material not found"
+
+    def test_pending_status_returned(self, client):
+        """Freshly-uploaded material shows processing_status=pending."""
+        material_id = uuid.uuid4()
+        with patch(
+            "app.routers.ingest.db.get_material_status",
+            new_callable=AsyncMock,
+            return_value={"processing_status": "pending", "chunk_count": 0},
+        ):
+            resp = client.get(f"/v1/ingest/{material_id}/status", headers=AUTH_HEADERS)
+        assert resp.status_code == 200
+        assert resp.json()["processing_status"] == "pending"
+
+    def test_failed_status_returned(self, client):
+        """Failed processing returns processing_status=failed with chunk_count=0."""
+        material_id = uuid.uuid4()
+        with patch(
+            "app.routers.ingest.db.get_material_status",
+            new_callable=AsyncMock,
+            return_value={"processing_status": "failed", "chunk_count": 0},
+        ):
+            resp = client.get(f"/v1/ingest/{material_id}/status", headers=AUTH_HEADERS)
+        assert resp.status_code == 200
+        assert resp.json()["processing_status"] == "failed"
+
+    def test_requires_auth(self, client):
+        """Status endpoint requires a valid Bearer token."""
+        resp = client.get(f"/v1/ingest/{uuid.uuid4()}/status")
+        assert resp.status_code == 403

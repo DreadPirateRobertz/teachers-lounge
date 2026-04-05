@@ -88,6 +88,29 @@ async def update_material_status(
     logger.info("material %s → %s", material_id, status)
 
 
+async def get_material_status(material_id: UUID) -> dict | None:
+    """Fetch processing status and chunk count for a material.
+
+    Args:
+        material_id: UUID of the material to query.
+
+    Returns:
+        Dict with ``processing_status`` (str) and ``chunk_count`` (int) keys,
+        or ``None`` when no row with that ID exists.
+    """
+    conn = await _connect()
+    try:
+        row = await conn.fetchrow(
+            "SELECT processing_status, chunk_count FROM materials WHERE id = $1",
+            material_id,
+        )
+    finally:
+        await conn.close()
+    if row is None:
+        return None
+    return {"processing_status": row["processing_status"], "chunk_count": row["chunk_count"]}
+
+
 async def insert_chunks(chunks: list[dict]) -> None:
     """Bulk-insert chunk metadata into the chunks table.
 
