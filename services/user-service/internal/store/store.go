@@ -316,47 +316,6 @@ func (s *Store) CreateErasureJob(ctx context.Context, userID uuid.UUID, metadata
 }
 
 // ============================================================
-// AUDIT LOG QUERY (admin / FERPA endpoint)
-// ============================================================
-
-// QueryAuditLog returns audit log entries filtered by student_id and date range.
-func (s *Store) QueryAuditLog(ctx context.Context, p AuditLogQueryParams) ([]*models.AuditLogEntry, error) {
-	limit := p.Limit
-	if limit <= 0 || limit > 500 {
-		limit = 200
-	}
-
-	const q = `
-		SELECT id, timestamp, accessor_id, student_id, action, data_accessed, purpose,
-		       COALESCE(ip_address::text, '')
-		FROM audit_log
-		WHERE ($1::uuid IS NULL OR student_id = $1)
-		  AND ($2::timestamptz IS NULL OR timestamp >= $2)
-		  AND ($3::timestamptz IS NULL OR timestamp <= $3)
-		ORDER BY timestamp DESC
-		LIMIT $4`
-
-	rows, err := s.pool.Query(ctx, q, p.StudentID, p.From, p.To, limit)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-
-	var entries []*models.AuditLogEntry
-	for rows.Next() {
-		e := &models.AuditLogEntry{}
-		if err := rows.Scan(
-			&e.ID, &e.Timestamp, &e.AccessorID, &e.StudentID,
-			&e.Action, &e.DataAccessed, &e.Purpose, &e.IPAddress,
-		); err != nil {
-			return nil, err
-		}
-		entries = append(entries, e)
-	}
-	return entries, rows.Err()
-}
-
-// ============================================================
 // CONSENT MANAGEMENT
 // ============================================================
 
