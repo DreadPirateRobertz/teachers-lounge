@@ -8,6 +8,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     poppler-utils \
     tesseract-ocr \
     libmagic1 \
+    ffmpeg \
+    libxml2-dev libxslt1-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .

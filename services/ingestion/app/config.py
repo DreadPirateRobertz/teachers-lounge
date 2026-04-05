@@ -40,5 +40,13 @@ class Settings(BaseSettings):
     clip_embedding_dim: int = 768
     gcs_figures_bucket: str = "tvtutor-raw-uploads"  # figures extracted to same bucket
 
+    # Video/audio transcription
+    transcription_provider: str = "openai"
+    whisper_model: str = "whisper-1"
+    audio_segment_max_seconds: int = 600
+
+    # Image OCR (Google Document AI)
+    document_ai_processor_name: str = ""
+
 
 settings = Settings()
