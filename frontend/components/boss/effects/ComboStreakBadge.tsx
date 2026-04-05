@@ -26,8 +26,7 @@ export interface ComboStreakBadgeProps {
  * ```
  */
 export function ComboStreakBadge({ comboCount }: ComboStreakBadgeProps) {
-  const { streakLevel, streakLabel, glowColor, isActive } =
-    useComboStreak(comboCount)
+  const { streakLevel, streakLabel, glowColor, isActive } = useComboStreak(comboCount)
 
   if (streakLevel === 0) {
     return null

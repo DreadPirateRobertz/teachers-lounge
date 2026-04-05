@@ -89,12 +89,10 @@ describe('useParticleBurst', () => {
   it('dead particles (life <= 0) are absent from the returned array', () => {
     // Capture the rAF callback so we can advance it manually
     let savedCb: FrameRequestCallback | null = null
-    ;(global.requestAnimationFrame as jest.Mock).mockImplementation(
-      (cb: FrameRequestCallback) => {
-        savedCb = cb
-        return 1
-      },
-    )
+    ;(global.requestAnimationFrame as jest.Mock).mockImplementation((cb: FrameRequestCallback) => {
+      savedCb = cb
+      return 1
+    })
 
     const { result } = renderHook(() => useParticleBurst())
 

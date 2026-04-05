@@ -74,8 +74,12 @@ describe('useScreenShake', () => {
       return 1
     })
     const { result: r1 } = renderHook(() => useScreenShake())
-    act(() => { r1.current.triggerShake(1.0) })
-    act(() => { if (rafCb1) rafCb1(10) })
+    act(() => {
+      r1.current.triggerShake(1.0)
+    })
+    act(() => {
+      if (rafCb1) rafCb1(10)
+    })
     const disp1 = extractMaxAbs(r1.current.shakeStyle)
 
     jest.restoreAllMocks()
@@ -88,8 +92,12 @@ describe('useScreenShake', () => {
       return 1
     })
     const { result: r2 } = renderHook(() => useScreenShake())
-    act(() => { r2.current.triggerShake(2.0) })
-    act(() => { if (rafCb2) rafCb2(10) })
+    act(() => {
+      r2.current.triggerShake(2.0)
+    })
+    act(() => {
+      if (rafCb2) rafCb2(10)
+    })
     const disp2 = extractMaxAbs(r2.current.shakeStyle)
 
     performance.now = origNow
