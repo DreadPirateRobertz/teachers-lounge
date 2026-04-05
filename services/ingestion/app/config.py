@@ -15,6 +15,11 @@ class Settings(BaseSettings):
     # Postgres
     database_url: str = "postgresql+asyncpg://postgres:postgres@localhost:5432/tvtutor"
 
+    # JWT validation (shared secret from User Service)
+    jwt_secret: str = "REPLACE_ME"
+    jwt_algorithm: str = "HS256"
+    jwt_audience: str = "teacherslounge-services"
+
     # Upload limits
     max_upload_bytes: int = 500 * 1024 * 1024  # 500 MB
 
