@@ -121,13 +121,14 @@ export default function TtsPlayer({ audioUrl, label, phrases }: Props) {
       aria-label={label ?? 'Audio explanation player'}
     >
       {/* Label */}
-      {label && (
-        <p className="text-xs font-mono text-neon-blue truncate">{label}</p>
-      )}
+      {label && <p className="text-xs font-mono text-neon-blue truncate">{label}</p>}
 
       {/* Error alert */}
       {error && (
-        <div role="alert" className="text-xs text-red-400 bg-red-950/30 border border-red-800/50 rounded px-2 py-1">
+        <div
+          role="alert"
+          className="text-xs text-red-400 bg-red-950/30 border border-red-800/50 rounded px-2 py-1"
+        >
           Failed to load audio. Please try again later.
         </div>
       )}

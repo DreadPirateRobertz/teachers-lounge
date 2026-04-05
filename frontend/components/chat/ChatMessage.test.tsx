@@ -232,7 +232,9 @@ describe('ChatMessage — NotesPanel', () => {
         message={msg({
           role: 'assistant',
           content: 'See the notes below.',
-          notes: [{ type: 'definition', term: 'Osmosis', body: 'Diffusion of water through a membrane.' }],
+          notes: [
+            { type: 'definition', term: 'Osmosis', body: 'Diffusion of water through a membrane.' },
+          ],
         })}
       />,
     )
@@ -254,11 +256,7 @@ describe('ChatMessage — NotesPanel', () => {
   })
 
   it('does not render notes panel when notes array is empty', () => {
-    render(
-      <ChatMessage
-        message={msg({ role: 'assistant', content: 'No notes.', notes: [] })}
-      />,
-    )
+    render(<ChatMessage message={msg({ role: 'assistant', content: 'No notes.', notes: [] })} />)
     expect(screen.queryByRole('heading', { name: /notes/i })).toBeNull()
   })
 })

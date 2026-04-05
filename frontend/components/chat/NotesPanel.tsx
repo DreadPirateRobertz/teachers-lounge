@@ -101,12 +101,14 @@ function FlashCard({ entry }: { entry: NoteEntry }) {
         <span className="text-[9px] font-mono font-bold px-1 py-0.5 rounded border text-neon-gold border-neon-gold/40 bg-neon-gold/10">
           CARD
         </span>
-        <span className="text-[10px] font-mono text-neon-gold">{flipped ? 'ANSWER' : 'QUESTION'}</span>
+        <span className="text-[10px] font-mono text-neon-gold">
+          {flipped ? 'ANSWER' : 'QUESTION'}
+        </span>
       </div>
-      <div className="text-sm text-text-base leading-snug">
-        {flipped ? entry.body : entry.term}
+      <div className="text-sm text-text-base leading-snug">{flipped ? entry.body : entry.term}</div>
+      <div className="text-[9px] text-text-dim mt-1.5">
+        (click to {flipped ? 'see question' : 'reveal answer'})
       </div>
-      <div className="text-[9px] text-text-dim mt-1.5">(click to {flipped ? 'see question' : 'reveal answer'})</div>
     </button>
   )
 }

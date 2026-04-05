@@ -57,9 +57,7 @@ describe('NotesPanel — rendering', () => {
 
   it('renders body for each note entry', () => {
     render(<NotesPanel notes={[DEFINITION]} />)
-    expect(
-      screen.getByText(/The process by which plants convert sunlight/),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/The process by which plants convert sunlight/)).toBeInTheDocument()
   })
 
   it('renders a type label for definitions', () => {
