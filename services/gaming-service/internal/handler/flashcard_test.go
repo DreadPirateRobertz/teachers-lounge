@@ -461,7 +461,7 @@ func TestReviewFlashcard_HappyPath(t *testing.T) {
 	}
 	h := newFlashcardHandler(s)
 
-	body, _ := json.Marshal(model.ReviewFlashcardRequest{UserID: "u1", Quality: 4})
+	body, _ := json.Marshal(model.ReviewFlashcardRequest{Quality: 4})
 	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/c1/review", bytes.NewBuffer(body))
 	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
 	// Set chi URL parameter.
@@ -487,7 +487,7 @@ func TestReviewFlashcard_HappyPath(t *testing.T) {
 func TestReviewFlashcard_InvalidQuality(t *testing.T) {
 	h := newFlashcardHandler(&flashcardStore{})
 
-	body, _ := json.Marshal(model.ReviewFlashcardRequest{UserID: "u1", Quality: 6})
+	body, _ := json.Marshal(model.ReviewFlashcardRequest{Quality: 6})
 	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/c1/review", bytes.NewBuffer(body))
 	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
 	rctx := chi.NewRouteContext()
@@ -512,7 +512,7 @@ func TestReviewFlashcard_ForbiddenCrossUser(t *testing.T) {
 	}
 	h := newFlashcardHandler(s)
 
-	body, _ := json.Marshal(model.ReviewFlashcardRequest{UserID: "u1", Quality: 3})
+	body, _ := json.Marshal(model.ReviewFlashcardRequest{Quality: 3})
 	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/c1/review", bytes.NewBuffer(body))
 	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
 	rctx := chi.NewRouteContext()
