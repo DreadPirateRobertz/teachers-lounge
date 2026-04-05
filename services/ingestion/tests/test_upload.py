@@ -272,6 +272,7 @@ class TestAuth:
             )
         assert resp.status_code == 202
 
+<<<<<<< Updated upstream
 
 class TestMaterialStatus:
     """Tests for GET /v1/ingest/{material_id}/status."""
@@ -311,11 +312,47 @@ class TestMaterialStatus:
     def test_pending_status_returned(self, client):
         """Freshly-uploaded material shows processing_status=pending."""
         material_id = uuid.uuid4()
+=======
+    def test_missing_uid_and_sub_rejected(self, client):
+        """Token with valid aud but no uid or sub claim → 401."""
+        no_uid_token = jwt.encode(
+            {"aud": AUDIENCE, "exp": int(time.time()) + 3600},
+            SECRET,
+            algorithm=ALGORITHM,
+        )
+        resp = client.get(
+            f"/v1/ingest/{uuid.uuid4()}/status",
+            headers={"Authorization": f"Bearer {no_uid_token}"},
+        )
+        assert resp.status_code == 401
+
+    def test_non_uuid_uid_rejected(self, client):
+        """Token with uid that is not a valid UUID string → 401."""
+        bad_uid_token = jwt.encode(
+            {"aud": AUDIENCE, "uid": "not-a-valid-uuid", "exp": int(time.time()) + 3600},
+            SECRET,
+            algorithm=ALGORITHM,
+        )
+        resp = client.get(
+            f"/v1/ingest/{uuid.uuid4()}/status",
+            headers={"Authorization": f"Bearer {bad_uid_token}"},
+        )
+        assert resp.status_code == 401
+
+    def test_sub_claim_accepted_as_fallback(self, client):
+        """Token with valid sub but no uid → auth succeeds via sub fallback."""
+        sub_token = jwt.encode(
+            {"aud": AUDIENCE, "sub": str(USER_ID), "exp": int(time.time()) + 3600},
+            SECRET,
+            algorithm=ALGORITHM,
+        )
+>>>>>>> Stashed changes
         with patch(
             "app.routers.ingest.db.get_material_status",
             new_callable=AsyncMock,
             return_value={"processing_status": "pending", "chunk_count": 0},
         ):
+<<<<<<< Updated upstream
             resp = client.get(f"/v1/ingest/{material_id}/status", headers=AUTH_HEADERS)
         assert resp.status_code == 200
         assert resp.json()["processing_status"] == "pending"
@@ -336,3 +373,10 @@ class TestMaterialStatus:
         """Status endpoint requires a valid Bearer token."""
         resp = client.get(f"/v1/ingest/{uuid.uuid4()}/status")
         assert resp.status_code == 403
+=======
+            resp = client.get(
+                f"/v1/ingest/{uuid.uuid4()}/status",
+                headers={"Authorization": f"Bearer {sub_token}"},
+            )
+        assert resp.status_code == 200
+>>>>>>> Stashed changes
