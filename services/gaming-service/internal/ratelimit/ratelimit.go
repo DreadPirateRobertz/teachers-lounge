@@ -5,11 +5,14 @@
 //   last_refill — Unix timestamp in seconds when tokens were last updated
 //
 // On every call the Lua script atomically:
-//  1. Computes elapsed seconds since last_refill
-//  2. Adds elapsed * rate tokens (clamped to capacity)
-//  3. Consumes one token if available
-//  4. Persists the new state with a TTL of 2*capacity/rate seconds
-//  5. Returns {1, floor(remaining)} if allowed, {0, 0} if denied
+//  1. Reads the current time via redis.call('TIME') so the clock is always
+//     sourced from Redis — this keeps the implementation testable with
+//     miniredis FastForward without passing wall-clock time from Go.
+//  2. Computes elapsed seconds since last_refill
+//  3. Adds elapsed * rate tokens (clamped to capacity)
+//  4. Consumes one token if available
+//  5. Persists the new state with a TTL of 2*capacity/rate seconds
+//  6. Returns {1, floor(remaining)} if allowed, {0, 0} if denied
 //
 // Keys follow the pattern "rl:{bucket}:{userID}" to namespace per-endpoint
 // limits independently.
@@ -50,8 +53,8 @@ type Bucket struct {
 
 // Pre-defined buckets for XP and quiz endpoints.
 var (
-	BucketXP        = Bucket{Name: "xp", Capacity: 10, Rate: 10.0 / 60}  // 10 req/min
-	BucketQuizStart = Bucket{Name: "quiz_start", Capacity: 5, Rate: 5.0 / 60}  // 5 req/min
+	BucketXP         = Bucket{Name: "xp", Capacity: 10, Rate: 10.0 / 60}         // 10 req/min
+	BucketQuizStart  = Bucket{Name: "quiz_start", Capacity: 5, Rate: 5.0 / 60}   // 5 req/min
 	BucketQuizAnswer = Bucket{Name: "quiz_answer", Capacity: 20, Rate: 20.0 / 60} // 20 req/min
 )
 
@@ -70,12 +73,11 @@ type Result struct {
 // Returns a Result and a non-nil error only on Redis failure.
 func (l *Limiter) Allow(ctx context.Context, b Bucket, userID string) (Result, error) {
 	key := fmt.Sprintf("rl:%s:%s", b.Name, userID)
-	nowSec := float64(time.Now().UnixNano()) / 1e9
 	ttlSec := int(math.Ceil(b.Capacity/b.Rate) * 2)
 
 	vals, err := l.script.Run(ctx, l.rdb,
 		[]string{key},
-		b.Capacity, b.Rate, nowSec, ttlSec,
+		b.Capacity, b.Rate, ttlSec,
 	).Int64Slice()
 	if err != nil {
 		return Result{}, fmt.Errorf("rate limit script: %w", err)
@@ -95,19 +97,23 @@ func (l *Limiter) Allow(ctx context.Context, b Bucket, userID string) (Result, e
 
 // luaTokenBucket is the atomic token-bucket Lua script.
 //
+// Time is read from Redis via TIME so that miniredis FastForward works in
+// tests without any wall-clock dependency on the Go side.
+//
 // KEYS[1]  — Redis hash key
 // ARGV[1]  — capacity (float)
 // ARGV[2]  — refill rate in tokens/second (float)
-// ARGV[3]  — current Unix time in fractional seconds (float)
-// ARGV[4]  — TTL in whole seconds (int)
+// ARGV[3]  — TTL in whole seconds (int)
 //
 // Returns {1, remaining} if allowed, {0, 0} if denied.
 const luaTokenBucket = `
 local key        = KEYS[1]
 local capacity   = tonumber(ARGV[1])
 local rate       = tonumber(ARGV[2])
-local now        = tonumber(ARGV[3])
-local ttl        = tonumber(ARGV[4])
+local ttl        = tonumber(ARGV[3])
+
+local t          = redis.call('TIME')
+local now        = tonumber(t[1]) + tonumber(t[2]) / 1000000
 
 local bucket     = redis.call('HMGET', key, 'tokens', 'last_refill')
 local tokens     = tonumber(bucket[1])
