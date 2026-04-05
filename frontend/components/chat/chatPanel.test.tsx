@@ -8,9 +8,10 @@
  */
 
 import React from 'react'
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor, act, cleanup } from '@testing-library/react'
 import '@testing-library/jest-dom'
-import { cleanup } from '@testing-library/react'
+import { ReadableStream as NodeReadableStream } from 'stream/web'
+import { TextEncoder as NodeTextEncoder } from 'util'
 
 // ---------------------------------------------------------------------------
 // Module mocks (must precede the component import)
@@ -61,18 +62,15 @@ jest.mock('./MoleculeBuilder', () => ({
 
 import ChatPanel from './ChatPanel'
 
-// jsdom doesn't implement scrollIntoView — stub it out
+// jsdom doesn't implement scrollIntoView — stub it out.
+// Also polyfill ReadableStream / TextEncoder for the Node jsdom environment.
 beforeAll(() => {
   window.HTMLElement.prototype.scrollIntoView = jest.fn()
-  // Polyfill ReadableStream/TextEncoder for Node jsdom environment
   if (typeof globalThis.ReadableStream === 'undefined') {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const web = require('stream/web') as typeof import('stream/web')
-    globalThis.ReadableStream = web.ReadableStream as unknown as typeof globalThis.ReadableStream
+    globalThis.ReadableStream = NodeReadableStream as unknown as typeof globalThis.ReadableStream
   }
   if (typeof globalThis.TextEncoder === 'undefined') {
-    const { TextEncoder } = require('util') as typeof import('util')
-    globalThis.TextEncoder = TextEncoder as unknown as typeof globalThis.TextEncoder
+    globalThis.TextEncoder = NodeTextEncoder as unknown as typeof globalThis.TextEncoder
   }
 })
 
