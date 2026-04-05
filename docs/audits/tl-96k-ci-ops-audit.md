@@ -2,7 +2,8 @@
 **Date:** 2026-04-05  
 **Auditor:** carn (teachers_lounge)  
 **Scope:** All merged PRs since Phase 1 kickoff (#3–#115)  
-**Audit criteria:** CI compliance, godoc/docstring coverage, test coverage ≥80%, structured logging, WHY-only comments
+**Audit criteria:** CI compliance, godoc/docstring coverage, test coverage ≥80%, structured logging, WHY-only comments  
+**Status:** v2 — updated with agent deep-scan findings (frontend component coverage, Python ruff config gap)
 
 ---
 
@@ -20,9 +21,11 @@
 | Python services — structured logging | ❌ FAIL | All 4 use `logging.basicConfig` (text) — no JSON output |
 | Frontend — ESLint | ✅ PASS | Added PR #69; enforced in CI |
 | Frontend — Prettier | ✅ PASS | Added PR #89; `format:check` in CI |
-| Frontend — tests | ✅ PASS | Component tests PR #85, API route tests PR #117 |
-| Frontend — JSDoc | ⚠️ PARTIAL | Inconsistent across components (see below) |
+| Frontend — tests (API routes) | ✅ PASS | API route tests PR #117 — 75 tests, 14 suites |
+| Frontend — tests (components) | ❌ FAIL | 24/40 components tested (60%); app pages 2/36 tested |
+| Frontend — JSDoc | ⚠️ PARTIAL | Good in boss/, effects/; missing in sidebars, analytics, modals |
 | Frontend — structured logging | ❌ FAIL | console.log/error throughout; no structured logger |
+| Python services — ruff config | ❌ FAIL | No ruff.toml in any service — ruff runs with defaults only |
 
 ---
 
@@ -53,7 +56,12 @@ Both allow code with lint errors to merge. `golangci-lint` and `ruff` must be ha
 `2>/dev/null` suppresses stderr and `|| echo "No tests yet"` means exit code 1 from a failing test never fails CI. This has been silently masking test regressions since Phase 1.  
 **Child bead needed:** Fix Python test gate in CI.
 
-### B3: Python services — unstructured logging
+### B3: Python services — no ruff config (new finding)
+All 4 Python services have no `ruff.toml` and no `[tool.ruff]` in `pyproject.toml`. The CI now runs `ruff check .` as a hard gate (fixed in B1), but with no config it enforces only ruff's opinionated defaults — not the project's docstring, import-order, or complexity rules.
+
+**Child bead needed:** Add `ruff.toml` (or `[tool.ruff]` in `pyproject.toml`) to each Python service with agreed rules (at minimum: `E`, `F`, `I`, `D` for docstrings).
+
+### B4: Python services — unstructured logging
 All 4 Python services use `logging.basicConfig` with text format. In Kubernetes, log aggregation (Loki/Stackdriver) requires JSON-structured logs.
 
 | Service | File | Issue |
@@ -64,6 +72,11 @@ All 4 Python services use `logging.basicConfig` with text format. In Kubernetes,
 | search | app/main.py:9 | `logging.basicConfig(..., format="%(asctime)s ...")` text format |
 
 **Child bead needed:** Add JSON structured logging to all 4 Python services.
+
+### B5: Frontend component test coverage (new finding)
+Deep scan found 24/40 components have tests (60%). App pages are nearly entirely untested: 2/36 routes tested. Untested components include: `ActivityChart`, `AppHeader`, `CharacterSidebar`, `ChatPanel`, `DeckSummary`, `FlashCard`, `LeaderboardPanel`, `MaterialLibrary`, `MaterialsSidebar`, `MaterialUpload`, `MoleculeViewer`, `QuestBoard`, `QuizBreakdownChart`, `RatingButtons` (14 components). Analytics pages and all sidebar/layout components have no test files.
+
+**Child bead needed:** Frontend component + page test coverage to reach ≥80%.
 
 ---
 
@@ -108,11 +121,13 @@ Key gaps:
 
 ---
 
-## Child Beads to Open
+## Child Beads
 
-| Bead | Title | Priority | Owner |
-|------|-------|----------|-------|
-| tl-96k-b1 | Fix CI lint gates — remove `continue-on-error` from golangci-lint, `\|\| true` from ruff | P1 | carn |
-| tl-96k-b2 | Fix Python test gate — pytest must fail CI on test errors | P1 | carn |
-| tl-96k-b3 | JSON structured logging for all 4 Python services | P2 | dink/alai |
-| tl-96k-b4 | Docstrings sweep — tutoring-service (38), ingestion (9), search (7) | P2 | alai/dink |
+| Bead | Title | Priority | Owner | Status |
+|------|-------|----------|-------|--------|
+| ~~B1~~ | ~~Fix CI lint gates~~ | P1 | carn | ✅ Fixed in PR #118 |
+| ~~B2~~ | ~~Fix Python test gate~~ | P1 | carn | ✅ Fixed in PR #118 |
+| tl-5ca | JSON structured logging for all 4 Python services | P2 | dink/alai | open |
+| tl-c12 | Docstrings sweep — tutoring (38), ingestion (9), search (7) | P2 | alai/dink | open |
+| tl-okc | Add ruff.toml to all 4 Python services with project rules | P2 | dink | open |
+| tl-kfc | Frontend component + page test coverage to ≥80% | P2 | shen | open |
