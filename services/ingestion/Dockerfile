@@ -1,10 +1,10 @@
-FROM python:3.12-slim
+FROM python:3.12
 
 WORKDIR /app
 
 # Install system deps for PDF processing (poppler for pdftotext, tesseract for OCR)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev gcc python3-dev cmake \
+    libpq-dev \
     poppler-utils \
     tesseract-ocr \
     libmagic1 \
@@ -13,8 +13,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir setuptools wheel grpcio-tools && \
-    pip install --no-cache-dir --no-build-isolation -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
 
