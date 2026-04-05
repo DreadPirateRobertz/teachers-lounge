@@ -1,7 +1,17 @@
-"""Office document processing pipeline: DOCX, PPTX, XLSX.
+"""Office document processing pipeline (DOCX, PPTX, XLSX).
 
-Each format is converted to structured text segments which feed into the
-shared hierarchical chunking → embedding → Qdrant pipeline.
+Handles Microsoft Office formats using python-docx, python-pptx, and
+openpyxl.  All three formats are routed through the same hierarchical
+chunking and embedding pipeline used by the PDF processor.
+
+Pipeline per format:
+
+- **DOCX** — iterates paragraphs and tables, uses paragraph style names
+  to detect headings, builds hierarchical chapter/section structure.
+- **PPTX** — treats each slide as a logical unit; slide title becomes
+  the section, slide body and speaker notes are the content.
+- **XLSX** — converts each worksheet to a Markdown table; sheet name
+  becomes the section.
 """
 import asyncio
 import logging
@@ -10,93 +20,63 @@ from uuid import UUID
 
 from app.config import settings
 from app.models import IngestJobMessage, ProcessingStatus
-from app.services import db, embeddings, gcs, qdrant
-from app.services.chunking import flush_segments as _flush_segments
+from app.processors.common import (
+    download_from_gcs,
+    embed_and_store,
+    flush_segments,
+)
+from app.services import db
 
 logger = logging.getLogger(__name__)
 
-# MIME → handler mapping
-_MIME_TO_FORMAT: dict[str, str] = {
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": "docx",
-    "application/vnd.openxmlformats-officedocument.presentationml.presentation": "pptx",
-    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": "xlsx",
-}
-
 
 async def process_office(job: IngestJobMessage) -> dict:
-    """Full Office document processing pipeline.
+    """Full office-document processing pipeline.
 
-    Routes to the appropriate format handler (DOCX, PPTX, XLSX), extracts
-    structured text with metadata, chunks, embeds, and writes to Qdrant + Postgres.
+    Routes to the correct sub-processor based on MIME type, then runs
+    the shared embed-and-store step.
 
     Args:
-        job: Pub/Sub message describing the upload.
+        job: Ingest job message from the Pub/Sub subscription.
 
     Returns:
-        Dict with status, job_id, chunk_count, and processor key.
+        Dict with keys: ``status``, ``job_id``, ``chunk_count``, ``processor``.
+
+    Raises:
+        ValueError: If the MIME type is not a supported office format.
+        Exception: Any exception during processing; material is marked FAILED.
     """
     logger.info("office_processor: starting job_id=%s file=%s", job.job_id, job.filename)
-    fmt = _MIME_TO_FORMAT.get(job.mime_type)
-    if not fmt:
-        raise ValueError(f"office_processor: unexpected mime type {job.mime_type!r}")
-
     await db.update_material_status(job.material_id, ProcessingStatus.PROCESSING)
 
+    local_path: Path | None = None
     try:
-        local_path = await gcs.download_file(job.gcs_path, job.job_id)
+        local_path = await download_from_gcs(job.gcs_path, job.job_id)
 
-        loop = asyncio.get_running_loop()
-        if fmt == "docx":
-            segments = await loop.run_in_executor(
-                None, _extract_docx_segments, local_path
+        mime = job.mime_type
+        if mime == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            chunks = await asyncio.get_running_loop().run_in_executor(
+                None, _extract_docx_chunks, local_path, job.material_id, job.course_id
             )
-        elif fmt == "pptx":
-            segments = await loop.run_in_executor(
-                None, _extract_pptx_segments, local_path
+        elif mime == "application/vnd.openxmlformats-officedocument.presentationml.presentation":
+            chunks = await asyncio.get_running_loop().run_in_executor(
+                None, _extract_pptx_chunks, local_path, job.material_id, job.course_id
             )
-        else:  # xlsx
-            segments = await loop.run_in_executor(
-                None, _extract_xlsx_segments, local_path
+        elif mime == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+            chunks = await asyncio.get_running_loop().run_in_executor(
+                None, _extract_xlsx_chunks, local_path, job.material_id, job.course_id
             )
-
-        logger.info("office_processor: job_id=%s extracted %d segments", job.job_id, len(segments))
-
-        max_chars = settings.chunk_max_tokens * 4
-        overlap_chars = settings.chunk_overlap_tokens * 4
-        chunks = _flush_segments(segments, job.material_id, job.course_id, max_chars, overlap_chars)
+        else:
+            raise ValueError(f"unsupported office MIME type: {mime!r}")
 
         logger.info("office_processor: job_id=%s built %d chunks", job.job_id, len(chunks))
+        chunk_count = await embed_and_store(chunks, job.material_id)
 
-        if not chunks:
-            await db.update_material_status(job.material_id, ProcessingStatus.COMPLETE, chunk_count=0)
-            return {"status": "complete", "job_id": str(job.job_id), "chunk_count": 0, "processor": "office"}
-
-        texts = [c["content"] for c in chunks]
-        vectors = await embeddings.embed_texts(texts)
-
-        chunk_ids = [c["id"] for c in chunks]
-        payloads = [
-            {
-                "chunk_id": str(c["id"]),
-                "material_id": str(c["material_id"]),
-                "course_id": str(c["course_id"]),
-                "content": c["content"],
-                "chapter": c.get("chapter"),
-                "section": c.get("section"),
-                "page": c.get("page"),
-                "content_type": c.get("content_type", "text"),
-            }
-            for c in chunks
-        ]
-        await qdrant.upsert_chunks(chunk_ids, vectors, payloads)
-        await db.insert_chunks(chunks)
-        await db.update_material_status(job.material_id, ProcessingStatus.COMPLETE, chunk_count=len(chunks))
-
-        logger.info("office_processor: complete job_id=%s chunks=%d", job.job_id, len(chunks))
+        logger.info("office_processor: complete job_id=%s chunks=%d", job.job_id, chunk_count)
         return {
             "status": "complete",
             "job_id": str(job.job_id),
-            "chunk_count": len(chunks),
+            "chunk_count": chunk_count,
             "processor": "office",
         }
 
@@ -105,324 +85,301 @@ async def process_office(job: IngestJobMessage) -> dict:
         await db.update_material_status(job.material_id, ProcessingStatus.FAILED)
         raise
     finally:
-        try:
+        if local_path is not None:
             local_path.unlink(missing_ok=True)
-        except Exception:
-            pass
 
 
-# ── DOCX ──────────────────────────────────────────────────────────────────────
+# ── DOCX ─────────────────────────────────────────────────────────────────────
 
 
-def _extract_docx_segments(path: Path) -> list[dict]:
-    """Extract ordered text segments from a DOCX file.
+def _extract_docx_chunks(
+    path: Path,
+    material_id: UUID,
+    course_id: UUID,
+) -> list[dict]:
+    """Extract hierarchical chunks from a DOCX file.
 
-    Iterates body elements in document order (paragraphs and tables interleaved)
-    to preserve content ordering. Heading 1 elements set the current chapter;
-    Heading 2+ set the current section. Tables are converted to Markdown.
+    Iterates all block-level objects (paragraphs and tables) in document
+    order.  Heading 1 / Title styles set the current chapter; Heading 2-3
+    set the section.  Body paragraphs and tables are accumulated as
+    segments and flushed with overlap when they exceed the chunk size limit.
 
     Args:
-        path: Local path to the .docx file.
+        path: Local path to the ``.docx`` file.
+        material_id: UUID of the parent material.
+        course_id: UUID of the course.
 
     Returns:
-        List of segment dicts compatible with _flush_segments.
+        List of chunk dicts ready for embedding and storage.
     """
     from docx import Document
     from docx.oxml.ns import qn
-    from docx.table import Table
+    from docx.table import Table as DocxTable
     from docx.text.paragraph import Paragraph
 
     doc = Document(str(path))
-    PARA_TAG = qn("w:p")
-    TABLE_TAG = qn("w:tbl")
+    max_chars = settings.chunk_max_tokens * 4
+    overlap_chars = settings.chunk_overlap_tokens * 4
 
-    segments: list[dict] = []
     current_chapter: str | None = None
     current_section: str | None = None
+    segments: list[dict] = []
+    chunks: list[dict] = []
 
-    for child in doc.element.body:
-        if child.tag == PARA_TAG:
-            para = Paragraph(child, doc)
-            text = para.text.strip()
-            if not text:
-                continue
-            style = para.style.name if para.style else ""
-            if style.startswith("Heading 1"):
-                current_chapter = text
-                current_section = None
-                continue
-            if style.startswith("Heading"):
-                current_section = text
-                continue
-            segments.append(
-                _seg(text, current_chapter, current_section, page=None, content_type="text")
+    def _flush() -> None:
+        nonlocal segments
+        if segments:
+            chunks.extend(
+                flush_segments(segments, material_id, course_id, max_chars, overlap_chars)
             )
+            segments = []
 
-        elif child.tag == TABLE_TAG:
-            table = Table(child, doc)
-            md = _docx_table_to_markdown(table)
+    for block in _iter_block_items(doc):
+        if isinstance(block, DocxTable):
+            md = _table_to_markdown(block)
             if md:
-                segments.append(
-                    _seg(md, current_chapter, current_section, page=None, content_type="table")
-                )
+                segments.append({
+                    "text": md,
+                    "chapter": current_chapter,
+                    "section": current_section,
+                    "page": None,
+                    "content_type": "table",
+                })
+            continue
 
-    return segments
+        # Paragraph
+        style_name = block.style.name if block.style else ""
+        text = block.text.strip()
+        if not text:
+            continue
+
+        if style_name in ("Heading 1", "Title"):
+            _flush()
+            current_chapter = text
+            current_section = None
+        elif style_name in ("Heading 2", "Heading 3"):
+            current_section = text
+        else:
+            segments.append({
+                "text": text,
+                "chapter": current_chapter,
+                "section": current_section,
+                "page": None,
+                "content_type": "text",
+            })
+
+    _flush()
+    return chunks
 
 
-def _docx_table_to_markdown(table) -> str:
-    """Convert a python-docx Table to a Markdown table string.
+def _iter_block_items(doc):
+    """Yield paragraphs and tables from a Document in document order.
+
+    python-docx exposes paragraphs and tables separately, but the XML
+    order is preserved in the parent body element.  This generator
+    reconstructs document order so headings are processed before the
+    content that follows them.
 
     Args:
-        table: A python-docx Table object.
+        doc: A ``docx.Document`` instance.
+
+    Yields:
+        ``docx.text.paragraph.Paragraph`` or ``docx.table.Table`` objects.
+    """
+    from docx.oxml.ns import qn
+    from docx.table import Table as DocxTable
+    from docx.text.paragraph import Paragraph
+
+    parent = doc.element.body
+    for child in parent.iterchildren():
+        if child.tag == qn("w:p"):
+            yield Paragraph(child, parent)
+        elif child.tag == qn("w:tbl"):
+            yield DocxTable(child, parent)
+
+
+def _table_to_markdown(table) -> str:
+    """Convert a python-docx Table to a Markdown-formatted string.
+
+    Merged cells are deduplicated by tracking seen values per row.
+    The first row is treated as the header.
+
+    Args:
+        table: A ``docx.table.Table`` instance.
 
     Returns:
-        Markdown-formatted table string, or empty string if table is empty.
+        Markdown table string, or empty string if the table has no rows.
     """
     rows = [[cell.text.strip() for cell in row.cells] for row in table.rows]
     if not rows:
         return ""
 
-    col_count = max(len(r) for r in rows)
-    # Pad short rows
-    rows = [r + [""] * (col_count - len(r)) for r in rows]
+    # Normalise column count
+    max_cols = max(len(r) for r in rows)
+    for row in rows:
+        while len(row) < max_cols:
+            row.append("")
 
     header = "| " + " | ".join(rows[0]) + " |"
-    separator = "| " + " | ".join(["---"] * col_count) + " |"
-    body = "\n".join("| " + " | ".join(r) + " |" for r in rows[1:])
-
-    parts = [header, separator]
-    if body:
-        parts.append(body)
-    return "\n".join(parts)
+    sep = "| " + " | ".join(["---"] * max_cols) + " |"
+    body_lines = ["| " + " | ".join(r) + " |" for r in rows[1:]]
+    return "\n".join([header, sep] + body_lines)
 
 
-# ── PPTX ──────────────────────────────────────────────────────────────────────
+# ── PPTX ─────────────────────────────────────────────────────────────────────
 
 
-def _extract_pptx_segments(path: Path) -> list[dict]:
-    """Extract text segments from a PPTX file, preserving slide structure.
+def _extract_pptx_chunks(
+    path: Path,
+    material_id: UUID,
+    course_id: UUID,
+) -> list[dict]:
+    """Extract chunks from a PowerPoint presentation.
 
-    Each slide produces: title segment (marks section boundary), body text
-    segments, and speaker notes as a separate segment. Tables within slides
-    are converted to Markdown.
+    Each slide is treated as a logical unit.  The slide title becomes the
+    section; body text frames and speaker notes are concatenated into a
+    single segment.  Slides are numbered from 1.
+
+    The presentation title (from core properties, or first slide title) is
+    used as the chapter for all slides.
 
     Args:
-        path: Local path to the .pptx file.
+        path: Local path to the ``.pptx`` file.
+        material_id: UUID of the parent material.
+        course_id: UUID of the course.
 
     Returns:
-        List of segment dicts compatible with _flush_segments.
+        List of chunk dicts ready for embedding and storage.
     """
     from pptx import Presentation
-    from pptx.util import Pt
-    from pptx.enum.text import PP_ALIGN
 
     prs = Presentation(str(path))
+    max_chars = settings.chunk_max_tokens * 4
+    overlap_chars = settings.chunk_overlap_tokens * 4
+
+    chapter = (prs.core_properties.title or "").strip() or None
     segments: list[dict] = []
 
-    for slide_num, slide in enumerate(prs.slides, start=1):
+    for slide_idx, slide in enumerate(prs.slides, start=1):
         title_text = ""
-        if slide.shapes.title and slide.shapes.title.has_text_frame:
-            title_text = slide.shapes.title.text.strip()
+        body_parts: list[str] = []
 
-        section_label = title_text or f"Slide {slide_num}"
-
-        # Emit slide title as section marker
-        if title_text:
-            segments.append(
-                _seg(
-                    f"[Slide {slide_num}] {title_text}",
-                    chapter=None,
-                    section=section_label,
-                    page=slide_num,
-                    content_type="text",
-                )
-            )
-
-        # Body shapes (skip title, handle tables separately)
         for shape in slide.shapes:
-            if shape == slide.shapes.title:
-                continue
-
-            # Table shape
-            if shape.has_table:
-                md = _pptx_table_to_markdown(shape.table)
-                if md:
-                    segments.append(
-                        _seg(md, chapter=None, section=section_label, page=slide_num, content_type="table")
-                    )
-                continue
-
             if not shape.has_text_frame:
                 continue
+            text = shape.text_frame.text.strip()
+            if not text:
+                continue
+            ph = getattr(shape, "placeholder_format", None)
+            if ph is not None and ph.idx == 0:
+                title_text = text
+            else:
+                body_parts.append(text)
 
-            for para in shape.text_frame.paragraphs:
-                text = para.text.strip()
-                if text:
-                    segments.append(
-                        _seg(text, chapter=None, section=section_label, page=slide_num, content_type="text")
-                    )
-
-        # Speaker notes — separate chunk
         if slide.has_notes_slide:
-            notes_frame = slide.notes_slide.notes_text_frame
-            if notes_frame:
-                notes_text = notes_frame.text.strip()
-                if notes_text:
-                    segments.append(
-                        _seg(
-                            f"[Speaker Notes] {notes_text}",
-                            chapter=None,
-                            section=section_label,
-                            page=slide_num,
-                            content_type="text",
-                            metadata={"notes": True},
-                        )
-                    )
+            notes_text = slide.notes_slide.notes_text_frame.text.strip()
+            if notes_text:
+                body_parts.append(f"[Speaker Notes] {notes_text}")
 
-    return segments
+        content_parts = [p for p in [title_text] + body_parts if p]
+        if not content_parts:
+            continue
 
+        segments.append({
+            "text": "\n".join(content_parts),
+            "chapter": chapter,
+            "section": title_text or f"Slide {slide_idx}",
+            "page": slide_idx,
+            "content_type": "text",
+        })
 
-def _pptx_table_to_markdown(table) -> str:
-    """Convert a python-pptx Table to a Markdown table string.
-
-    Args:
-        table: A python-pptx Table object.
-
-    Returns:
-        Markdown-formatted table string, or empty string if table is empty.
-    """
-    rows = [[cell.text.strip() for cell in row.cells] for row in table.rows]
-    if not rows:
-        return ""
-
-    col_count = max(len(r) for r in rows)
-    rows = [r + [""] * (col_count - len(r)) for r in rows]
-
-    header = "| " + " | ".join(rows[0]) + " |"
-    separator = "| " + " | ".join(["---"] * col_count) + " |"
-    body = "\n".join("| " + " | ".join(r) + " |" for r in rows[1:])
-
-    parts = [header, separator]
-    if body:
-        parts.append(body)
-    return "\n".join(parts)
+    return flush_segments(segments, material_id, course_id, max_chars, overlap_chars)
 
 
 # ── XLSX ──────────────────────────────────────────────────────────────────────
 
 
-def _extract_xlsx_segments(path: Path) -> list[dict]:
-    """Extract text segments from an XLSX file.
+def _extract_xlsx_chunks(
+    path: Path,
+    material_id: UUID,
+    course_id: UUID,
+) -> list[dict]:
+    """Extract chunks from an Excel workbook.
 
-    Each worksheet becomes a separate chunk. Non-empty sheets are converted
-    to Markdown tables. Formulas are read as their cached display values.
+    Each worksheet is converted to a Markdown table.  The workbook title
+    (from file properties) becomes the chapter; the sheet name becomes the
+    section.  Large sheets are split into multiple table chunks so that
+    each stays within the ``chunk_max_tokens`` character limit.
 
     Args:
-        path: Local path to the .xlsx file.
+        path: Local path to the ``.xlsx`` file.
+        material_id: UUID of the parent material.
+        course_id: UUID of the course.
 
     Returns:
-        List of segment dicts compatible with _flush_segments.
+        List of chunk dicts ready for embedding and storage.
     """
     import openpyxl
 
-    wb = openpyxl.load_workbook(str(path), data_only=True)
-    segments: list[dict] = []
+    wb = openpyxl.load_workbook(str(path), read_only=True, data_only=True)
+    max_chars = settings.chunk_max_tokens * 4
+    overlap_chars = settings.chunk_overlap_tokens * 4
+
+    chapter = (wb.properties.title or "").strip() or None
+    chunks: list[dict] = []
 
     for sheet_name in wb.sheetnames:
         ws = wb[sheet_name]
-        rows = [
-            [_cell_to_str(cell) for cell in row]
-            for row in ws.iter_rows()
-            if any(cell.value is not None for cell in row)
-        ]
+        rows: list[list[str]] = []
+        for row in ws.iter_rows(values_only=True):
+            str_cells = [str(cell) if cell is not None else "" for cell in row]
+            if any(str_cells):
+                rows.append(str_cells)
+
         if not rows:
             continue
 
-        md = _rows_to_markdown(rows)
-        if md:
-            segments.append(
-                _seg(
-                    f"Sheet: {sheet_name}\n{md}",
-                    chapter=sheet_name,
-                    section=None,
-                    page=None,
-                    content_type="table",
-                )
-            )
+        max_cols = max(len(r) for r in rows)
+        for row in rows:
+            while len(row) < max_cols:
+                row.append("")
 
-    return segments
+        header = "| " + " | ".join(rows[0]) + " |"
+        sep = "| " + " | ".join(["---"] * max_cols) + " |"
+        header_len = len(header) + len(sep) + 2
 
+        segments: list[dict] = []
+        current_rows: list[str] = []
+        current_len = header_len
 
-def _cell_to_str(cell) -> str:
-    """Convert an openpyxl cell value to a clean string.
+        for data_row_cells in rows[1:]:
+            data_row = "| " + " | ".join(data_row_cells) + " |"
+            if current_len + len(data_row) > max_chars and current_rows:
+                table_md = "\n".join([header, sep] + current_rows)
+                segments.append({
+                    "text": table_md,
+                    "chapter": chapter,
+                    "section": sheet_name,
+                    "page": None,
+                    "content_type": "table",
+                })
+                current_rows = []
+                current_len = header_len
 
-    Args:
-        cell: An openpyxl cell object.
+            current_rows.append(data_row)
+            current_len += len(data_row) + 1
 
-    Returns:
-        String representation of the cell value.
-    """
-    if cell.value is None:
-        return ""
-    return str(cell.value).strip()
+        if current_rows:
+            table_md = "\n".join([header, sep] + current_rows)
+            segments.append({
+                "text": table_md,
+                "chapter": chapter,
+                "section": sheet_name,
+                "page": None,
+                "content_type": "table",
+            })
 
+        chunks.extend(flush_segments(segments, material_id, course_id, max_chars, overlap_chars))
 
-def _rows_to_markdown(rows: list[list[str]]) -> str:
-    """Convert a list of string rows to a Markdown table.
-
-    The first row is treated as the header.
-
-    Args:
-        rows: List of rows, each a list of cell strings.
-
-    Returns:
-        Markdown-formatted table string, or empty string if rows is empty.
-    """
-    if not rows:
-        return ""
-
-    col_count = max(len(r) for r in rows)
-    rows = [r + [""] * (col_count - len(r)) for r in rows]
-
-    header = "| " + " | ".join(rows[0]) + " |"
-    separator = "| " + " | ".join(["---"] * col_count) + " |"
-    body = "\n".join("| " + " | ".join(r) + " |" for r in rows[1:])
-
-    parts = [header, separator]
-    if body:
-        parts.append(body)
-    return "\n".join(parts)
-
-
-# ── Shared helpers ─────────────────────────────────────────────────────────────
-
-
-def _seg(
-    text: str,
-    chapter: str | None,
-    section: str | None,
-    page: int | None,
-    content_type: str,
-    metadata: dict | None = None,
-) -> dict:
-    """Build a segment dict for use with _flush_segments.
-
-    Args:
-        text: The text content of the segment.
-        chapter: Current chapter heading, if any.
-        section: Current section heading, if any.
-        page: Page or slide number, if available.
-        content_type: One of 'text', 'table', 'equation', etc.
-        metadata: Optional extra metadata stored in the chunk.
-
-    Returns:
-        Segment dict with all required keys.
-    """
-    return {
-        "text": text,
-        "chapter": chapter,
-        "section": section,
-        "page": page,
-        "content_type": content_type,
-        "metadata": metadata or {},
-    }
+    wb.close()
+    return chunks

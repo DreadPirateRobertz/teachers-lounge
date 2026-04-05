@@ -75,9 +75,7 @@ describe('AchievementGallery — empty state', () => {
       json: async () => ({ achievements: [] }),
     } as unknown as Response)
     render(<AchievementGallery userId={USER_ID} />)
-    await waitFor(() =>
-      expect(screen.getByText(/defeat bosses/i)).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByText(/defeat bosses/i)).toBeInTheDocument())
   })
 
   it('shows "0 badges" in header', async () => {

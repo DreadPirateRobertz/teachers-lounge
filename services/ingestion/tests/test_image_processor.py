@@ -1,346 +1,354 @@
-"""Tests for image OCR processing pipeline using Google Document AI."""
-import uuid
+"""Tests for services/ingestion/app/processors/image_processor.py.
+
+Covers:
+- _extract_layout_text — normal segments, empty anchor, multiple segments
+- _build_image_chunks — delegates to flush_segments with correct segment shape
+- _ocr_with_document_ai — paragraph extraction, fallback to full text, empty doc
+- process_image — happy path, missing config raises ValueError,
+  exception → FAILED status, temp file cleanup, empty OCR result
+"""
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
 
-from app.models import IngestJobMessage, ProcessingStatus
+from app.models import ProcessingStatus
 from app.processors.image_processor import (
-    _average_confidence,
+    _build_image_chunks,
     _extract_layout_text,
-    _extract_segments_from_document,
-    _run_document_ai,
     process_image,
 )
 
-
-def _make_job(
-    mime_type: str = "image/jpeg",
-    filename: str = "scan.jpg",
-) -> IngestJobMessage:
-    """Build a minimal IngestJobMessage for image processor tests."""
-    return IngestJobMessage(
-        job_id=uuid.uuid4(),
-        user_id=uuid.uuid4(),
-        course_id=uuid.uuid4(),
-        material_id=uuid.uuid4(),
-        gcs_path=f"gs://tvtutor-raw-uploads/u/c/j/{filename}",
-        mime_type=mime_type,
-        filename=filename,
-    )
+MATERIAL_ID = uuid4()
+COURSE_ID = uuid4()
+JOB_ID = uuid4()
 
 
-# ── Layout text extraction ────────────────────────────────────────────────────
+def _make_job(mime="image/jpeg"):
+    job = MagicMock()
+    job.job_id = JOB_ID
+    job.material_id = MATERIAL_ID
+    job.course_id = COURSE_ID
+    job.gcs_path = "gs://bucket/image.jpg"
+    job.filename = "image.jpg"
+    job.mime_type = mime
+    return job
+
+
+# ── _extract_layout_text ─────────────────────────────────────────────────────
 
 
 class TestExtractLayoutText:
-    def test_basic_extraction(self):
-        """Text is extracted using start/end byte offsets from text_anchor."""
-        full_text = "Hello world, this is a test."
-        layout = MagicMock()
-        seg = MagicMock()
-        seg.start_index = 0
-        seg.end_index = 5
-        layout.text_anchor.text_segments = [seg]
-        assert _extract_layout_text(full_text, layout) == "Hello"
+    def test_single_segment_returns_slice(self):
+        """Single TextAnchor segment returns the correct substring."""
+        segment = MagicMock()
+        segment.start_index = 0
+        segment.end_index = 5
 
-    def test_multiple_segments(self):
-        """Multiple text_segments are concatenated."""
-        full_text = "Hello world"
         layout = MagicMock()
+        layout.text_anchor.text_segments = [segment]
+
+        result = _extract_layout_text("Hello, world!", layout)
+        assert result == "Hello"
+
+    def test_multiple_segments_concatenated(self):
+        """Multiple TextAnchor segments are joined without separator."""
         seg1 = MagicMock()
         seg1.start_index = 0
         seg1.end_index = 5
         seg2 = MagicMock()
-        seg2.start_index = 5
-        seg2.end_index = 11
-        layout.text_anchor.text_segments = [seg1, seg2]
-        assert _extract_layout_text(full_text, layout) == "Hello world"
+        seg2.start_index = 7
+        seg2.end_index = 12
 
-    def test_no_layout_returns_empty(self):
-        """None layout returns empty string."""
-        assert _extract_layout_text("text", None) == ""
-
-    def test_no_text_anchor_returns_empty(self):
-        """Layout with no text_anchor returns empty string."""
         layout = MagicMock()
-        layout.text_anchor = None
-        assert _extract_layout_text("text", layout) == ""
+        layout.text_anchor.text_segments = [seg1, seg2]
+
+        result = _extract_layout_text("Hello, world!", layout)
+        assert result == "Helloworld"
+
+    def test_empty_text_anchor_returns_empty_string(self):
+        """Missing text_anchor or empty segments returns empty string."""
+        layout_no_anchor = MagicMock()
+        layout_no_anchor.text_anchor = None
+        assert _extract_layout_text("Hello", layout_no_anchor) == ""
+
+        layout_empty_segs = MagicMock()
+        layout_empty_segs.text_anchor.text_segments = []
+        assert _extract_layout_text("Hello", layout_empty_segs) == ""
 
 
-# ── Average confidence ────────────────────────────────────────────────────────
+# ── _build_image_chunks ───────────────────────────────────────────────────────
 
 
-class TestAverageConfidence:
-    def test_empty_segments_returns_one(self):
-        """Empty segment list returns full confidence (1.0)."""
-        assert _average_confidence([]) == 1.0
+class TestBuildImageChunks:
+    def test_empty_blocks_returns_empty_list(self):
+        """No text blocks → no chunks."""
+        with patch("app.processors.image_processor.settings") as mock_settings:
+            mock_settings.chunk_max_tokens = 512
+            mock_settings.chunk_overlap_tokens = 64
+            chunks = _build_image_chunks([], MATERIAL_ID, COURSE_ID)
+        assert chunks == []
 
-    def test_mixed_confidence(self):
-        """Mean confidence is computed correctly across segments."""
-        segments = [
-            {"metadata": {"ocr_confidence": 0.8}},
-            {"metadata": {"ocr_confidence": 0.6}},
-        ]
-        assert _average_confidence(segments) == pytest.approx(0.7)
+    def test_whitespace_only_blocks_filtered(self):
+        """Blocks containing only whitespace are excluded from segments."""
+        with patch("app.processors.image_processor.settings") as mock_settings, \
+             patch("app.processors.image_processor.flush_segments", return_value=[]) as mock_flush:
+            mock_settings.chunk_max_tokens = 512
+            mock_settings.chunk_overlap_tokens = 64
+            _build_image_chunks(["  ", "\t", "real text"], MATERIAL_ID, COURSE_ID)
 
-    def test_missing_metadata_defaults_to_one(self):
-        """Segments without ocr_confidence default to 1.0."""
-        segments = [{"metadata": {}}, {"metadata": {"ocr_confidence": 0.5}}]
-        assert _average_confidence(segments) == pytest.approx(0.75)
+        call_segs = mock_flush.call_args[0][0]
+        assert len(call_segs) == 1
+        assert call_segs[0]["text"] == "real text"
+
+    def test_segments_have_correct_shape(self):
+        """Each segment has the expected keys with None hierarchy fields."""
+        with patch("app.processors.image_processor.settings") as mock_settings, \
+             patch("app.processors.image_processor.flush_segments", return_value=[]) as mock_flush:
+            mock_settings.chunk_max_tokens = 512
+            mock_settings.chunk_overlap_tokens = 64
+            _build_image_chunks(["Block one", "Block two"], MATERIAL_ID, COURSE_ID)
+
+        segs = mock_flush.call_args[0][0]
+        for seg in segs:
+            assert seg["chapter"] is None
+            assert seg["section"] is None
+            assert seg["page"] is None
+            assert seg["content_type"] == "text"
+
+    def test_max_chars_passed_correctly(self):
+        """max_chars and overlap_chars are derived from settings and passed to flush_segments."""
+        with patch("app.processors.image_processor.settings") as mock_settings, \
+             patch("app.processors.image_processor.flush_segments", return_value=[]) as mock_flush:
+            mock_settings.chunk_max_tokens = 256
+            mock_settings.chunk_overlap_tokens = 32
+            _build_image_chunks(["text"], MATERIAL_ID, COURSE_ID)
+
+        _, _, _, max_c, overlap_c = mock_flush.call_args[0]
+        assert max_c == 256 * 4
+        assert overlap_c == 32 * 4
 
 
-# ── Document AI segment extraction ───────────────────────────────────────────
+# ── _ocr_with_document_ai ─────────────────────────────────────────────────────
 
 
-def _make_doc_ai_document(blocks: list[dict]) -> MagicMock:
-    """Build a mock Document AI document with the given blocks.
-
-    Args:
-        blocks: List of dicts with 'text' and 'confidence' keys.
-
-    Returns:
-        Mock Document AI document.
-    """
-    full_text = " ".join(b["text"] for b in blocks)
-    doc = MagicMock()
-    doc.text = full_text
-
-    pages = []
-    page = MagicMock()
-    page_blocks = []
-    offset = 0
-    for block_data in blocks:
-        block = MagicMock()
-        block.layout = MagicMock()
-        block.layout.confidence = block_data["confidence"]
+class TestOcrWithDocumentAi:
+    def _make_paragraph(self, full_text, start, end):
+        """Helper: build a mock paragraph layout element."""
         seg = MagicMock()
-        seg.start_index = offset
-        seg.end_index = offset + len(block_data["text"])
-        block.layout.text_anchor.text_segments = [seg]
-        page_blocks.append(block)
-        offset += len(block_data["text"]) + 1  # +1 for space
+        seg.start_index = start
+        seg.end_index = end
 
-    page.blocks = page_blocks
-    pages.append(page)
-    doc.pages = pages
-    return doc
+        layout = MagicMock()
+        layout.text_anchor.text_segments = [seg]
 
+        para = MagicMock()
+        para.layout = layout
+        return para
 
-class TestExtractSegmentsFromDocument:
-    def test_basic_extraction(self):
-        """Text blocks with high confidence produce segments without low_confidence flag."""
-        doc = _make_doc_ai_document([
-            {"text": "This is clear printed text.", "confidence": 0.95},
-        ])
-        segments = _extract_segments_from_document(doc)
-        assert len(segments) == 1
-        assert "clear printed text" in segments[0]["text"]
-        assert segments[0]["metadata"]["low_confidence"] is False
-        assert segments[0]["page"] == 1
+    def test_paragraphs_extracted_in_order(self, tmp_path):
+        """Paragraph-level text blocks are returned in page order."""
+        from app.processors.image_processor import _ocr_with_document_ai
 
-    def test_low_confidence_flagged(self):
-        """Blocks with confidence below threshold are flagged low_confidence=True."""
-        doc = _make_doc_ai_document([
-            {"text": "Hard to read handwriting.", "confidence": 0.4},
-        ])
-        segments = _extract_segments_from_document(doc, threshold=0.7)
-        assert segments[0]["metadata"]["low_confidence"] is True
+        full_text = "First paragraph. Second paragraph."
+        para1 = self._make_paragraph(full_text, 0, 17)
+        para2 = self._make_paragraph(full_text, 17, 34)
 
-    def test_empty_text_blocks_skipped(self):
-        """Blocks with no text after stripping are skipped."""
-        doc = MagicMock()
-        doc.text = "   "
         page = MagicMock()
-        block = MagicMock()
-        block.layout = MagicMock()
-        block.layout.confidence = 0.9
-        seg = MagicMock()
-        seg.start_index = 0
-        seg.end_index = 3
-        block.layout.text_anchor.text_segments = [seg]
-        page.blocks = [block]
-        doc.pages = [page]
+        page.paragraphs = [para1, para2]
 
-        segments = _extract_segments_from_document(doc)
-        assert segments == []
+        document = MagicMock()
+        document.text = full_text
+        document.pages = [page]
+
+        mock_response = MagicMock()
+        mock_response.document = document
+        mock_client = MagicMock()
+        mock_client.process_document.return_value = mock_response
+
+        mock_dai = MagicMock()
+        mock_dai.DocumentProcessorServiceClient.return_value = mock_client
+        mock_dai.ProcessRequest.return_value = MagicMock()
+        mock_dai.RawDocument.return_value = MagicMock()
+
+        image_file = tmp_path / "image.jpg"
+        image_file.write_bytes(b"\xff\xd8\xff")  # minimal JPEG header
+
+        with patch("app.processors.image_processor.settings") as mock_settings, \
+             patch.dict("sys.modules", {"google.cloud": MagicMock(), "google.cloud.documentai": mock_dai}):
+            mock_settings.document_ai_processor_name = "projects/p/locations/l/processors/id"
+            blocks = _ocr_with_document_ai(image_file, "image/jpeg")
+
+        assert blocks == ["First paragraph.", "Second paragraph."]
+
+    def test_empty_document_text_returns_empty(self, tmp_path):
+        """Document with no text returns an empty list."""
+        from app.processors.image_processor import _ocr_with_document_ai
+
+        document = MagicMock()
+        document.text = ""
+        document.pages = []
+
+        mock_response = MagicMock()
+        mock_response.document = document
+        mock_client = MagicMock()
+        mock_client.process_document.return_value = mock_response
+
+        mock_dai = MagicMock()
+        mock_dai.DocumentProcessorServiceClient.return_value = mock_client
+        mock_dai.ProcessRequest.return_value = MagicMock()
+        mock_dai.RawDocument.return_value = MagicMock()
+
+        image_file = tmp_path / "blank.jpg"
+        image_file.write_bytes(b"\xff\xd8\xff")
+
+        with patch("app.processors.image_processor.settings") as mock_settings, \
+             patch.dict("sys.modules", {"google.cloud": MagicMock(), "google.cloud.documentai": mock_dai}):
+            mock_settings.document_ai_processor_name = "projects/p/locations/l/processors/id"
+            blocks = _ocr_with_document_ai(image_file, "image/jpeg")
+
+        assert blocks == []
+
+    def test_fallback_to_full_text_when_no_paragraphs(self, tmp_path):
+        """When pages have no paragraphs, full document text is returned as one block."""
+        from app.processors.image_processor import _ocr_with_document_ai
+
+        full_text = "  Some raw OCR text.  "
+        page = MagicMock()
+        page.paragraphs = []
+
+        document = MagicMock()
+        document.text = full_text
+        document.pages = [page]
+
+        mock_response = MagicMock()
+        mock_response.document = document
+        mock_client = MagicMock()
+        mock_client.process_document.return_value = mock_response
+
+        mock_dai = MagicMock()
+        mock_dai.DocumentProcessorServiceClient.return_value = mock_client
+        mock_dai.ProcessRequest.return_value = MagicMock()
+        mock_dai.RawDocument.return_value = MagicMock()
+
+        image_file = tmp_path / "image.png"
+        image_file.write_bytes(b"\x89PNG")
+
+        with patch("app.processors.image_processor.settings") as mock_settings, \
+             patch.dict("sys.modules", {"google.cloud": MagicMock(), "google.cloud.documentai": mock_dai}):
+            mock_settings.document_ai_processor_name = "projects/p/locations/l/processors/id"
+            blocks = _ocr_with_document_ai(image_file, "image/png")
+
+        assert blocks == ["Some raw OCR text."]
 
 
-# ── Full pipeline (mocked externals) ─────────────────────────────────────────
+# ── process_image pipeline ────────────────────────────────────────────────────
 
 
 class TestProcessImagePipeline:
     @pytest.mark.asyncio
-    @patch("app.processors.image_processor.qdrant")
-    @patch("app.processors.image_processor.embeddings")
-    @patch("app.processors.image_processor.db")
-    @patch("app.processors.image_processor.gcs")
-    @patch("app.processors.image_processor._run_document_ai")
-    async def test_happy_path_jpeg(
-        self, mock_docai, mock_gcs, mock_db, mock_embed, mock_qdrant, tmp_path
-    ):
-        """JPEG job processes through Document AI and writes chunks to Qdrant + DB."""
-        job = _make_job("image/jpeg", "notes.jpg")
+    async def test_happy_path_jpeg(self, tmp_path):
+        """Full pipeline: downloads, OCRs, chunks, embeds, returns complete status."""
+        local_file = tmp_path / "image.jpg"
+        local_file.write_bytes(b"\xff\xd8\xff")
 
-        fake_image = tmp_path / "notes.jpg"
-        fake_image.write_bytes(b"\xff\xd8\xff")  # minimal JPEG header
-        mock_gcs.download_file = AsyncMock(return_value=fake_image)
-
-        mock_docai.return_value = [
-            {
-                "text": "Handwritten equation: E = mc²",
-                "chapter": None,
-                "section": None,
-                "page": 1,
-                "content_type": "text",
-                "metadata": {"ocr_confidence": 0.88, "low_confidence": False},
-            }
-        ]
-        mock_embed.embed_texts = AsyncMock(return_value=[[0.1] * 1024])
-        mock_db.update_material_status = AsyncMock()
-        mock_db.insert_chunks = AsyncMock()
-        mock_qdrant.upsert_chunks = AsyncMock()
-
-        with patch("app.processors.image_processor.settings") as mock_settings:
-            mock_settings.document_ai_ocr_processor_id = "test-ocr-id"
-            mock_settings.document_ai_form_processor_id = ""
-            mock_settings.document_ai_low_confidence_threshold = 0.7
-            mock_settings.document_ai_location = "us"
-            mock_settings.gcp_project = "test-project"
+        with patch("app.processors.image_processor.db") as mock_db, \
+             patch("app.processors.image_processor.download_from_gcs", return_value=local_file), \
+             patch("app.processors.image_processor.embed_and_store", new_callable=AsyncMock, return_value=2), \
+             patch("app.processors.image_processor.settings") as mock_settings, \
+             patch("app.processors.image_processor._ocr_with_document_ai", return_value=["Block one.", "Block two."]):
+            mock_db.update_material_status = AsyncMock()
+            mock_settings.document_ai_processor_name = "projects/p/locations/l/processors/id"
             mock_settings.chunk_max_tokens = 512
             mock_settings.chunk_overlap_tokens = 64
-            mock_settings.curriculum_collection = "curriculum"
 
+            job = _make_job(mime="image/jpeg")
             result = await process_image(job)
 
         assert result["status"] == "complete"
+        assert result["chunk_count"] == 2
         assert result["processor"] == "image"
-        assert result["chunk_count"] >= 1
-
-        calls = mock_db.update_material_status.call_args_list
-        assert calls[0].args == (job.material_id, ProcessingStatus.PROCESSING)
-        assert calls[-1].args[1] == ProcessingStatus.COMPLETE
-
-        # Verify low_confidence is forwarded to Qdrant payload
-        qdrant_payloads = mock_qdrant.upsert_chunks.call_args.args[2]
-        assert "low_confidence" in qdrant_payloads[0]
 
     @pytest.mark.asyncio
-    @patch("app.processors.image_processor.qdrant")
-    @patch("app.processors.image_processor.embeddings")
-    @patch("app.processors.image_processor.db")
-    @patch("app.processors.image_processor.gcs")
-    @patch("app.processors.image_processor._run_document_ai")
-    async def test_low_confidence_triggers_form_parser_retry(
-        self, mock_docai, mock_gcs, mock_db, mock_embed, mock_qdrant, tmp_path
-    ):
-        """Low-confidence OCR with form processor configured causes retry."""
-        job = _make_job("image/jpeg", "handwritten.jpg")
+    async def test_missing_processor_name_raises_value_error(self):
+        """Unset document_ai_processor_name raises ValueError before any GCS call."""
+        with patch("app.processors.image_processor.db") as mock_db, \
+             patch("app.processors.image_processor.download_from_gcs") as mock_dl, \
+             patch("app.processors.image_processor.settings") as mock_settings:
+            mock_db.update_material_status = AsyncMock()
+            mock_settings.document_ai_processor_name = ""
 
-        fake_image = tmp_path / "hw.jpg"
-        fake_image.write_bytes(b"\xff\xd8\xff")
-        mock_gcs.download_file = AsyncMock(return_value=fake_image)
-
-        # First call (OCR): low confidence. Second call (Form Parser): better result.
-        low_conf_seg = {
-            "text": "Messy scrawl",
-            "chapter": None, "section": None, "page": 1, "content_type": "text",
-            "metadata": {"ocr_confidence": 0.3, "low_confidence": True},
-        }
-        good_seg = {
-            "text": "F = ma (Newton second law)",
-            "chapter": None, "section": None, "page": 1, "content_type": "text",
-            "metadata": {"ocr_confidence": 0.85, "low_confidence": False},
-        }
-        mock_docai.side_effect = [[low_conf_seg], [good_seg]]
-        mock_embed.embed_texts = AsyncMock(return_value=[[0.1] * 1024])
-        mock_db.update_material_status = AsyncMock()
-        mock_db.insert_chunks = AsyncMock()
-        mock_qdrant.upsert_chunks = AsyncMock()
-
-        with patch("app.processors.image_processor.settings") as mock_settings:
-            mock_settings.document_ai_ocr_processor_id = "ocr-id"
-            mock_settings.document_ai_form_processor_id = "form-id"
-            mock_settings.document_ai_low_confidence_threshold = 0.7
-            mock_settings.document_ai_location = "us"
-            mock_settings.gcp_project = "test-project"
-            mock_settings.chunk_max_tokens = 512
-            mock_settings.chunk_overlap_tokens = 64
-            mock_settings.curriculum_collection = "curriculum"
-
-            result = await process_image(job)
-
-        assert result["status"] == "complete"
-        # Both OCR and Form Parser calls should have been made
-        assert mock_docai.call_count == 2
-        # The second call should use the form processor id
-        second_call_args = mock_docai.call_args_list[1].args
-        assert second_call_args[2] == "form-id"
-
-    @pytest.mark.asyncio
-    @patch("app.processors.image_processor.db")
-    @patch("app.processors.image_processor.gcs")
-    async def test_missing_processor_id_raises(self, mock_gcs, mock_db, tmp_path):
-        """Missing document_ai_ocr_processor_id raises RuntimeError."""
-        job = _make_job()
-        fake_image = tmp_path / "img.jpg"
-        fake_image.write_bytes(b"\xff\xd8\xff")
-        mock_gcs.download_file = AsyncMock(return_value=fake_image)
-        mock_db.update_material_status = AsyncMock()
-
-        with patch("app.processors.image_processor.settings") as mock_settings:
-            mock_settings.document_ai_ocr_processor_id = ""
-            mock_settings.document_ai_form_processor_id = ""
-
-            with pytest.raises(RuntimeError, match="document_ai_ocr_processor_id"):
+            job = _make_job()
+            with pytest.raises(ValueError, match="document_ai_processor_name must be set"):
                 await process_image(job)
 
-        calls = mock_db.update_material_status.call_args_list
-        assert calls[-1].args == (job.material_id, ProcessingStatus.FAILED)
+        mock_dl.assert_not_called()
 
     @pytest.mark.asyncio
-    @patch("app.processors.image_processor.db")
-    @patch("app.processors.image_processor.gcs")
-    async def test_gcs_failure_marks_failed(self, mock_gcs, mock_db):
-        """GCS download failure marks the material as FAILED."""
-        job = _make_job()
-        mock_gcs.download_file = AsyncMock(side_effect=Exception("GCS error"))
-        mock_db.update_material_status = AsyncMock()
+    async def test_exception_marks_failed_and_cleans_up(self, tmp_path):
+        """Exception during OCR marks material FAILED and removes temp file."""
+        local_file = tmp_path / "image.jpg"
+        local_file.write_bytes(b"\xff\xd8\xff")
 
-        with pytest.raises(Exception, match="GCS error"):
-            await process_image(job)
-
-        calls = mock_db.update_material_status.call_args_list
-        assert calls[-1].args == (job.material_id, ProcessingStatus.FAILED)
-
-    @pytest.mark.asyncio
-    @patch("app.processors.image_processor.db")
-    @patch("app.processors.image_processor.gcs")
-    @patch("app.processors.image_processor._run_document_ai")
-    async def test_empty_ocr_result_completes_zero_chunks(
-        self, mock_docai, mock_gcs, mock_db, tmp_path
-    ):
-        """Document AI returning no segments completes with chunk_count=0."""
-        job = _make_job()
-        fake_image = tmp_path / "blank.jpg"
-        fake_image.write_bytes(b"\xff\xd8\xff")
-        mock_gcs.download_file = AsyncMock(return_value=fake_image)
-        mock_docai.return_value = []
-        mock_db.update_material_status = AsyncMock()
-
-        with patch("app.processors.image_processor.settings") as mock_settings:
-            mock_settings.document_ai_ocr_processor_id = "ocr-id"
-            mock_settings.document_ai_form_processor_id = ""
-            mock_settings.document_ai_low_confidence_threshold = 0.7
-            mock_settings.document_ai_location = "us"
-            mock_settings.gcp_project = "test-project"
+        with patch("app.processors.image_processor.db") as mock_db, \
+             patch("app.processors.image_processor.download_from_gcs", return_value=local_file), \
+             patch("app.processors.image_processor.settings") as mock_settings, \
+             patch("app.processors.image_processor._ocr_with_document_ai", side_effect=RuntimeError("API error")):
+            mock_db.update_material_status = AsyncMock()
+            mock_settings.document_ai_processor_name = "projects/p/locations/l/processors/id"
             mock_settings.chunk_max_tokens = 512
             mock_settings.chunk_overlap_tokens = 64
 
+            job = _make_job()
+            with pytest.raises(RuntimeError, match="API error"):
+                await process_image(job)
+
+        mock_db.update_material_status.assert_any_call(MATERIAL_ID, ProcessingStatus.FAILED)
+        assert not local_file.exists()
+
+    @pytest.mark.asyncio
+    async def test_empty_ocr_result_stores_zero_chunks(self, tmp_path):
+        """Empty OCR output calls embed_and_store with an empty list → 0 chunks."""
+        local_file = tmp_path / "image.jpg"
+        local_file.write_bytes(b"\xff\xd8\xff")
+
+        with patch("app.processors.image_processor.db") as mock_db, \
+             patch("app.processors.image_processor.download_from_gcs", return_value=local_file), \
+             patch("app.processors.image_processor.embed_and_store", new_callable=AsyncMock, return_value=0) as mock_store, \
+             patch("app.processors.image_processor.settings") as mock_settings, \
+             patch("app.processors.image_processor._ocr_with_document_ai", return_value=[]):
+            mock_db.update_material_status = AsyncMock()
+            mock_settings.document_ai_processor_name = "projects/p/locations/l/processors/id"
+            mock_settings.chunk_max_tokens = 512
+            mock_settings.chunk_overlap_tokens = 64
+
+            job = _make_job()
             result = await process_image(job)
 
-        assert result["status"] == "complete"
         assert result["chunk_count"] == 0
-        calls = mock_db.update_material_status.call_args_list
-        assert calls[-1].args[1] == ProcessingStatus.COMPLETE
+        mock_store.assert_called_once()
+        stored_chunks = mock_store.call_args[0][0]
+        assert stored_chunks == []
+
+    @pytest.mark.asyncio
+    async def test_png_mime_type_passed_to_dai(self, tmp_path):
+        """PNG MIME type is correctly forwarded to Document AI."""
+        local_file = tmp_path / "image.png"
+        local_file.write_bytes(b"\x89PNG")
+
+        with patch("app.processors.image_processor.db") as mock_db, \
+             patch("app.processors.image_processor.download_from_gcs", return_value=local_file), \
+             patch("app.processors.image_processor.embed_and_store", new_callable=AsyncMock, return_value=1), \
+             patch("app.processors.image_processor.settings") as mock_settings, \
+             patch("app.processors.image_processor._ocr_with_document_ai", return_value=["Text."]) as mock_ocr:
+            mock_db.update_material_status = AsyncMock()
+            mock_settings.document_ai_processor_name = "projects/p/locations/l/processors/id"
+            mock_settings.chunk_max_tokens = 512
+            mock_settings.chunk_overlap_tokens = 64
+
+            job = _make_job(mime="image/png")
+            await process_image(job)
+
+        _, called_mime = mock_ocr.call_args[0]
+        assert called_mime == "image/png"

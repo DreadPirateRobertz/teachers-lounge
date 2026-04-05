@@ -114,7 +114,7 @@ export default function ChatPanel() {
 
         rawBuffer += decoder.decode(value, { stream: true })
         const lines = rawBuffer.split('\n')
-        rawBuffer = lines.pop() ?? ''  // last (possibly incomplete) line stays in buffer
+        rawBuffer = lines.pop() ?? '' // last (possibly incomplete) line stays in buffer
 
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue
@@ -131,18 +131,14 @@ export default function ChatPanel() {
           if (event.type === 'delta') {
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === assistantId
-                  ? { ...m, content: m.content + (event.content ?? '') }
-                  : m,
+                m.id === assistantId ? { ...m, content: m.content + (event.content ?? '') } : m,
               ),
             )
           } else if (event.type === 'diagram' && event.diagram) {
             const diagram = event.diagram
             setMessages((prev) =>
               prev.map((m) =>
-                m.id === assistantId
-                  ? { ...m, diagrams: [...(m.diagrams ?? []), diagram] }
-                  : m,
+                m.id === assistantId ? { ...m, diagrams: [...(m.diagrams ?? []), diagram] } : m,
               ),
             )
           }

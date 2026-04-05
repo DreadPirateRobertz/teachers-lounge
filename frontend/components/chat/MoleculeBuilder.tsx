@@ -1,6 +1,13 @@
 'use client'
 
-import { type KeyboardEvent, type MouseEvent, useEffect, useRef, useState, useCallback } from 'react'
+import {
+  type KeyboardEvent,
+  type MouseEvent,
+  useEffect,
+  useRef,
+  useState,
+  useCallback,
+} from 'react'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -9,14 +16,14 @@ interface Atom {
   symbol: string
   x: number
   y: number
-  valence: number  // max bonds this atom can form
+  valence: number // max bonds this atom can form
 }
 
 interface Bond {
   id: string
   fromId: string
   toId: string
-  order: 1 | 2 | 3  // single, double, triple
+  order: 1 | 2 | 3 // single, double, triple
 }
 
 interface Props {
@@ -73,7 +80,7 @@ export function generateSmiles(atoms: Atom[], bonds: Bond[]): string {
   const atomById = new Map(atoms.map((a) => [a.id, a]))
   const visited = new Set<string>()
   let ringCounter = 1
-  const ringMap = new Map<string, number>()  // edgeKey → ring number
+  const ringMap = new Map<string, number>() // edgeKey → ring number
 
   function edgeKey(a: string, b: string): string {
     return a < b ? `${a}:${b}` : `${b}:${a}`
@@ -140,10 +147,16 @@ function drawScene(
   ctx.strokeStyle = 'rgba(255,255,255,0.04)'
   ctx.lineWidth = 1
   for (let x = 0; x < CANVAS_W; x += 30) {
-    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, CANVAS_H); ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(x, 0)
+    ctx.lineTo(x, CANVAS_H)
+    ctx.stroke()
   }
   for (let y = 0; y < CANVAS_H; y += 30) {
-    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(CANVAS_W, y); ctx.stroke()
+    ctx.beginPath()
+    ctx.moveTo(0, y)
+    ctx.lineTo(CANVAS_W, y)
+    ctx.stroke()
   }
 
   const atomById = new Map(atoms.map((a) => [a.id, a]))
@@ -157,8 +170,8 @@ function drawScene(
     const dx = b.x - a.x
     const dy = b.y - a.y
     const len = Math.hypot(dx, dy) || 1
-    const nx = -dy / len  // normal x
-    const ny = dx / len   // normal y
+    const nx = -dy / len // normal x
+    const ny = dx / len // normal y
 
     const offsets = bond.order === 1 ? [0] : bond.order === 2 ? [-3, 3] : [-4, 0, 4]
 
@@ -208,8 +221,12 @@ function drawScene(
 // ── MoleculeBuilder ───────────────────────────────────────────────────────────
 
 let _idCounter = 0
-function newId() { return `atom-${++_idCounter}` }
-function newBondId() { return `bond-${++_idCounter}` }
+function newId() {
+  return `atom-${++_idCounter}`
+}
+function newBondId() {
+  return `bond-${++_idCounter}`
+}
 
 /**
  * Interactive molecule canvas for kinesthetic learners.
@@ -252,104 +269,118 @@ export default function MoleculeBuilder({ onSubmit, hint }: Props) {
     }
   }, [])
 
-  const hitAtom = useCallback((x: number, y: number, excludeId?: string): Atom | null => {
-    for (const atom of [...atoms].reverse()) {
-      if (atom.id === excludeId) continue
-      if (Math.hypot(atom.x - x, atom.y - y) < ATOM_RADIUS) return atom
-    }
-    return null
-  }, [atoms])
+  const hitAtom = useCallback(
+    (x: number, y: number, excludeId?: string): Atom | null => {
+      for (const atom of [...atoms].reverse()) {
+        if (atom.id === excludeId) continue
+        if (Math.hypot(atom.x - x, atom.y - y) < ATOM_RADIUS) return atom
+      }
+      return null
+    },
+    [atoms],
+  )
 
-  const handleMouseDown = useCallback((e: MouseEvent<HTMLCanvasElement>) => {
-    const pos = getCanvasPos(e)
-    const hit = hitAtom(pos.x, pos.y)
+  const handleMouseDown = useCallback(
+    (e: MouseEvent<HTMLCanvasElement>) => {
+      const pos = getCanvasPos(e)
+      const hit = hitAtom(pos.x, pos.y)
 
-    if (mode === 'place' && !hit) {
-      // Place new atom
-      const id = newId()
-      setAtoms((prev) => [...prev, {
-        id,
-        symbol: activePalette,
-        x: pos.x,
-        y: pos.y,
-        valence: ATOM_VALENCE[activePalette] ?? 4,
-      }])
-      return
-    }
+      if (mode === 'place' && !hit) {
+        // Place new atom
+        const id = newId()
+        setAtoms((prev) => [
+          ...prev,
+          {
+            id,
+            symbol: activePalette,
+            x: pos.x,
+            y: pos.y,
+            valence: ATOM_VALENCE[activePalette] ?? 4,
+          },
+        ])
+        return
+      }
 
-    if (mode === 'bond') {
-      if (!hit) return
-      if (!bondSource) {
-        setBondSource(hit.id)
-        setSelectedAtom(hit.id)
-      } else if (bondSource !== hit.id) {
-        // Create or cycle bond between bondSource and hit
-        const existing = bonds.find(
-          (b) =>
-            (b.fromId === bondSource && b.toId === hit.id) ||
-            (b.fromId === hit.id && b.toId === bondSource),
-        )
-        if (existing) {
-          setBonds((prev) =>
-            prev.map((b) =>
-              b.id === existing.id
-                ? { ...b, order: ((existing.order % 3) + 1) as 1 | 2 | 3 }
-                : b,
-            ),
+      if (mode === 'bond') {
+        if (!hit) return
+        if (!bondSource) {
+          setBondSource(hit.id)
+          setSelectedAtom(hit.id)
+        } else if (bondSource !== hit.id) {
+          // Create or cycle bond between bondSource and hit
+          const existing = bonds.find(
+            (b) =>
+              (b.fromId === bondSource && b.toId === hit.id) ||
+              (b.fromId === hit.id && b.toId === bondSource),
           )
+          if (existing) {
+            setBonds((prev) =>
+              prev.map((b) =>
+                b.id === existing.id ? { ...b, order: ((existing.order % 3) + 1) as 1 | 2 | 3 } : b,
+              ),
+            )
+          } else {
+            setBonds((prev) => [
+              ...prev,
+              {
+                id: newBondId(),
+                fromId: bondSource,
+                toId: hit.id,
+                order: 1,
+              },
+            ])
+          }
+          setBondSource(null)
+          setSelectedAtom(null)
         } else {
-          setBonds((prev) => [...prev, {
-            id: newBondId(),
-            fromId: bondSource,
-            toId: hit.id,
-            order: 1,
-          }])
+          // Clicked same atom → deselect
+          setBondSource(null)
+          setSelectedAtom(null)
         }
-        setBondSource(null)
-        setSelectedAtom(null)
+        return
+      }
+
+      // select mode
+      if (hit) {
+        setSelectedAtom(hit.id)
+        setDragging(hit.id)
+        setDragOffset({ x: pos.x - hit.x, y: pos.y - hit.y })
       } else {
-        // Clicked same atom → deselect
-        setBondSource(null)
         setSelectedAtom(null)
       }
-      return
-    }
+    },
+    [mode, activePalette, bondSource, bonds, getCanvasPos, hitAtom],
+  )
 
-    // select mode
-    if (hit) {
-      setSelectedAtom(hit.id)
-      setDragging(hit.id)
-      setDragOffset({ x: pos.x - hit.x, y: pos.y - hit.y })
-    } else {
-      setSelectedAtom(null)
-    }
-  }, [mode, activePalette, bondSource, bonds, getCanvasPos, hitAtom])
-
-  const handleMouseMove = useCallback((e: MouseEvent<HTMLCanvasElement>) => {
-    if (!dragging) return
-    const pos = getCanvasPos(e)
-    setAtoms((prev) =>
-      prev.map((a) =>
-        a.id === dragging
-          ? { ...a, x: pos.x - dragOffset.x, y: pos.y - dragOffset.y }
-          : a,
-      ),
-    )
-  }, [dragging, dragOffset, getCanvasPos])
+  const handleMouseMove = useCallback(
+    (e: MouseEvent<HTMLCanvasElement>) => {
+      if (!dragging) return
+      const pos = getCanvasPos(e)
+      setAtoms((prev) =>
+        prev.map((a) =>
+          a.id === dragging ? { ...a, x: pos.x - dragOffset.x, y: pos.y - dragOffset.y } : a,
+        ),
+      )
+    },
+    [dragging, dragOffset, getCanvasPos],
+  )
 
   const handleMouseUp = useCallback(() => {
     setDragging(null)
   }, [])
 
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
-    if ((e.key === 'Delete' || e.key === 'Backspace') && selectedAtom) {
-      setAtoms((prev: Atom[]) => prev.filter((a: Atom) => a.id !== selectedAtom))
-      setBonds((prev: Bond[]) =>
-        prev.filter((b: Bond) => b.fromId !== selectedAtom && b.toId !== selectedAtom),
-      )
-      setSelectedAtom(null)
-    }
-  }, [selectedAtom])
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if ((e.key === 'Delete' || e.key === 'Backspace') && selectedAtom) {
+        setAtoms((prev: Atom[]) => prev.filter((a: Atom) => a.id !== selectedAtom))
+        setBonds((prev: Bond[]) =>
+          prev.filter((b: Bond) => b.fromId !== selectedAtom && b.toId !== selectedAtom),
+        )
+        setSelectedAtom(null)
+      }
+    },
+    [selectedAtom],
+  )
 
   const handleSubmit = useCallback(() => {
     const smiles = generateSmiles(atoms, bonds)
@@ -371,16 +402,17 @@ export default function MoleculeBuilder({ onSubmit, hint }: Props) {
       tabIndex={0}
       aria-label="Molecule builder canvas"
     >
-      {hint && (
-        <p className="text-xs text-text-dim italic">{hint}</p>
-      )}
+      {hint && <p className="text-xs text-text-dim italic">{hint}</p>}
 
       {/* Mode toolbar */}
       <div className="flex gap-2 items-center flex-wrap">
         {(['select', 'place', 'bond'] as const).map((m) => (
           <button
             key={m}
-            onClick={() => { setMode(m); setBondSource(null) }}
+            onClick={() => {
+              setMode(m)
+              setBondSource(null)
+            }}
             className={`px-2 py-1 text-[11px] font-mono rounded border transition-colors ${
               mode === m
                 ? 'bg-neon-blue/20 border-neon-blue text-neon-blue'
@@ -398,8 +430,13 @@ export default function MoleculeBuilder({ onSubmit, hint }: Props) {
         {ATOM_PALETTE.map((a) => (
           <button
             key={a.symbol}
-            onClick={() => { setActivePalette(a.symbol); setMode('place') }}
-            style={{ borderColor: activePalette === a.symbol && mode === 'place' ? a.color : undefined }}
+            onClick={() => {
+              setActivePalette(a.symbol)
+              setMode('place')
+            }}
+            style={{
+              borderColor: activePalette === a.symbol && mode === 'place' ? a.color : undefined,
+            }}
             className={`w-7 h-7 rounded-full text-[10px] font-bold border transition-all ${
               activePalette === a.symbol && mode === 'place'
                 ? 'opacity-100 scale-110'
