@@ -123,7 +123,7 @@ func main() {
 		r.Patch("/onboarding", usersH.CompleteOnboarding)
 		r.Post("/export", usersH.ExportData)
 		r.Get("/export/{jobID}", usersH.GetExport)
-		r.Delete("", usersH.DeleteAccount)
+		r.Delete("/", usersH.DeleteAccount)
 		r.Get("/consent", usersH.GetConsent)
 		r.Patch("/consent", usersH.UpdateConsent)
 
