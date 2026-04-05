@@ -5,11 +5,13 @@ from uuid import UUID, uuid4
 import pytest
 
 from app.graph import (
+    ADEQUATE_THRESHOLD,
     MASTERY_THRESHOLD,
     _build_prereq_graph,
     _get_all_prerequisites,
     detect_gaps,
     generate_remediation_path,
+    get_prerequisite_chain,
 )
 
 
@@ -32,6 +34,7 @@ class FakeConcept:
     name: str
     description: str = ""
     path: str = ""
+    difficulty: float = 0.5
     prerequisites: list[FakeEdge] = field(default_factory=list)
     dependents: list[FakeEdge] = field(default_factory=list)
 
@@ -292,3 +295,110 @@ class TestConceptResponseModel:
         )
         data = resp.model_dump()
         assert data["steps"][0]["order"] == 1
+
+
+# ── Tests: get_prerequisite_chain ────────────────────────────────────────────
+
+class TestGetPrerequisiteChain:
+    def test_linear_chain_returns_all_prereqs(self, linear_chain):
+        a, b, c = linear_chain
+        mastery = {}
+        chain = get_prerequisite_chain(c.id, linear_chain, mastery)
+        chain_ids = {entry["concept_id"] for entry in chain}
+        assert chain_ids == {a.id, b.id}
+
+    def test_depth_is_1_for_direct_prereq(self, linear_chain):
+        a, b, c = linear_chain
+        chain = get_prerequisite_chain(c.id, linear_chain, mastery={})
+        by_id = {e["concept_id"]: e for e in chain}
+        assert by_id[b.id]["depth"] == 1
+        assert by_id[a.id]["depth"] == 2
+
+    def test_diamond_all_prereqs_included(self, diamond_graph):
+        a, b, c, d = diamond_graph
+        chain = get_prerequisite_chain(d.id, diamond_graph, mastery={})
+        chain_ids = {entry["concept_id"] for entry in chain}
+        assert chain_ids == {a.id, b.id, c.id}
+
+    def test_no_prereqs_returns_empty(self, linear_chain):
+        a, b, c = linear_chain
+        chain = get_prerequisite_chain(a.id, linear_chain, mastery={})
+        assert chain == []
+
+    def test_mastery_score_populated(self, linear_chain):
+        a, b, c = linear_chain
+        user_id = uuid4()
+        mastery = {
+            a.id: FakeMastery(user_id, a.id, 0.9),
+            b.id: FakeMastery(user_id, b.id, 0.3),
+        }
+        chain = get_prerequisite_chain(c.id, linear_chain, mastery)
+        by_id = {e["concept_id"]: e for e in chain}
+        assert by_id[a.id]["mastery_score"] == 0.9
+        assert by_id[b.id]["mastery_score"] == 0.3
+
+    def test_mastery_adequate_flag(self, linear_chain):
+        a, b, c = linear_chain
+        user_id = uuid4()
+        mastery = {
+            a.id: FakeMastery(user_id, a.id, 0.9),  # above threshold
+            b.id: FakeMastery(user_id, b.id, 0.3),  # below threshold
+        }
+        chain = get_prerequisite_chain(c.id, linear_chain, mastery)
+        by_id = {e["concept_id"]: e for e in chain}
+        assert by_id[a.id]["mastery_adequate"] is True
+        assert by_id[b.id]["mastery_adequate"] is False
+
+    def test_custom_threshold(self, linear_chain):
+        a, b, c = linear_chain
+        user_id = uuid4()
+        mastery = {a.id: FakeMastery(user_id, a.id, 0.5), b.id: FakeMastery(user_id, b.id, 0.5)}
+        chain_strict = get_prerequisite_chain(c.id, linear_chain, mastery, threshold=0.9)
+        chain_loose = get_prerequisite_chain(c.id, linear_chain, mastery, threshold=0.4)
+        assert all(not e["mastery_adequate"] for e in chain_strict)
+        assert all(e["mastery_adequate"] for e in chain_loose)
+
+    def test_path_and_difficulty_included(self, linear_chain):
+        a, b, c = linear_chain
+        chain = get_prerequisite_chain(c.id, linear_chain, mastery={})
+        for entry in chain:
+            assert "path" in entry
+            assert "difficulty" in entry
+            assert 0.0 <= entry["difficulty"] <= 1.0
+
+
+# ── Tests: new response models ────────────────────────────────────────────────
+
+class TestNewResponseModels:
+    def test_prerequisite_chain_response_serialization(self):
+        from app.models import PrerequisiteChainEntry, PrerequisiteChainResponse
+        resp = PrerequisiteChainResponse(
+            target_concept_id=uuid4(),
+            target_concept_name="Stereochemistry",
+            chain=[
+                PrerequisiteChainEntry(
+                    concept_id=uuid4(),
+                    concept_name="Chirality",
+                    path="chem.organic.chirality",
+                    difficulty=0.7,
+                    mastery_score=0.4,
+                    mastery_adequate=False,
+                    depth=1,
+                )
+            ],
+        )
+        data = resp.model_dump()
+        assert data["chain"][0]["depth"] == 1
+        assert data["chain"][0]["mastery_adequate"] is False
+
+    def test_mastery_update_request_validates_bounds(self):
+        from pydantic import ValidationError
+        from app.models import MasteryUpdateRequest
+        req = MasteryUpdateRequest(mastery_score=0.75)
+        assert req.mastery_score == 0.75
+
+        with pytest.raises(ValidationError):
+            MasteryUpdateRequest(mastery_score=1.5)
+
+        with pytest.raises(ValidationError):
+            MasteryUpdateRequest(mastery_score=-0.1)

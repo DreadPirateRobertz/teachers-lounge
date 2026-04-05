@@ -155,3 +155,41 @@ class RemediationPathResponse(BaseModel):
     target_concept_id: UUID
     target_concept_name: str
     steps: list[RemediationStep]
+
+
+class PrerequisiteChainEntry(BaseModel):
+    """One concept in the prerequisite chain with the student's current mastery."""
+
+    concept_id: UUID
+    concept_name: str
+    path: str
+    difficulty: float
+    mastery_score: float
+    mastery_adequate: bool   # True if mastery_score >= gap threshold
+    depth: int               # hops from the target concept (1 = direct prerequisite)
+
+
+class PrerequisiteChainResponse(BaseModel):
+    """All transitive prerequisites for a concept, ordered by depth then name."""
+
+    target_concept_id: UUID
+    target_concept_name: str
+    chain: list[PrerequisiteChainEntry]
+
+
+class MasteryUpdateRequest(BaseModel):
+    """Body for PATCH mastery — caller supplies the new observed mastery score."""
+
+    mastery_score: float = Field(..., ge=0.0, le=1.0,
+                                 description="New mastery score (0-1) from interaction evidence")
+
+
+class MasteryUpdateResponse(BaseModel):
+    """Result after updating a student's mastery for a concept."""
+
+    concept_id: UUID
+    mastery_before_decay: float   # stored score at time of update
+    mastery_after_decay: float    # score after applying forgetting-curve decay
+    mastery_updated: float        # final stored value (the new score)
+    decay_rate: float
+    last_reviewed_at: datetime
