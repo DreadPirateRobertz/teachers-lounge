@@ -22,7 +22,7 @@ export default function QuizBreakdownChart({ topics }: QuizBreakdownChartProps) 
 
   return (
     <div className="flex flex-col gap-3">
-      {topics.map(t => (
+      {topics.map((t) => (
         <div key={t.topic} className="flex flex-col gap-1">
           <div className="flex items-center justify-between">
             <span className="text-xs text-text-base truncate max-w-[55%]">{t.topic}</span>
@@ -49,11 +49,7 @@ export default function QuizBreakdownChart({ topics }: QuizBreakdownChartProps) 
               style={{
                 width: `${t.accuracy_pct}%`,
                 background:
-                  t.accuracy_pct >= 80
-                    ? '#00ff88'
-                    : t.accuracy_pct >= 60
-                      ? '#ffdc00'
-                      : '#ff00aa',
+                  t.accuracy_pct >= 80 ? '#00ff88' : t.accuracy_pct >= 60 ? '#ffdc00' : '#ff00aa',
                 boxShadow:
                   t.accuracy_pct >= 80
                     ? '0 0 6px #00ff8866'

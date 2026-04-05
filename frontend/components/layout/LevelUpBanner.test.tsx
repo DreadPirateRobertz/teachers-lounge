@@ -6,8 +6,12 @@ import { render, screen, act } from '@testing-library/react'
 import LevelUpBanner from './LevelUpBanner'
 
 describe('LevelUpBanner', () => {
-  beforeEach(() => { jest.useFakeTimers() })
-  afterEach(() => { jest.useRealTimers() })
+  beforeEach(() => {
+    jest.useFakeTimers()
+  })
+  afterEach(() => {
+    jest.useRealTimers()
+  })
 
   it('renders the new level number', () => {
     render(<LevelUpBanner newLevel={7} />)
@@ -29,21 +33,27 @@ describe('LevelUpBanner', () => {
   it('auto-dismisses after 3 seconds', () => {
     render(<LevelUpBanner newLevel={3} />)
     expect(screen.getByText('Level Up!')).toBeInTheDocument()
-    act(() => { jest.advanceTimersByTime(3000) })
+    act(() => {
+      jest.advanceTimersByTime(3000)
+    })
     expect(screen.queryByText('Level Up!')).not.toBeInTheDocument()
   })
 
   it('calls onDismiss callback when timer fires', () => {
     const onDismiss = jest.fn()
     render(<LevelUpBanner newLevel={2} onDismiss={onDismiss} />)
-    act(() => { jest.advanceTimersByTime(3000) })
+    act(() => {
+      jest.advanceTimersByTime(3000)
+    })
     expect(onDismiss).toHaveBeenCalledTimes(1)
   })
 
   it('does not call onDismiss before 3 seconds', () => {
     const onDismiss = jest.fn()
     render(<LevelUpBanner newLevel={2} onDismiss={onDismiss} />)
-    act(() => { jest.advanceTimersByTime(2999) })
+    act(() => {
+      jest.advanceTimersByTime(2999)
+    })
     expect(onDismiss).not.toHaveBeenCalled()
   })
 

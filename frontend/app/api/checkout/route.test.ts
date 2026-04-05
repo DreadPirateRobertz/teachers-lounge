@@ -11,10 +11,7 @@ const MOCK_TOKEN = [
   'sig',
 ].join('.')
 
-function makeRequest(opts: {
-  body?: unknown
-  token?: string | null
-}): NextRequest {
+function makeRequest(opts: { body?: unknown; token?: string | null }): NextRequest {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (opts.token !== null) {
     headers['Cookie'] = `tl_token=${opts.token ?? MOCK_TOKEN}`
@@ -53,10 +50,13 @@ describe('POST /api/checkout', () => {
     global.fetch = jest.fn().mockImplementation((_url: string, init: RequestInit) => {
       capturedBody = JSON.parse(init.body as string)
       return Promise.resolve(
-        new Response(JSON.stringify({ checkout_url: 'https://checkout.stripe.com/pay/cs_test_123' }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
+        new Response(
+          JSON.stringify({ checkout_url: 'https://checkout.stripe.com/pay/cs_test_123' }),
+          {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          },
+        ),
       )
     })
 
@@ -78,7 +78,7 @@ describe('POST /api/checkout', () => {
         new Response(JSON.stringify({ checkout_url: 'https://stripe.com/pay/x' }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
-        })
+        }),
       )
     })
 
@@ -90,9 +90,7 @@ describe('POST /api/checkout', () => {
   })
 
   it('propagates upstream error status', async () => {
-    global.fetch = jest.fn().mockResolvedValue(
-      new Response('Not found', { status: 404 })
-    )
+    global.fetch = jest.fn().mockResolvedValue(new Response('Not found', { status: 404 }))
 
     const { POST } = await import('./route')
     const req = makeRequest({ body: { planId: 'monthly' } })

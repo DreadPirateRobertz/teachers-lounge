@@ -10,11 +10,7 @@ import Link from 'next/link'
 //   - Combo system, loot drops, Weird Science particle effects
 //   - Sci-fi quote overlays on hits/misses
 
-export default async function BossBattlePage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
+export default async function BossBattlePage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-bg-deep text-center px-4">
@@ -34,9 +30,9 @@ export default async function BossBattlePage({
           ⚔️ <strong className="text-text-bright">The Atom</strong> awaits.
         </p>
         <p className="text-xs text-text-dim leading-relaxed">
-          Boss battles arrive in <span className="text-neon-gold font-mono">Phase 4</span>.
-          Finish studying your course material — the fight will unlock when you
-          reach 60% mastery on this chapter.
+          Boss battles arrive in <span className="text-neon-gold font-mono">Phase 4</span>. Finish
+          studying your course material — the fight will unlock when you reach 60% mastery on this
+          chapter.
         </p>
       </div>
 

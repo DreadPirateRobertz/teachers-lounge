@@ -28,8 +28,7 @@ export async function POST(req: NextRequest): Promise<NextResponse> {
   // Forward to ingestion service when available.
   const tokenCookie = req.cookies.get('tl_token')?.value
   const authHeader =
-    req.headers.get('authorization') ??
-    (tokenCookie ? `Bearer ${tokenCookie}` : null)
+    req.headers.get('authorization') ?? (tokenCookie ? `Bearer ${tokenCookie}` : null)
 
   if (!authHeader) {
     return NextResponse.json({ detail: 'unauthorized' }, { status: 401 })

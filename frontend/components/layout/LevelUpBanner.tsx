@@ -27,7 +27,8 @@ export default function LevelUpBanner({ newLevel, onDismiss }: Props) {
       className="fixed inset-x-0 bottom-16 flex justify-center items-end z-50 pointer-events-none"
       aria-live="polite"
     >
-      <div className="animate-level-up flex flex-col items-center gap-1 px-8 py-4 rounded-2xl border border-neon-gold/60 bg-bg-deep/90 backdrop-blur-sm"
+      <div
+        className="animate-level-up flex flex-col items-center gap-1 px-8 py-4 rounded-2xl border border-neon-gold/60 bg-bg-deep/90 backdrop-blur-sm"
         style={{ boxShadow: '0 0 24px #ffdc0044, 0 0 60px #ffdc0022, inset 0 0 20px #ffdc0011' }}
       >
         {/* Stars row */}
@@ -47,9 +48,7 @@ export default function LevelUpBanner({ newLevel, onDismiss }: Props) {
           Level Up!
         </div>
 
-        <div
-          className="animate-level-num-pop font-mono text-4xl font-black text-neon-gold text-glow-gold leading-none"
-        >
+        <div className="animate-level-num-pop font-mono text-4xl font-black text-neon-gold text-glow-gold leading-none">
           {newLevel}
         </div>
 

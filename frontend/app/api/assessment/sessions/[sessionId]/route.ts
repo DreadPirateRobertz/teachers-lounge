@@ -17,12 +17,9 @@ type Params = { params: Promise<{ sessionId: string }> }
 export async function GET(req: NextRequest, { params }: Params) {
   const { sessionId } = await params
   const authHeader = getAuthHeader(req)
-  const upstream = await fetch(
-    `${GAMING_SERVICE_URL}/gaming/assessment/sessions/${sessionId}`,
-    {
-      headers: { ...(authHeader ? { Authorization: authHeader } : {}) },
-    }
-  )
+  const upstream = await fetch(`${GAMING_SERVICE_URL}/gaming/assessment/sessions/${sessionId}`, {
+    headers: { ...(authHeader ? { Authorization: authHeader } : {}) },
+  })
   const data = await upstream.json()
   return NextResponse.json(data, { status: upstream.status })
 }
@@ -40,7 +37,7 @@ export async function POST(req: NextRequest, { params }: Params) {
         ...(authHeader ? { Authorization: authHeader } : {}),
       },
       body: await req.text(),
-    }
+    },
   )
   const data = await upstream.json()
   return NextResponse.json(data, { status: upstream.status })

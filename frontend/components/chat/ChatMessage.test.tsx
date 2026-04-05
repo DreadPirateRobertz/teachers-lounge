@@ -67,14 +67,14 @@ describe('ChatMessage', () => {
 
   it('applies typing-cursor class when streaming is true', () => {
     const { container } = render(
-      <ChatMessage message={msg({ role: 'assistant', content: 'typing…', streaming: true })} />
+      <ChatMessage message={msg({ role: 'assistant', content: 'typing…', streaming: true })} />,
     )
     expect(container.querySelector('.typing-cursor')).not.toBeNull()
   })
 
   it('does not apply typing-cursor class when streaming is false', () => {
     const { container } = render(
-      <ChatMessage message={msg({ role: 'assistant', content: 'done', streaming: false })} />
+      <ChatMessage message={msg({ role: 'assistant', content: 'done', streaming: false })} />,
     )
     expect(container.querySelector('.typing-cursor')).toBeNull()
   })

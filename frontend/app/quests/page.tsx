@@ -53,10 +53,10 @@ function StreakBanner({ streak, multiplier }: { streak: number; multiplier: numb
             🔥
           </span>
           <div>
-            <div className="text-sm font-semibold text-orange-400">
-              {streak}-Day Streak Active
+            <div className="text-sm font-semibold text-orange-400">{streak}-Day Streak Active</div>
+            <div className="text-[11px] text-text-dim">
+              Keep it going — don&apos;t break the chain!
             </div>
-            <div className="text-[11px] text-text-dim">Keep it going — don&apos;t break the chain!</div>
           </div>
         </div>
         <div className="text-right">

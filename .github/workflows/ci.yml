@@ -87,6 +87,8 @@ jobs:
         if: steps.check.outputs.exists == 'true'
       - run: npm run lint
         if: steps.check.outputs.exists == 'true'
+      - run: npm run format:check
+        if: steps.check.outputs.exists == 'true'
       - run: npm run build
         if: steps.check.outputs.exists == 'true'
       - run: npm test -- --passWithNoTests --coverage --coverageReporters=lcov

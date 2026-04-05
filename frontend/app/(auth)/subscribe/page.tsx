@@ -71,7 +71,7 @@ export default function SubscribePage() {
         </div>
 
         <div className="flex flex-col gap-3 mb-6">
-          {PLANS.map(plan => (
+          {PLANS.map((plan) => (
             <div
               key={plan.id}
               className={`relative flex flex-col px-4 py-3 rounded-lg border transition-all ${
@@ -95,7 +95,7 @@ export default function SubscribePage() {
                 </div>
               </div>
               <ul className="text-[11px] text-text-dim space-y-0.5 mb-3">
-                {plan.features.map(f => (
+                {plan.features.map((f) => (
                   <li key={f} className="flex items-center gap-1.5">
                     <span className="text-neon-green">✓</span> {f}
                   </li>

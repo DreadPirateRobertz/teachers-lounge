@@ -35,8 +35,8 @@ describe('StatCard', () => {
 
   it.each([
     ['green', 'text-neon-green'],
-    ['pink',  'text-neon-pink'],
-    ['gold',  'text-neon-gold'],
+    ['pink', 'text-neon-pink'],
+    ['gold', 'text-neon-gold'],
   ] as const)('applies correct text class for color=%s', (color, cls) => {
     const { container } = render(<StatCard label="L" value="V" color={color} />)
     expect(container.querySelector(`.${cls}`)).not.toBeNull()
