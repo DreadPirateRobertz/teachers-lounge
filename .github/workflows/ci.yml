@@ -181,7 +181,7 @@ jobs:
       - uses: actions/setup-python@v5
         if: steps.check.outputs.exists == 'true'
         with:
-          python-version: '3.13'
+          python-version: '3.12'
           cache: pip
       - run: pip install setuptools wheel grpcio-tools --quiet
         if: steps.check.outputs.exists == 'true'
@@ -342,7 +342,7 @@ jobs:
           go-version: '1.25'
       - uses: actions/setup-python@v5
         with:
-          python-version: '3.13'
+          python-version: '3.12'
       - name: Run all tests
         id: tests
         run: |
