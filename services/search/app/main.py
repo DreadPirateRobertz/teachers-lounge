@@ -11,10 +11,11 @@ from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
+from app.logging_config import configure_logging
 from app.routers import diagrams, search
 from app.services.qdrant import close_client, init_client
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+configure_logging(service_name="search", log_level="INFO")
 logger = logging.getLogger(__name__)
 
 # ── OpenTelemetry setup ───────────────────────────────────────────────────────

@@ -13,3 +13,4 @@ opentelemetry-sdk==1.29.0
 opentelemetry-instrumentation-fastapi==0.50b0
 opentelemetry-exporter-otlp-proto-grpc==1.29.0
 redis[hiredis]==5.2.1
+python-json-logger==3.2.1
