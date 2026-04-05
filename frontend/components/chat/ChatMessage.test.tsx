@@ -7,8 +7,9 @@ import ChatMessage, { type Message } from './ChatMessage'
 
 // MoleculeViewer is loaded via next/dynamic (ssr:false); render a stub so
 // tests run without WebGL.
-jest.mock('next/dynamic', () =>
-  (_loader: unknown, _opts?: unknown) =>
+jest.mock(
+  'next/dynamic',
+  () => (_loader: unknown, _opts?: unknown) =>
     function DynamicStub() {
       return null
     },
@@ -91,26 +92,18 @@ describe('ChatMessage', () => {
   // ── Molecule viewer integration ────────────────────────────────────────
 
   it('strips [molecule:...] tag — raw tag text not visible in DOM', () => {
-    render(
-      <ChatMessage message={msg({ content: 'Look at this [molecule:water]' })} />,
-    )
+    render(<ChatMessage message={msg({ content: 'Look at this [molecule:water]' })} />)
     expect(screen.queryByText(/\[molecule:water\]/)).toBeNull()
   })
 
   it('renders text around [molecule:...] tag unchanged', () => {
-    render(
-      <ChatMessage message={msg({ content: 'Before [molecule:benzene] after' })} />,
-    )
+    render(<ChatMessage message={msg({ content: 'Before [molecule:benzene] after' })} />)
     expect(screen.getByText('Before ')).toBeInTheDocument()
     expect(screen.getByText(' after')).toBeInTheDocument()
   })
 
   it('handles multiple molecule tags in one message', () => {
-    render(
-      <ChatMessage
-        message={msg({ content: '[molecule:water] and [molecule:co2]' })}
-      />,
-    )
+    render(<ChatMessage message={msg({ content: '[molecule:water] and [molecule:co2]' })} />)
     expect(screen.queryByText(/\[molecule:/)).toBeNull()
   })
 

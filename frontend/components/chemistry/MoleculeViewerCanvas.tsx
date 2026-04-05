@@ -85,8 +85,7 @@ function AtomSphere({ atom, index }: AtomSphereProps) {
             <span style={{ color: '#00aaff', fontWeight: 'bold' }}>{atom.element}</span>
             {' — atom '}
             {index}
-            <br />
-            [{atom.position.map((v) => v.toFixed(2)).join(', ')}] Å
+            <br />[{atom.position.map((v) => v.toFixed(2)).join(', ')}] Å
           </div>
         </Html>
       )}

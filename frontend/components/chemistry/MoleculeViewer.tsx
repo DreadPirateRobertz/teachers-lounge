@@ -48,7 +48,11 @@ export interface MoleculeViewerProps {
  * @param props - MoleculeViewerProps
  * @returns A styled container with the 3-D canvas, or a fallback message.
  */
-export default function MoleculeViewer({ molecule, width = 400, height = 300 }: MoleculeViewerProps) {
+export default function MoleculeViewer({
+  molecule,
+  width = 400,
+  height = 300,
+}: MoleculeViewerProps) {
   const data = findMolecule(molecule)
 
   return (

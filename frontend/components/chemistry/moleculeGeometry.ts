@@ -58,8 +58,8 @@ export const ELEMENT_RADII: Record<string, number> = {
   H: 0.25,
   C: 0.35,
   N: 0.35,
-  O: 0.30,
-  S: 0.40,
+  O: 0.3,
+  S: 0.4,
   default: 0.35,
 }
 
@@ -158,9 +158,9 @@ const ammonia: MoleculeData = {
   formula: 'NH3',
   atoms: [
     { element: 'N', position: [0, 0, 0] },
-    { element: 'H', position: [0.940, 0, -0.383] },
-    { element: 'H', position: [-0.470, 0.814, -0.383] },
-    { element: 'H', position: [-0.470, -0.814, -0.383] },
+    { element: 'H', position: [0.94, 0, -0.383] },
+    { element: 'H', position: [-0.47, 0.814, -0.383] },
+    { element: 'H', position: [-0.47, -0.814, -0.383] },
   ],
   bonds: [
     { from: 0, to: 1, order: 1 },
@@ -176,7 +176,7 @@ const ammonia: MoleculeData = {
  * Ring in the xz-plane; all atoms placed at chemically correct positions.
  */
 const benzene: MoleculeData = (() => {
-  const cc = 1.40 // C–C bond length
+  const cc = 1.4 // C–C bond length
   const ch = 1.09 // C–H bond length
   const atoms: Atom[] = []
   const bonds: Bond[] = []
@@ -274,7 +274,7 @@ const ALIASES: Record<string, string> = {
   c6h6: 'benzene',
   // ethanol
   'ethyl alcohol': 'ethanol',
-  'alcohol': 'ethanol',
+  alcohol: 'ethanol',
   c2h5oh: 'ethanol',
   c2h6o: 'ethanol',
 }

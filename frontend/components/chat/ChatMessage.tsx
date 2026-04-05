@@ -140,14 +140,14 @@ function renderContent(text: string): ReactNode[] {
     } else {
       // Text: split on newlines, apply math + markdown per line
       const lines = seg.value.split('\n')
-      lines.forEach((line, lineIdx) => (
+      lines.forEach((line, lineIdx) =>
         nodes.push(
           <span key={`line-${segIdx}-${lineIdx}`}>
             {renderWithBlockMath(line)}
             {lineIdx < lines.length - 1 && <br />}
           </span>,
-        )
-      ))
+        ),
+      )
     }
   })
 
