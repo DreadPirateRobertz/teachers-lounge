@@ -253,3 +253,26 @@ func TestRandomQuote_ResponseBodyIsValidJSON(t *testing.T) {
 		t.Error("expected non-zero quote ID in response")
 	}
 }
+
+// ── Flashcard stubs ───────────────────────────────────────────────────────────
+func (s *quoteStorer) CreateFlashcard(_ context.Context, c *model.Flashcard) (*model.Flashcard, error) {
+	return c, nil
+}
+func (s *quoteStorer) GetFlashcard(_ context.Context, _ string) (*model.Flashcard, error) {
+	return nil, nil
+}
+func (s *quoteStorer) ListFlashcards(_ context.Context, _ string) ([]*model.Flashcard, error) {
+	return nil, nil
+}
+func (s *quoteStorer) DueFlashcards(_ context.Context, _ string) ([]*model.Flashcard, error) {
+	return nil, nil
+}
+func (s *quoteStorer) ReviewFlashcard(_ context.Context, _, _ string, _ int) (*model.Flashcard, error) {
+	return nil, nil
+}
+func (s *quoteStorer) FlashcardsForSession(_ context.Context, _ string) ([]*model.Flashcard, error) {
+	return nil, nil
+}
+func (s *quoteStorer) AllFlashcardsForExport(_ context.Context, _ string) ([]*model.Flashcard, error) {
+	return nil, nil
+}

@@ -122,6 +122,13 @@ func main() {
 		r.Post("/gaming/assessment/start", h.StartAssessment)
 		r.Get("/gaming/assessment/sessions/{sessionId}", h.GetAssessmentSession)
 		r.Post("/gaming/assessment/sessions/{sessionId}/answer", h.SubmitAssessmentAnswer)
+
+		// Flashcard system
+		r.Post("/gaming/flashcards/generate", h.GenerateFlashcards)
+		r.Get("/gaming/flashcards", h.ListFlashcards)
+		r.Get("/gaming/flashcards/due", h.DueFlashcards)
+		r.Post("/gaming/flashcards/{cardId}/review", h.ReviewFlashcard)
+		r.Get("/gaming/flashcards/export/anki", h.ExportAnki)
 	})
 
 	srv := &http.Server{
