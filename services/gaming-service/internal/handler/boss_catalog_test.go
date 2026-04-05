@@ -13,7 +13,7 @@ import (
 )
 
 func setupBossCatalogRouter() http.Handler {
-	h := handler.New(nil, zap.NewNop())
+	h := handler.New(nil, nil, zap.NewNop())
 	r := chi.NewRouter()
 	r.Get("/gaming/boss/catalog", h.GetBossCatalog)
 	r.Get("/gaming/boss/catalog/{bossId}", h.GetBossByID)
