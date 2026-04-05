@@ -10,9 +10,8 @@ import (
 	"github.com/teacherslounge/user-service/internal/cache"
 	"github.com/teacherslounge/user-service/internal/middleware"
 	"github.com/teacherslounge/user-service/internal/models"
-	"github.com/teacherslounge/user-service/internal/store"
-
 	"github.com/teacherslounge/user-service/internal/rediskeys"
+	"github.com/teacherslounge/user-service/internal/store"
 )
 
 type UsersHandler struct {
@@ -177,6 +176,62 @@ func (h *UsersHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	})
 
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// GET /users/{id}/export/{jobID} — retrieve a completed data export.
+// On first call for a pending job, triggers synchronous data collection.
+func (h *UsersHandler) GetExport(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUserIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	jobIDStr := chi.URLParam(r, "jobID")
+	jobID, err := uuid.Parse(jobIDStr)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid job id")
+		return
+	}
+
+	job, err := h.store.GetExportJob(r.Context(), jobID, userID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "export job not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	// If already complete, return cached result.
+	if job.Status == models.ExportStatusComplete && job.ResultData != nil {
+		writeJSON(w, http.StatusOK, job)
+		return
+	}
+
+	// Pending or processing: build synchronously (Pub/Sub not yet wired).
+	export, err := h.store.BuildUserExport(r.Context(), jobID, userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to build export")
+		return
+	}
+
+	// Audit the export retrieval.
+	_ = h.store.WriteAuditLog(r.Context(), store.AuditLogParams{
+		AccessorID:   &userID,
+		StudentID:    &userID,
+		Action:       models.AuditActionExportView,
+		DataAccessed: "all_user_data",
+		Purpose:      "gdpr_right_to_portability",
+		IPAddress:    realIP(r),
+	})
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"job_id":     jobID,
+		"status":     models.ExportStatusComplete,
+		"export":     export,
+	})
 }
 
 // ============================================================

@@ -31,14 +31,19 @@ type mockStore struct {
 	byID  map[uuid.UUID]*models.User
 	subs  map[uuid.UUID]*models.Subscription
 	toks  map[string]*models.AuthToken // keyed by token hash
+	// FERPA/GDPR test helpers
+	auditEntries   []*models.AuditEntry
+	lastAuditQuery *store.QueryAuditLogParams
+	exportJobs     map[uuid.UUID]*models.ExportJob
 }
 
 func newMockStore() *mockStore {
 	return &mockStore{
-		users: map[string]*models.User{},
-		byID:  map[uuid.UUID]*models.User{},
-		subs:  map[uuid.UUID]*models.Subscription{},
-		toks:  map[string]*models.AuthToken{},
+		users:      map[string]*models.User{},
+		byID:       map[uuid.UUID]*models.User{},
+		subs:       map[uuid.UUID]*models.Subscription{},
+		toks:       map[string]*models.AuthToken{},
+		exportJobs: map[uuid.UUID]*models.ExportJob{},
 	}
 }
 

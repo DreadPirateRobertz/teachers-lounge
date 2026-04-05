@@ -24,8 +24,9 @@ type User struct {
 	DisplayName  string      `json:"display_name"`
 	AvatarEmoji  string      `json:"avatar_emoji"`
 	AccountType  AccountType `json:"account_type"`
+	IsAdmin      bool        `json:"is_admin"`
 	DateOfBirth  *time.Time  `json:"date_of_birth,omitempty"`
-	// K-12 skeleton — not active at launch
+	// K-12 / FERPA: guardian consent for minors
 	GuardianEmail     *string    `json:"guardian_email,omitempty"`
 	GuardianConsentAt *time.Time `json:"guardian_consent_at,omitempty"`
 	CreatedAt         time.Time  `json:"created_at"`
@@ -259,4 +260,104 @@ type AddStudentRequest struct {
 type AssignMaterialRequest struct {
 	MaterialID string     `json:"material_id"`
 	DueDate    *time.Time `json:"due_date,omitempty"`
+}
+
+// ============================================================
+// FERPA AUDIT LOG
+// ============================================================
+
+// AuditEntry is a single record from the audit_log table.
+type AuditEntry struct {
+	ID           uuid.UUID  `json:"id"`
+	Timestamp    time.Time  `json:"timestamp"`
+	AccessorID   *uuid.UUID `json:"accessor_id,omitempty"`
+	StudentID    *uuid.UUID `json:"student_id,omitempty"`
+	Action       string     `json:"action"`
+	DataAccessed string     `json:"data_accessed"`
+	Purpose      string     `json:"purpose"`
+	IPAddress    string     `json:"ip_address,omitempty"`
+}
+
+// Audit action constants used across user-service and tutoring-service.
+const (
+	AuditActionReadProfile      = "read_profile"
+	AuditActionReadInteractions = "read_interactions"
+	AuditActionReadSubscription = "read_subscription"
+	AuditActionExportRequest    = "export_request"
+	AuditActionExportView       = "export_view"
+	AuditActionAccountDelete    = "account_delete"
+	AuditActionTeacherView      = "teacher_progress_view"
+	AuditActionQueryAuditLog    = "query_audit_log"
+	AuditActionConsentGiven     = "guardian_consent_given"
+)
+
+// ============================================================
+// GDPR DATA EXPORT
+// ============================================================
+
+// ExportJobStatus mirrors the export_status Postgres enum.
+type ExportJobStatus string
+
+const (
+	ExportStatusPending    ExportJobStatus = "pending"
+	ExportStatusProcessing ExportJobStatus = "processing"
+	ExportStatusComplete   ExportJobStatus = "complete"
+	ExportStatusFailed     ExportJobStatus = "failed"
+)
+
+// ExportJob is a row from the export_jobs table.
+type ExportJob struct {
+	ID          uuid.UUID       `json:"id"`
+	UserID      uuid.UUID       `json:"user_id"`
+	Status      ExportJobStatus `json:"status"`
+	GCSPath     *string         `json:"gcs_path,omitempty"`
+	ResultData  *UserExport     `json:"result_data,omitempty"`
+	CreatedAt   time.Time       `json:"created_at"`
+	CompletedAt *time.Time      `json:"completed_at,omitempty"`
+}
+
+// UserExport is the full GDPR data package for a user.
+type UserExport struct {
+	ExportedAt      time.Time              `json:"exported_at"`
+	User            *User                  `json:"user"`
+	LearningProfile *LearningProfile       `json:"learning_profile,omitempty"`
+	Subscription    *Subscription          `json:"subscription,omitempty"`
+	Interactions    []InteractionExport    `json:"interactions"`
+	QuizResults     []QuizResultExport     `json:"quiz_results"`
+}
+
+// InteractionExport is a single chat message for the export payload.
+type InteractionExport struct {
+	SessionID string    `json:"session_id"`
+	Role      string    `json:"role"`
+	Content   string    `json:"content"`
+	CreatedAt time.Time `json:"created_at"`
+}
+
+// QuizResultExport is a single quiz answer for the export payload.
+type QuizResultExport struct {
+	QuestionID  uuid.UUID `json:"question_id"`
+	Correct     bool      `json:"correct"`
+	AnswerGiven string    `json:"answer_given"`
+	XPEarned    int       `json:"xp_earned"`
+	AnsweredAt  time.Time `json:"answered_at"`
+}
+
+// ============================================================
+// CONSENT MANAGEMENT
+// ============================================================
+
+// ConsentStatus is the response payload for GET /users/{id}/consent.
+type ConsentStatus struct {
+	IsMinor           bool       `json:"is_minor"`
+	GuardianEmail     *string    `json:"guardian_email,omitempty"`
+	GuardianConsentAt *time.Time `json:"guardian_consent_at,omitempty"`
+	ConsentRequired   bool       `json:"consent_required"`
+	ConsentGiven      bool       `json:"consent_given"`
+}
+
+// UpdateConsentRequest is the body for PATCH /users/{id}/consent.
+type UpdateConsentRequest struct {
+	// GuardianEmail must match the guardian_email on the account.
+	GuardianEmail string `json:"guardian_email"`
 }

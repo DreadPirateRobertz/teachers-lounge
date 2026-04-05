@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/teacherslounge/user-service/internal/auth"
+	"github.com/teacherslounge/user-service/internal/models"
 	"github.com/teacherslounge/user-service/internal/store"
 )
 
@@ -64,6 +65,35 @@ func RequireSelf(getUserID func(r *http.Request) string) func(http.Handler) http
 			claims := ClaimsFromCtx(r.Context())
 			if claims == nil || claims.UserID != resourceUserID {
 				http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+				return
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// AdminChecker is the minimal store interface RequireAdmin needs.
+type AdminChecker interface {
+	GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error)
+}
+
+// RequireAdmin rejects requests from users that do not have is_admin = true.
+// Must be used after Authenticate.
+func RequireAdmin(s AdminChecker) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			userID, ok := UserIDFromCtx(r.Context())
+			if !ok {
+				http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
+				return
+			}
+			user, err := s.GetUserByID(r.Context(), userID)
+			if err != nil {
+				http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
+				return
+			}
+			if !user.IsAdmin {
+				http.Error(w, `{"error":"admin access required"}`, http.StatusForbidden)
 				return
 			}
 			next.ServeHTTP(w, r)

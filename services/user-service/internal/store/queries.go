@@ -69,6 +69,15 @@ type AuditLogParams struct {
 	IPAddress    string
 }
 
+// QueryAuditLogParams filters the audit_log query for the admin endpoint.
+type QueryAuditLogParams struct {
+	StudentID *uuid.UUID
+	From      *time.Time
+	To        *time.Time
+	Limit     int // clamped to 500; default 100
+	Offset    int
+}
+
 // ============================================================
 // SCAN HELPERS
 // ============================================================
@@ -81,7 +90,7 @@ func scanUser(row scanner) (*models.User, error) {
 	u := &models.User{}
 	err := row.Scan(
 		&u.ID, &u.Email, &u.PasswordHash, &u.DisplayName, &u.AvatarEmoji,
-		&u.AccountType, &u.DateOfBirth, &u.GuardianEmail, &u.GuardianConsentAt,
+		&u.AccountType, &u.IsAdmin, &u.DateOfBirth, &u.GuardianEmail, &u.GuardianConsentAt,
 		&u.CreatedAt, &u.UpdatedAt,
 	)
 	if err != nil {

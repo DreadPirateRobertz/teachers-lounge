@@ -1,0 +1,6 @@
+BEGIN;
+
+ALTER TABLE export_jobs DROP COLUMN IF EXISTS result_data;
+ALTER TABLE users DROP COLUMN IF EXISTS is_admin;
+
+COMMIT;

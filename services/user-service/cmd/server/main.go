@@ -18,6 +18,7 @@ import (
 	"github.com/teacherslounge/user-service/internal/config"
 	"github.com/teacherslounge/user-service/internal/handlers"
 	"github.com/teacherslounge/user-service/internal/middleware"
+	"github.com/teacherslounge/user-service/internal/models"
 	"github.com/teacherslounge/user-service/internal/store"
 )
 
@@ -69,6 +70,7 @@ func main() {
 	subsH := handlers.NewSubscriptionsHandler(db, billingClient)
 	webhookH := handlers.NewWebhookHandler(billingClient)
 	teachersH := handlers.NewTeachersHandler(db)
+	adminH := handlers.NewAdminHandler(db)
 
 	// ── Router ───────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -102,18 +104,33 @@ func main() {
 			return chi.URLParam(req, "id")
 		}))
 
-		r.Get("/profile", usersH.GetProfile)
+		r.With(middleware.AuditLog(db, models.AuditActionReadProfile, "user_profile,learning_profile", "ferpa_compliance")).
+			Get("/profile", usersH.GetProfile)
 		r.Patch("/preferences", usersH.UpdatePreferences)
 		r.Post("/export", usersH.ExportData)
+		r.Get("/export/{jobID}", usersH.GetExport)
 		r.Delete("", usersH.DeleteAccount)
 
-		r.Get("/subscription", subsH.GetSubscription)
+		r.With(middleware.AuditLog(db, models.AuditActionReadSubscription, "subscription", "billing_support")).
+			Get("/subscription", subsH.GetSubscription)
 		r.Post("/subscription/cancel", subsH.CancelSubscription)
 		r.Post("/subscription/reactivate", subsH.ReactivateSubscription)
+
+		// Consent management (FERPA K-12)
+		r.Get("/consent", usersH.GetConsent)
+		r.Patch("/consent", usersH.UpdateConsent)
 
 		// Teacher profile (self-only; no teacher profile required to create one)
 		r.Post("/teacher-profile", teachersH.CreateTeacherProfile)
 		r.Get("/teacher-profile", teachersH.GetTeacherProfile)
+	})
+
+	// Admin routes (JWT + is_admin required + rate limited)
+	r.Route("/admin", func(r chi.Router) {
+		r.Use(middleware.Authenticate(jwtManager))
+		r.Use(middleware.RequireAdmin(db))
+		r.With(middleware.RateLimit(redisClient, "admin_audit", 100, 1*time.Hour)).
+			Get("/audit", adminH.GetAuditLog)
 	})
 
 	// Teacher routes (JWT + self + teacher profile required)
