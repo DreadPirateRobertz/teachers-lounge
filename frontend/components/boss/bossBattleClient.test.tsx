@@ -6,7 +6,7 @@
  * is shown instead of crashing the entire battle page.
  */
 import React from 'react'
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 
 // ── Module mocks (must precede imports that pull in the mocked modules) ────────
 
@@ -19,22 +19,11 @@ afterEach(() => {
   console.error = originalConsoleError
 })
 
-// next/dynamic — collapse to a synchronous passthrough so we can control the
-// rendered component without async chunk loading.
+// next/dynamic — return the mocked module synchronously so BossScene renders
+// immediately in jsdom without async chunk loading or useEffect delays.
 jest.mock('next/dynamic', () => ({
   __esModule: true,
-  default: (loader: () => Promise<{ default: React.ComponentType }>) => {
-    // Return a component that calls the loader's result synchronously.
-    // In tests BossScene is replaced by the mock below, so this is safe.
-    const Lazy = (props: Record<string, unknown>) => {
-      const [Comp, setComp] = React.useState<React.ComponentType | null>(null)
-      React.useEffect(() => {
-        loader().then((mod) => setComp(() => mod.default))
-      }, [])
-      return Comp ? <Comp {...props} /> : null
-    }
-    return Lazy
-  },
+  default: () => jest.requireMock('./BossScene').default,
 }))
 
 // BossScene mock — default export throws so the ErrorBoundary triggers.
@@ -108,12 +97,9 @@ describe('BossBattleClient — ErrorBoundary around BossScene', () => {
   })
 
   it('shows WebGL fallback when BossScene throws during active phase', async () => {
-    const { getByRole } = renderBattle()
-
-    // Simulate moving to active phase by clicking "Begin Battle".
-    // apiFetch will throw (fetch is not mocked) which is fine — we just need
-    // the component to attempt rendering BossScene.
-    // Instead, drive phase directly by mocking fetch to return a valid session.
+    // Mock fetch so startBattle() transitions phase → 'active', which mounts
+    // BossScene. The synchronous dynamic mock makes BossScene render immediately,
+    // throw, and let the ErrorBoundary show its fallback.
     global.fetch = jest.fn().mockResolvedValue({
       ok: true,
       status: 200,
@@ -128,14 +114,13 @@ describe('BossBattleClient — ErrorBoundary around BossScene', () => {
       }),
     })
 
-    const startBtn = getByRole('button', { name: /begin battle/i })
-    startBtn.click()
-
-    // Wait for the fetch to resolve and state to update.
-    await screen.findByTestId('boss-hud')
+    const { getByRole } = renderBattle()
+    getByRole('button', { name: /begin battle/i }).click()
 
     // BossScene threw → ErrorBoundary should show the WebGL fallback text.
-    expect(screen.getByText(/webgl failed to initialise/i)).toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByText(/webgl failed to initialise/i)).toBeInTheDocument()
+    })
     expect(screen.getByText(/try refreshing the page/i)).toBeInTheDocument()
   })
 })
