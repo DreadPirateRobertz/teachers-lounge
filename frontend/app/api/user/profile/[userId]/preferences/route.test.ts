@@ -101,6 +101,11 @@ describe('PATCH /api/user/profile/[userId]/preferences', () => {
   })
 
   it('sends no Authorization when no token or header provided', async () => {
+    // INTENTIONAL: this route is a transparent proxy. When the caller provides
+    // no credentials, the request is forwarded without an Authorization header
+    // and the user-service enforces auth (typically returning 401). The Next.js
+    // layer does not short-circuit unauthenticated requests — it relies on the
+    // backend to do so.
     let capturedHeaders: Record<string, string> = {}
     global.fetch = jest.fn().mockImplementation((_url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>

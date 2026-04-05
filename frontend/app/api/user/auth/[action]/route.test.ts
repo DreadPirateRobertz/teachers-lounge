@@ -80,6 +80,12 @@ describe('POST /api/user/auth/[action]', () => {
     const setCookieHeader = res.headers.get('Set-Cookie') ?? ''
     expect(setCookieHeader).toContain('tl_token')
     expect(setCookieHeader).toContain(MOCK_TOKEN)
+    // tl_token is JS-readable (httpOnly: false) so the frontend middleware can
+    // check auth state. Assert the security attributes set in route.ts.
+    expect(setCookieHeader.toLowerCase()).not.toContain('httponly')
+    expect(setCookieHeader.toLowerCase()).toContain('samesite=lax')
+    // Max-Age should match the 15-minute access-token TTL (900 seconds)
+    expect(setCookieHeader).toContain('Max-Age=900')
   })
 
   it('does not set tl_token cookie when login fails', async () => {

@@ -49,7 +49,7 @@ describe('POST /api/chat — mock stream (no TUTORING_SERVICE_URL)', () => {
     const res = await POST(makeRequest({}))
 
     expect(res.status).toBe(200)
-    expect(res.headers.get('Content-Type')).toContain('text/plain')
+    expect(res.headers.get('Content-Type')).toBe('text/plain; charset=utf-8')
   })
 
   it('sets X-Content-Type-Options: nosniff on mock stream', async () => {
@@ -123,7 +123,13 @@ describe('POST /api/chat — tutoring service proxy', () => {
     expect(capturedHeaders['Authorization']).toBe(`Bearer ${MOCK_TOKEN}`)
   })
 
-  it('falls back to mock stream when upstream is not ok', async () => {
+  it('falls back to mock stream when upstream returns non-ok status', async () => {
+    // INTENTIONAL Phase 1 behaviour: when TUTORING_SERVICE_URL is set but the
+    // upstream returns a non-ok status (e.g. 500 during a deploy), the route
+    // silently falls through to the built-in mock stream so the UI stays
+    // functional. This is a product decision — see route.ts comment
+    // "Fall through to mock". If the product requirement changes to surface the
+    // upstream error, replace the fallback with a 502 propagation here.
     global.fetch = jest.fn().mockResolvedValue(new Response('error', { status: 500 }))
 
     const { POST } = await import('./route')
@@ -131,6 +137,6 @@ describe('POST /api/chat — tutoring service proxy', () => {
 
     // Falls through to mock — still returns 200 with streaming body
     expect(res.status).toBe(200)
-    expect(res.headers.get('Content-Type')).toContain('text/plain')
+    expect(res.headers.get('Content-Type')).toContain('text/plain; charset=utf-8')
   })
 })

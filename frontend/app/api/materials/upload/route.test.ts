@@ -49,6 +49,26 @@ describe('POST /api/materials/upload — validation', () => {
     expect(res.status).toBe(400)
     expect(data.detail).toContain('course_id')
   })
+
+  it('handles missing file field gracefully — uses "upload" as fallback filename', async () => {
+    // The route uses formData.get('file') and falls back to 'upload' when the
+    // file field is absent. This is intentional Phase 1 behaviour: the mock
+    // path is lenient so the UI can be exercised without a real file.
+    delete process.env.INGESTION_SERVICE_URL
+    const { POST } = await import('./route')
+
+    const emptyForm = new FormData() // no 'file' field
+    const req = new NextRequest('http://localhost/api/materials/upload?course_id=c1', {
+      method: 'POST',
+      body: emptyForm,
+    })
+    const res = await POST(req)
+    const data = await res.json()
+
+    expect(res.status).toBe(202)
+    // gcs_path should use the 'upload' fallback name
+    expect(data.gcs_path).toContain('/upload')
+  })
 })
 
 describe('POST /api/materials/upload — mock fallback (no INGESTION_SERVICE_URL)', () => {

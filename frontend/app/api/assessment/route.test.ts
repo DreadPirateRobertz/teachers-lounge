@@ -103,6 +103,23 @@ describe('POST /api/assessment', () => {
     expect(res.status).toBe(400)
   })
 
+  it('propagates 401 when upstream rejects unauthenticated request', async () => {
+    // The Next.js route is a transparent proxy — it does not enforce auth itself.
+    // Auth is enforced by the gaming-service; when no token is present the
+    // upstream returns 401 which the route propagates to the client.
+    global.fetch = jest.fn().mockResolvedValue(
+      new Response(JSON.stringify({ detail: 'unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    const { POST } = await import('./route')
+    const res = await POST(makeRequest({ token: null }))
+
+    expect(res.status).toBe(401)
+  })
+
   it('calls gaming-service assessment/start endpoint', async () => {
     let capturedUrl = ''
     global.fetch = jest.fn().mockImplementation((url: string) => {

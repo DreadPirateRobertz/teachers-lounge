@@ -7,10 +7,13 @@ import { NextRequest } from 'next/server'
 
 const MOCK_TOKEN = 'quests-test-token'
 
-function makeGetRequest(opts: { token?: string } = {}): NextRequest {
+function makeGetRequest(opts: { token?: string | null } = {}): NextRequest {
   const headers: Record<string, string> = {}
-  if (opts.token ?? MOCK_TOKEN) {
-    headers['Cookie'] = `tl_token=${opts.token ?? MOCK_TOKEN}`
+  // Use explicit null to produce an unauthenticated request; undefined falls
+  // back to MOCK_TOKEN so callers that don't care about auth stay concise.
+  const token = opts.token !== undefined ? opts.token : MOCK_TOKEN
+  if (token !== null) {
+    headers['Cookie'] = `tl_token=${token}`
   }
   return new NextRequest('http://localhost/api/gaming/quests', { method: 'GET', headers })
 }
@@ -129,7 +132,7 @@ describe('GET /api/gaming/quests — gaming-service proxy', () => {
 
     expect(res.status).toBe(200)
     expect(capturedUrl).toContain('/gaming/quests/daily')
-    expect(data.quests).toBeDefined()
+    expect(Array.isArray(data.quests)).toBe(true)
   })
 
   it('returns error response when upstream GET fails', async () => {
@@ -139,6 +142,22 @@ describe('GET /api/gaming/quests — gaming-service proxy', () => {
     const res = await GET(makeGetRequest())
 
     expect(res.status).toBe(503)
+  })
+
+  it('propagates 401 for unauthenticated GET (no token)', async () => {
+    // The route is a transparent proxy — auth is enforced by the gaming-service.
+    // Pass token: null to send no cookie; upstream rejects with 401.
+    global.fetch = jest.fn().mockResolvedValue(
+      new Response(JSON.stringify({ error: 'unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    const { GET } = await import('./route')
+    const res = await GET(makeGetRequest({ token: null }))
+
+    expect(res.status).toBe(401)
   })
 })
 
