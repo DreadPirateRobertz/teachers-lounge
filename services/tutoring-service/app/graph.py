@@ -7,7 +7,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .orm import Concept, ConceptPrerequisite, StudentConceptMastery
 
-MASTERY_THRESHOLD = 0.7  # below this a prerequisite is considered a "gap"
+MASTERY_THRESHOLD = 0.7   # below this a prerequisite is considered a "gap"
+ADEQUATE_THRESHOLD = 0.6  # lower bar used for prerequisite chain adequacy check
 
 
 async def get_course_concepts(db: AsyncSession, course_id: UUID) -> list[Concept]:
@@ -60,6 +61,60 @@ def _get_all_prerequisites(
                 result.append(prereq_id)
                 queue.append(prereq_id)
     return result
+
+
+def get_prerequisite_chain(
+    target_concept_id: UUID,
+    concepts: list[Concept],
+    mastery: dict[UUID, StudentConceptMastery],
+    threshold: float = ADEQUATE_THRESHOLD,
+) -> list[dict]:
+    """Return all transitive prerequisites ordered by depth then concept name.
+
+    Each entry includes the student's current mastery and whether it meets the
+    adequacy threshold — providing the full prerequisite chain for display even
+    when the student has already mastered some prerequisites.
+
+    Args:
+        target_concept_id: The concept whose prerequisite chain to walk.
+        concepts:          All concepts in the course.
+        mastery:           Student's current mastery keyed by concept_id.
+        threshold:         Mastery score at or above which a prereq is "adequate".
+
+    Returns:
+        List of dicts: {concept_id, concept_name, path, difficulty, mastery_score,
+                        mastery_adequate, depth}.
+    """
+    graph = _build_prereq_graph(concepts)
+    concept_map = {c.id: c for c in concepts}
+
+    # BFS to collect all transitive prerequisites with their depth
+    visited: dict[UUID, int] = {}  # concept_id -> min depth (hops from target)
+    queue: deque[tuple[UUID, int]] = deque([(target_concept_id, 0)])
+    while queue:
+        cid, depth = queue.popleft()
+        for prereq_id, _ in graph.get(cid, []):
+            if prereq_id not in visited:
+                visited[prereq_id] = depth + 1
+                queue.append((prereq_id, depth + 1))
+
+    chain = []
+    for prereq_id, depth in sorted(visited.items(), key=lambda kv: (kv[1], str(kv[0]))):
+        concept = concept_map.get(prereq_id)
+        if not concept:
+            continue
+        score = mastery[prereq_id].mastery_score if prereq_id in mastery else 0.0
+        chain.append({
+            "concept_id": prereq_id,
+            "concept_name": concept.name,
+            "path": concept.path,
+            "difficulty": getattr(concept, "difficulty", 0.5),
+            "mastery_score": score,
+            "mastery_adequate": score >= threshold,
+            "depth": depth,
+        })
+
+    return chain
 
 
 def detect_gaps(
