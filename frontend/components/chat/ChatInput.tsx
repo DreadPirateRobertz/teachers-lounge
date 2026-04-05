@@ -21,7 +21,10 @@ export default function ChatInput({ value, onChange, onSubmit, disabled }: Props
 
   return (
     <form
-      onSubmit={(e) => { e.preventDefault(); if (!disabled && value.trim()) onSubmit() }}
+      onSubmit={(e) => {
+        e.preventDefault()
+        if (!disabled && value.trim()) onSubmit()
+      }}
       className="flex gap-2 p-3 border-t border-border-dim bg-bg-panel"
     >
       <div className="flex-1 relative">
@@ -51,7 +54,16 @@ export default function ChatInput({ value, onChange, onSubmit, disabled }: Props
 
 function SendIcon() {
   return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <line x1="22" y1="2" x2="11" y2="13" />
       <polygon points="22 2 15 22 11 13 2 9 22 2" />
     </svg>

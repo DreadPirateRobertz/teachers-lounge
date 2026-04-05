@@ -39,8 +39,8 @@ export default function ProfilePage() {
 
   useEffect(() => {
     fetch('/api/subscription')
-      .then(r => r.json())
-      .then(data => setSub(data))
+      .then((r) => r.json())
+      .then((data) => setSub(data))
       .catch(() => setError('Failed to load subscription'))
       .finally(() => setLoading(false))
   }, [])
@@ -73,14 +73,21 @@ export default function ProfilePage() {
             <div className="flex items-center gap-2">
               <span className="text-base">🧠</span>
               <div>
-                <div className="text-xs font-medium text-text-bright">Learning Style Assessment</div>
+                <div className="text-xs font-medium text-text-bright">
+                  Learning Style Assessment
+                </div>
                 <div className="text-[10px] text-text-dim">Help Nova adapt to how you learn</div>
               </div>
             </div>
-            <span className="text-text-dim text-xs group-hover:text-neon-blue transition-colors">→</span>
+            <span className="text-text-dim text-xs group-hover:text-neon-blue transition-colors">
+              →
+            </span>
           </Link>
 
-          <Link href="/" className="block text-xs text-neon-blue hover:text-glow-blue transition-colors text-center py-1">
+          <Link
+            href="/"
+            className="block text-xs text-neon-blue hover:text-glow-blue transition-colors text-center py-1"
+          >
             ← Back to tutor
           </Link>
         </div>
@@ -105,15 +112,16 @@ function SubCard({ sub }: { sub: Subscription }) {
         <p className="text-2xl font-mono font-bold text-neon-green mb-1">
           {days} <span className="text-sm font-normal text-text-dim">days left</span>
         </p>
-        <p className="text-xs text-text-dim mb-4">
-          Trial ends {formatDate(sub.trial_end)}
-        </p>
+        <p className="text-xs text-text-dim mb-4">Trial ends {formatDate(sub.trial_end)}</p>
         {planLabel && (
           <p className="text-xs text-text-dim mb-4">
             Plan selected: <span className="text-text-base">{planLabel}</span>
           </p>
         )}
-        <Link href="/subscribe" className="block w-full text-center py-2 bg-neon-blue text-bg-deep text-xs font-semibold rounded-lg hover:bg-neon-blue/90 transition-colors">
+        <Link
+          href="/subscribe"
+          className="block w-full text-center py-2 bg-neon-blue text-bg-deep text-xs font-semibold rounded-lg hover:bg-neon-blue/90 transition-colors"
+        >
           Upgrade now ⚡
         </Link>
       </div>
@@ -165,7 +173,10 @@ function SubCard({ sub }: { sub: Subscription }) {
       <p className="text-xs text-text-dim mb-4">
         Subscribe to unlock unlimited AI tutoring and boss battles.
       </p>
-      <Link href="/subscribe" className="block w-full text-center py-2 bg-neon-blue text-bg-deep text-xs font-semibold rounded-lg hover:bg-neon-blue/90 transition-colors">
+      <Link
+        href="/subscribe"
+        className="block w-full text-center py-2 bg-neon-blue text-bg-deep text-xs font-semibold rounded-lg hover:bg-neon-blue/90 transition-colors"
+      >
         Subscribe ⚡
       </Link>
     </div>

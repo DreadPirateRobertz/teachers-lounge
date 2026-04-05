@@ -83,10 +83,10 @@ export default function MaterialUpload({ courseId, onUploadComplete }: Props) {
       const body = new FormData()
       body.append('file', selectedFile)
 
-      const res = await fetch(
-        `/api/materials/upload?course_id=${encodeURIComponent(courseId)}`,
-        { method: 'POST', body },
-      )
+      const res = await fetch(`/api/materials/upload?course_id=${encodeURIComponent(courseId)}`, {
+        method: 'POST',
+        body,
+      })
 
       const data: { job_id?: string; material_id?: string; status?: string; detail?: string } =
         await res.json().catch(() => ({ detail: res.statusText }))
@@ -123,11 +123,12 @@ export default function MaterialUpload({ courseId, onUploadComplete }: Props) {
         onClick={() => !selectedFile && inputRef.current?.click()}
         className={`
           relative border-2 border-dashed rounded-lg p-3 text-center transition-all select-none
-          ${selectedFile
-            ? 'border-neon-green/50 bg-neon-green/5 cursor-default'
-            : dragging
-              ? 'border-neon-blue bg-neon-blue/10 shadow-neon-blue-sm cursor-copy'
-              : 'border-border-mid hover:border-neon-blue/50 hover:bg-neon-blue/5 cursor-pointer'
+          ${
+            selectedFile
+              ? 'border-neon-green/50 bg-neon-green/5 cursor-default'
+              : dragging
+                ? 'border-neon-blue bg-neon-blue/10 shadow-neon-blue-sm cursor-copy'
+                : 'border-border-mid hover:border-neon-blue/50 hover:bg-neon-blue/5 cursor-pointer'
           }
         `}
       >
@@ -162,7 +163,9 @@ export default function MaterialUpload({ courseId, onUploadComplete }: Props) {
             <p className="text-xs text-text-dim">
               <span className="text-neon-blue">Browse</span> or drop a file
             </p>
-            <p className="text-[10px] text-text-dim">PDF · DOCX · PPTX · MP4 · images · 500 MB max</p>
+            <p className="text-[10px] text-text-dim">
+              PDF · DOCX · PPTX · MP4 · images · 500 MB max
+            </p>
           </div>
         )}
       </div>
@@ -175,7 +178,13 @@ export default function MaterialUpload({ courseId, onUploadComplete }: Props) {
           disabled={uploading}
           className="w-full py-2 rounded-lg bg-neon-blue/10 border border-neon-blue/40 text-neon-blue text-xs font-medium hover:bg-neon-blue/20 hover:shadow-neon-blue-sm disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
         >
-          {uploading ? <><SpinnerIcon /> Uploading…</> : 'Upload Material'}
+          {uploading ? (
+            <>
+              <SpinnerIcon /> Uploading…
+            </>
+          ) : (
+            'Upload Material'
+          )}
         </button>
       )}
     </div>
@@ -184,16 +193,30 @@ export default function MaterialUpload({ courseId, onUploadComplete }: Props) {
 
 function FileTypeEmoji({ type }: { type: string }) {
   const map: Record<string, string> = {
-    MP4: '🎬', MOV: '🎬', MP3: '🎵', WAV: '🎵',
-    JPG: '🖼️', PNG: '🖼️', PDF: '📄',
+    MP4: '🎬',
+    MOV: '🎬',
+    MP3: '🎵',
+    WAV: '🎵',
+    JPG: '🖼️',
+    PNG: '🖼️',
+    PDF: '📄',
   }
   return <span className="text-xl leading-none flex-shrink-0">{map[type] ?? '📝'}</span>
 }
 
 function UploadIcon() {
   return (
-    <svg className="text-text-dim" width="22" height="22" viewBox="0 0 24 24" fill="none"
-      stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+    <svg
+      className="text-text-dim"
+      width="22"
+      height="22"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
       <path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4" />
       <polyline points="17 8 12 3 7 8" />
       <line x1="12" y1="3" x2="12" y2="15" />
@@ -203,8 +226,15 @@ function UploadIcon() {
 
 function SpinnerIcon() {
   return (
-    <svg className="animate-spin flex-shrink-0" width="12" height="12" viewBox="0 0 24 24"
-      fill="none" stroke="currentColor" strokeWidth="2.5">
+    <svg
+      className="animate-spin flex-shrink-0"
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2.5"
+    >
       <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
     </svg>
   )

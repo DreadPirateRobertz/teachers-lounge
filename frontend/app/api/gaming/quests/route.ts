@@ -5,9 +5,7 @@ const GAMING_SERVICE_URL = process.env.GAMING_SERVICE_URL
 function authHeader(req: NextRequest): Record<string, string> {
   const bearer =
     req.headers.get('authorization') ||
-    (req.cookies.get('tl_token')?.value
-      ? `Bearer ${req.cookies.get('tl_token')!.value}`
-      : null)
+    (req.cookies.get('tl_token')?.value ? `Bearer ${req.cookies.get('tl_token')!.value}` : null)
   return bearer ? { Authorization: bearer } : {}
 }
 

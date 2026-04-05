@@ -16,7 +16,7 @@ async function* mockStream(userMessage: string): AsyncGenerator<string> {
   ]
   for (const chunk of responses) {
     yield chunk
-    await new Promise(r => setTimeout(r, 40))
+    await new Promise((r) => setTimeout(r, 40))
   }
 }
 
@@ -26,7 +26,8 @@ export async function POST(req: NextRequest) {
 
   // Forward to Tutoring Service when available
   if (TUTORING_SERVICE_URL) {
-    const authHeader = req.headers.get('authorization') ||
+    const authHeader =
+      req.headers.get('authorization') ||
       (req.cookies.get('tl_token')?.value
         ? `Bearer ${req.cookies.get('tl_token')!.value}`
         : undefined)
@@ -34,7 +35,7 @@ export async function POST(req: NextRequest) {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        ...(authHeader ? { 'Authorization': authHeader } : {}),
+        ...(authHeader ? { Authorization: authHeader } : {}),
       },
       body: JSON.stringify({ messages }),
     })

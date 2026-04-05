@@ -52,7 +52,7 @@ export default function RegisterPage() {
               id="display-name"
               type="text"
               value={displayName}
-              onChange={e => setDisplayName(e.target.value)}
+              onChange={(e) => setDisplayName(e.target.value)}
               placeholder="ChemWizard"
               required
               autoComplete="nickname"
@@ -65,7 +65,7 @@ export default function RegisterPage() {
               id="email"
               type="email"
               value={email}
-              onChange={e => setEmail(e.target.value)}
+              onChange={(e) => setEmail(e.target.value)}
               placeholder="you@university.edu"
               required
               autoComplete="email"
@@ -78,7 +78,7 @@ export default function RegisterPage() {
               id="password"
               type="password"
               value={password}
-              onChange={e => setPassword(e.target.value)}
+              onChange={(e) => setPassword(e.target.value)}
               placeholder="Min. 8 characters"
               required
               autoComplete="new-password"
@@ -91,7 +91,7 @@ export default function RegisterPage() {
               id="confirm"
               type="password"
               value={confirm}
-              onChange={e => setConfirm(e.target.value)}
+              onChange={(e) => setConfirm(e.target.value)}
               placeholder="••••••••"
               required
               autoComplete="new-password"

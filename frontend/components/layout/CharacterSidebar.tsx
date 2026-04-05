@@ -60,9 +60,24 @@ export default function CharacterSidebar() {
         <div className="flex items-center justify-between">
           <span className="text-xs text-text-dim">Daily Streak</span>
           <div className="flex items-center gap-0.5">
-            <span className="text-base leading-none animate-streak-flame" style={{ animationDelay: '0s' }}>🔥</span>
-            <span className="text-sm leading-none animate-streak-flame" style={{ animationDelay: '0.2s', opacity: 0.7 }}>🔥</span>
-            <span className="text-xs leading-none animate-streak-flame" style={{ animationDelay: '0.4s', opacity: 0.4 }}>🔥</span>
+            <span
+              className="text-base leading-none animate-streak-flame"
+              style={{ animationDelay: '0s' }}
+            >
+              🔥
+            </span>
+            <span
+              className="text-sm leading-none animate-streak-flame"
+              style={{ animationDelay: '0.2s', opacity: 0.7 }}
+            >
+              🔥
+            </span>
+            <span
+              className="text-xs leading-none animate-streak-flame"
+              style={{ animationDelay: '0.4s', opacity: 0.4 }}
+            >
+              🔥
+            </span>
             <span className="font-mono text-sm font-bold text-orange-400 ml-1">7</span>
           </div>
         </div>
@@ -175,7 +190,7 @@ const SIDEBAR_MOCK_QUESTS = [
 
 // ── Quest item (compact sidebar display) ─────────────────────────────────────
 
-function QuestItem({ quest }: { quest: typeof SIDEBAR_MOCK_QUESTS[0] }) {
+function QuestItem({ quest }: { quest: (typeof SIDEBAR_MOCK_QUESTS)[0] }) {
   const pct = quest.target > 0 ? Math.round((quest.progress / quest.target) * 100) : 0
 
   return (
@@ -188,7 +203,9 @@ function QuestItem({ quest }: { quest: typeof SIDEBAR_MOCK_QUESTS[0] }) {
     >
       <div className="flex items-start justify-between gap-1">
         <span className="text-[11px] text-text-base leading-tight">{quest.title}</span>
-        <span className="font-mono text-[10px] text-neon-gold flex-shrink-0">+{quest.xp_reward}xp</span>
+        <span className="font-mono text-[10px] text-neon-gold flex-shrink-0">
+          +{quest.xp_reward}xp
+        </span>
       </div>
       {!quest.completed && (
         <div className="mt-1">
