@@ -1,0 +1,102 @@
+# Analytics nightly CronJob — Phase 7
+#
+# Runs at 2am UTC every night. Steps:
+#   1. Query last 24h interactions + quiz_results from Postgres
+#   2. Anonymize (SHA-256 + k-anonymity + Laplace DP noise)
+#   3. Stream aggregate rows to BigQuery dataset 'tvtutor_analytics'
+#   4. Generate Claude Haiku insights for high-error-rate topics → embed → Qdrant 'insights'
+#   5. Cache top-3 insights per topic in Redis (6h TTL)
+#   6. Write compliance audit log entry
+#
+# Service account requires:
+#   - roles/bigquery.dataEditor on dataset tvtutor_analytics
+#   - Workload Identity bound to the GCP SA 'analytics-cronjob@<project>.iam.gserviceaccount.com'
+#
+# Secrets referenced (all in the 'teachers-lounge' namespace):
+#   - analytics-secrets: DATABASE_URL, ANTHROPIC_API_KEY, OPENAI_API_KEY
+#   - analytics-redis-secret: REDIS_URL
+#
+# Apply with: kubectl apply -f infra/k8s/analytics-cronjob.yaml -n teachers-lounge
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: analytics-nightly
+  namespace: teachers-lounge
+  labels:
+    app: analytics-service
+    component: cronjob
+    phase: "7"
+spec:
+  # 2am UTC every day
+  schedule: "0 2 * * *"
+  # Keep last 3 successful and 1 failed job for log inspection
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 1
+  # Prevent concurrent runs if a previous job is still running
+  concurrencyPolicy: Forbid
+  # Allow up to 1h before forcefully terminating a stuck job
+  startingDeadlineSeconds: 3600
+  jobTemplate:
+    spec:
+      # Retry once on transient failures; alert on second failure
+      backoffLimit: 1
+      # 45-minute hard timeout — pipeline should finish in ~10 min under normal load
+      activeDeadlineSeconds: 2700
+      template:
+        metadata:
+          labels:
+            app: analytics-service
+            component: cronjob
+        spec:
+          serviceAccountName: analytics-cronjob
+          restartPolicy: Never
+          containers:
+            - name: analytics-cronjob
+              image: gcr.io/teachers-lounge/analytics-service:latest
+              imagePullPolicy: Always
+              command: ["python", "-m", "app.cron_job"]
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "1000m"
+                  memory: "1Gi"
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: analytics-secrets
+                      key: DATABASE_URL
+                - name: ANTHROPIC_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: analytics-secrets
+                      key: ANTHROPIC_API_KEY
+                - name: OPENAI_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: analytics-secrets
+                      key: OPENAI_API_KEY
+                - name: REDIS_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: analytics-redis-secret
+                      key: REDIS_URL
+                - name: GCP_PROJECT
+                  value: "teachers-lounge"
+                - name: BIGQUERY_DATASET
+                  value: "tvtutor_analytics"
+                - name: QDRANT_HOST
+                  value: "qdrant.qdrant.svc.cluster.local"
+                - name: QDRANT_PORT
+                  value: "6333"
+                - name: INSIGHTS_COLLECTION
+                  value: "insights"
+                - name: K_ANONYMITY_THRESHOLD
+                  value: "10"
+                - name: DP_NOISE_SCALE
+                  value: "1.0"
+                - name: LOG_LEVEL
+                  value: "info"
