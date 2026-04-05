@@ -288,3 +288,26 @@ func TestAttack_SessionNotFound_Returns404(t *testing.T) {
 		t.Fatalf("expected 404, got %d", rr.Code)
 	}
 }
+
+// ── Flashcard stubs ───────────────────────────────────────────────────────────
+func (b *battleStore) CreateFlashcard(_ context.Context, c *model.Flashcard) (*model.Flashcard, error) {
+	return c, nil
+}
+func (b *battleStore) GetFlashcard(_ context.Context, _ string) (*model.Flashcard, error) {
+	return nil, nil
+}
+func (b *battleStore) ListFlashcards(_ context.Context, _ string) ([]*model.Flashcard, error) {
+	return nil, nil
+}
+func (b *battleStore) DueFlashcards(_ context.Context, _ string) ([]*model.Flashcard, error) {
+	return nil, nil
+}
+func (b *battleStore) ReviewFlashcard(_ context.Context, _, _ string, _ int) (*model.Flashcard, error) {
+	return nil, nil
+}
+func (b *battleStore) FlashcardsForSession(_ context.Context, _ string) ([]*model.Flashcard, error) {
+	return nil, nil
+}
+func (b *battleStore) AllFlashcardsForExport(_ context.Context, _ string) ([]*model.Flashcard, error) {
+	return nil, nil
+}
