@@ -17,7 +17,7 @@ ALTER TABLE student_concept_mastery
     ADD COLUMN IF NOT EXISTS review_count  INT   NOT NULL DEFAULT 0;
 
 -- Index for efficient prerequisite chain walks via ltree
-CREATE INDEX IF NOT EXISTS idx_concepts_path_gist ON concepts USING gist(path::ltree);
+CREATE INDEX IF NOT EXISTS idx_concepts_path_gist ON concepts USING gist(path);
 
 -- Index for prerequisite edge lookups
 CREATE INDEX IF NOT EXISTS idx_concept_prereqs_prereq_id
