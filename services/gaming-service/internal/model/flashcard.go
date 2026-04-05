@@ -62,9 +62,8 @@ type FlashcardReview struct {
 
 // GenerateFlashcardsRequest triggers flashcard generation from a completed quiz session.
 type GenerateFlashcardsRequest struct {
-	// UserID is the UUID of the student requesting generation.
-	UserID string `json:"user_id"`
 	// SessionID is the UUID of the completed quiz session to generate cards from.
+	// The owning user is derived from the JWT, not the request body.
 	SessionID string `json:"session_id"`
 }
 
@@ -87,9 +86,8 @@ type ListFlashcardsResponse struct {
 }
 
 // ReviewFlashcardRequest is the body for POST /gaming/flashcards/{id}/review.
+// The owning user is derived from the JWT, not the request body.
 type ReviewFlashcardRequest struct {
-	// UserID is the UUID of the student submitting the review.
-	UserID string `json:"user_id"`
 	// Quality is the student's self-reported recall quality (0–5).
 	Quality int `json:"quality"`
 }

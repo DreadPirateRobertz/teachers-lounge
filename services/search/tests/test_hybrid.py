@@ -72,9 +72,10 @@ class TestTokenize:
 
     def test_repeated_token_increases_weight(self):
         """A token repeated more gets a higher TF weight than a single-occurrence token."""
+        import hashlib
         result = _tokenize("a a a b")
-        a_idx = hash("a") % 30_000
-        b_idx = hash("b") % 30_000
+        a_idx = int(hashlib.sha1(b"a").hexdigest()[:8], 16) % 30_000
+        b_idx = int(hashlib.sha1(b"b").hexdigest()[:8], 16) % 30_000
         if a_idx != b_idx:  # skip if hash collision
             assert result[a_idx] > result[b_idx]
 

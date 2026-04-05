@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import re
 from collections import Counter
@@ -43,7 +44,7 @@ def _tokenize(text: str) -> dict[int, float]:
     """Produce a sparse BM25-style term-frequency vector from text.
 
     Maps each lowercase alphanumeric token to a deterministic integer index
-    via hash(token) % VOCAB_SIZE, with normalized TF as the weight.
+    via sha1(token)[:8] % VOCAB_SIZE, with normalized TF as the weight.
     This matches the tokenization used by the search service so that at query
     time the two sparse vectors are compatible.
 
@@ -62,7 +63,7 @@ def _tokenize(text: str) -> dict[int, float]:
     total = sum(counts.values())
     sparse: dict[int, float] = {}
     for token, count in counts.items():
-        idx = hash(token) % _VOCAB_SIZE
+        idx = int(hashlib.sha1(token.encode()).hexdigest()[:8], 16) % _VOCAB_SIZE
         sparse[idx] = sparse.get(idx, 0.0) + count / total
     return sparse
 

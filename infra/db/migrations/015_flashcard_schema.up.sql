@@ -44,6 +44,7 @@ ALTER TABLE flashcard_reviews ENABLE ROW LEVEL SECURITY;
 CREATE POLICY user_isolation ON flashcards
     USING (user_id = current_setting('app.current_user_id', true)::uuid);
 CREATE POLICY user_isolation ON flashcard_reviews
-    USING (user_id = current_setting('app.current_user_id', true)::uuid);
+    USING (user_id = current_setting('app.current_user_id', true)::uuid)
+    WITH CHECK (user_id = current_setting('app.current_user_id', true)::uuid);
 
 COMMIT;

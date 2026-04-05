@@ -152,6 +152,8 @@ func TestBuildAPKGCardCount(t *testing.T) {
 
 // TestBuildAPKGFldsContainsFrontAndBack verifies that each note's flds column
 // contains front and back text separated by the Anki field separator (\x1f).
+// Notes are matched by GUID (card ID) rather than row order, since sha1-derived
+// note IDs are not guaranteed to sort in insertion order.
 func TestBuildAPKGFldsContainsFrontAndBack(t *testing.T) {
 	cards := testCards()
 	data, err := flashcard.BuildAPKG("Test Deck", cards)
@@ -161,34 +163,95 @@ func TestBuildAPKGFldsContainsFrontAndBack(t *testing.T) {
 	db := openAnki2FromAPKG(t, data)
 	defer db.Close()
 
-	rows, err := db.Query("SELECT flds FROM notes ORDER BY id")
+	// Build a map of guid → flds from the database.
+	rows, err := db.Query("SELECT guid, flds FROM notes")
 	if err != nil {
 		t.Fatalf("query flds: %v", err)
 	}
 	defer rows.Close()
 
-	i := 0
+	guidToFlds := make(map[string]string)
 	for rows.Next() {
-		var flds string
-		if err := rows.Scan(&flds); err != nil {
-			t.Fatalf("scan flds: %v", err)
+		var guid, flds string
+		if err := rows.Scan(&guid, &flds); err != nil {
+			t.Fatalf("scan guid+flds: %v", err)
 		}
-		parts := strings.Split(flds, "\x1f")
-		if len(parts) != 2 {
-			t.Errorf("note %d: expected 2 fields, got %d", i, len(parts))
-		} else {
-			if parts[0] != cards[i].Front {
-				t.Errorf("note %d front = %q, want %q", i, parts[0], cards[i].Front)
-			}
-			if parts[1] != cards[i].Back {
-				t.Errorf("note %d back = %q, want %q", i, parts[1], cards[i].Back)
-			}
-		}
-		i++
+		guidToFlds[guid] = flds
 	}
 	if err := rows.Err(); err != nil {
 		t.Fatalf("rows error: %v", err)
 	}
+
+	for _, card := range cards {
+		flds, ok := guidToFlds[card.ID]
+		if !ok {
+			t.Errorf("note with guid %q not found in database", card.ID)
+			continue
+		}
+		parts := strings.Split(flds, "\x1f")
+		if len(parts) != 2 {
+			t.Errorf("card %s: expected 2 fields, got %d", card.ID, len(parts))
+		} else {
+			if parts[0] != card.Front {
+				t.Errorf("card %s front = %q, want %q", card.ID, parts[0], card.Front)
+			}
+			if parts[1] != card.Back {
+				t.Errorf("card %s back = %q, want %q", card.ID, parts[1], card.Back)
+			}
+		}
+	}
+}
+
+// TestBuildAPKGNoteIDsAreStable verifies that note and card IDs are deterministic:
+// exporting the same cards twice produces identical IDs. This guards against the
+// nowMs+i timestamp-based approach that breaks for large decks.
+func TestBuildAPKGNoteIDsAreStable(t *testing.T) {
+	cards := testCards()
+
+	ids1 := exportNoteIDs(t, cards)
+	ids2 := exportNoteIDs(t, cards)
+
+	if len(ids1) != len(ids2) {
+		t.Fatalf("id count mismatch: %d vs %d", len(ids1), len(ids2))
+	}
+	for k, v1 := range ids1 {
+		v2, ok := ids2[k]
+		if !ok {
+			t.Errorf("guid %q missing from second export", k)
+			continue
+		}
+		if v1 != v2 {
+			t.Errorf("guid %q: noteID changed between exports (%d → %d)", k, v1, v2)
+		}
+	}
+}
+
+// exportNoteIDs runs BuildAPKG and returns a map of guid → noteID from the notes table.
+func exportNoteIDs(t *testing.T, cards []flashcard.AnkiCard) map[string]int64 {
+	t.Helper()
+	data, err := flashcard.BuildAPKG("Stable IDs Test", cards)
+	if err != nil {
+		t.Fatalf("BuildAPKG: %v", err)
+	}
+	db := openAnki2FromAPKG(t, data)
+	defer db.Close()
+
+	rows, err := db.Query("SELECT guid, id FROM notes")
+	if err != nil {
+		t.Fatalf("query notes: %v", err)
+	}
+	defer rows.Close()
+
+	result := make(map[string]int64)
+	for rows.Next() {
+		var guid string
+		var id int64
+		if err := rows.Scan(&guid, &id); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		result[guid] = id
+	}
+	return result
 }
 
 // TestBuildAPKGEmptyCards verifies that BuildAPKG with no cards produces a

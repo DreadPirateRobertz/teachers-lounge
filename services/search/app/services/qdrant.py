@@ -1,3 +1,4 @@
+import hashlib
 import logging
 import re
 from collections import Counter
@@ -142,7 +143,7 @@ def _tokenize(text: str) -> dict[int, float]:
     """Produce a sparse term-frequency vector from *text*.
 
     Each unique lowercase token is mapped to a deterministic integer index via
-    hash(token) % VOCAB_SIZE.  Values are normalized term frequencies (TF),
+    sha1(token) % VOCAB_SIZE.  Values are normalized term frequencies (TF),
     matching the format Qdrant's BM25/BM42 sparse fields expect at query time.
 
     VOCAB_SIZE=30000 is intentionally larger than typical BM25 vocabularies to
@@ -163,7 +164,7 @@ def _tokenize(text: str) -> dict[int, float]:
     # Collapse collisions by summing TF — benign for retrieval quality
     sparse: dict[int, float] = {}
     for token, count in counts.items():
-        idx = hash(token) % _VOCAB_SIZE
+        idx = int(hashlib.sha1(token.encode()).hexdigest()[:8], 16) % _VOCAB_SIZE
         sparse[idx] = sparse.get(idx, 0.0) + count / total
     return sparse
 

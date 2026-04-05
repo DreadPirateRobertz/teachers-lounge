@@ -18,21 +18,21 @@ import (
 //
 // It auto-creates flashcards from every question in a completed quiz session.
 // Existing cards for the session are skipped so the endpoint is idempotent.
-// The caller must be the owner of the session (callerID == req.UserID).
+// The owning user is derived from the JWT — user_id is not accepted in the body.
 func (h *Handler) GenerateFlashcards(w http.ResponseWriter, r *http.Request) {
+	callerID := middleware.UserIDFromContext(r.Context())
+	if callerID == "" {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		return
+	}
+
 	var req model.GenerateFlashcardsRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
 		return
 	}
-	if req.UserID == "" || req.SessionID == "" {
-		writeError(w, http.StatusBadRequest, "user_id and session_id required")
-		return
-	}
-
-	callerID := middleware.UserIDFromContext(r.Context())
-	if callerID == "" || callerID != req.UserID {
-		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+	if req.SessionID == "" {
+		writeError(w, http.StatusBadRequest, "session_id required")
 		return
 	}
 
@@ -88,7 +88,7 @@ func (h *Handler) GenerateFlashcards(w http.ResponseWriter, r *http.Request) {
 		topicVal := q.Topic
 
 		card := &model.Flashcard{
-			UserID:       req.UserID,
+			UserID:       callerID,
 			QuestionID:   &qIDCopy,
 			SessionID:    &sessionID,
 			Front:        q.Question,
@@ -185,13 +185,15 @@ func (h *Handler) ReviewFlashcard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	callerID := middleware.UserIDFromContext(r.Context())
+	if callerID == "" {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		return
+	}
+
 	var req model.ReviewFlashcardRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeError(w, http.StatusBadRequest, "invalid request body")
-		return
-	}
-	if req.UserID == "" {
-		writeError(w, http.StatusBadRequest, "user_id required")
 		return
 	}
 	if req.Quality < 0 || req.Quality > 5 {
@@ -199,16 +201,14 @@ func (h *Handler) ReviewFlashcard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	callerID := middleware.UserIDFromContext(r.Context())
-	if callerID == "" || callerID != req.UserID {
-		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
-		return
-	}
-
 	// Verify ownership before applying the review.
 	card, err := h.store.GetFlashcard(r.Context(), cardID)
 	if err != nil {
 		h.logger.Error("review flashcard: get card", zap.String("card_id", cardID), zap.Error(err))
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	if card == nil {
 		writeError(w, http.StatusNotFound, "flashcard not found")
 		return
 	}
@@ -217,7 +217,7 @@ func (h *Handler) ReviewFlashcard(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := h.store.ReviewFlashcard(r.Context(), cardID, req.UserID, req.Quality)
+	updated, err := h.store.ReviewFlashcard(r.Context(), cardID, callerID, req.Quality)
 	if err != nil {
 		h.logger.Error("review flashcard", zap.String("card_id", cardID), zap.Error(err))
 		writeError(w, http.StatusInternalServerError, "internal error")
