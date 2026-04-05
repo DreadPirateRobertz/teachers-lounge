@@ -20,6 +20,7 @@
 | [#113](../../pull/113) | fix(docker): resolve 3 Docker build failures — cmake, Go 1.25, npm |
 | [#118](../../pull/118) | chore(tl-96k): CI/ops audit — enforce lint + test gates |
 | [#139](../../pull/139) | fix(ci): switch Docker CI to GHCR — free, no GCP billing needed |
+| [#144](../../pull/144) | chore: enforce 90% patch coverage + expanded PR template |
 
 ### Phase 2: RAG Core
 | PR | What |
@@ -37,6 +38,8 @@
 | [#132](../../pull/132) | feat(hq-cv-iguk6): ingestion service — material status endpoint |
 | [#135](../../pull/135) | feat(hq-cv-iguk6): wire figure GCS upload — PDF processor uploads extracted images |
 | [#129](../../pull/129) | feat(hq-cv-kqszc): Qdrant GKE production readiness — PDB, Helm test, GCS terraform |
+| [#138](../../pull/138) | feat(hq-cv-gjapg): tutoring-service JWT audience validation + full docstrings |
+| [#141](../../pull/141) | feat(tl-5ca): JSON structured logging — tutoring, ingestion, search, analytics |
 
 ### Phase 3: Gaming Layer
 | PR | What |
@@ -45,6 +48,7 @@
 | [#90](../../pull/90) | feat(tl-7r6): Redis token-bucket rate limiting on XP and quiz endpoints |
 | [#92](../../pull/92) | feat(tl-27h): simulated rivals — leaderboard NPCs (expanded) |
 | [#74](../../pull/74) | feat(tl-dbw): quest board UI — dedicated page, real API integration |
+| [#142](../../pull/142) | feat(tl-a1n): power-up gem shop — backend API + frontend UI |
 
 ### Phase 4: Boss Battles
 | PR | What |
@@ -73,6 +77,7 @@
 | [#91](../../pull/91) | feat(tl-z7o): notification push mechanics — FCM delivery, token registration |
 | [#103](../../pull/103) | feat(tl-0x8): SendGrid email, event triggers, 3/day push rate limit |
 | [#136](../../pull/136) | feat(tl-zti): security hardening — CMEK/KMS, Redis TLS, CSP headers, rate limiting |
+| [#140](../../pull/140) | feat(tl-ixk): CSP nonce migration — remove `unsafe-inline` from `script-src` |
 
 ### Frontend + UX
 | PR | What |
@@ -86,24 +91,31 @@
 | [#119](../../pull/119) | feat(tl-c5m): multi-modal responses — TTS audio player + notes panel |
 | [#123](../../pull/123) | fix(tl-cqg): cookie security, auth 401s, makeGetRequest null-check |
 | [#133](../../pull/133) | feat(tl-kfc): frontend coverage — 16 new test files, 573 total tests |
+| [#143](../../pull/143) | feat(tl-num): onboarding flow — first-run wizard, character creation, upload guide |
+| [#147](../../pull/147) | feat(tl-buv): mobile responsiveness + K-12 hooks |
+
+### Docker / Local Dev
+| PR | What |
+|----|------|
+| [#149](../../pull/149) | fix(docker): add DATABASE_URL to user-service |
+| [#150](../../pull/150) | fix(docker): add missing Stripe price ID env vars to user-service |
+| [#151](../../pull/151) | fix(docker): add REDIS_ADDR to user-service |
+| [#152](../../pull/152) | fix(user-service): fix empty chi route pattern for DELETE /users/{id} |
+| [#153](../../pull/153) | fix(docker): user-service healthcheck endpoint is /healthz not /health |
+| [#154](../../pull/154) | fix(user-service): switch runtime image to alpine for healthcheck |
+| [#155](../../pull/155) | fix(docker): add missing env vars to tutoring-service |
+| [#156](../../pull/156) | fix(docker): add db-migrate init service for schema migrations |
+| [#157](../../pull/157) | fix(docker): use pgvector/pgvector:pg16 for postgres image |
+| [#158](../../pull/158) | fix(docker): tutoring-service port mapping 8000:8080 + healthcheck |
+| [#159](../../pull/159) | fix(docker): bind frontend to 0.0.0.0 for LAN access |
+| [#160](../../pull/160) | fix(frontend): disable HSTS for local dev — browser was upgrading to HTTPS |
 
 ### Fixes
 | PR | What |
 |----|------|
 | [#86](../../pull/86) | fix(tl-ck9): subscription integration tests |
+| [#137](../../pull/137) | fix: upload route tests — use valid UUIDs after security hardening |
 
 ---
 
-## In Progress (2026-04-05)
-
-| Crew | Bead | Work |
-|------|------|------|
-| alai | hq-cv-gjapg | JWT audience validation in tutoring-service |
-| bean | tl-5ca | Python JSON structured logging (4 services) |
-| carn | tl-5d3 | Nonce-CSP migration (Next.js middleware) |
-| dink | hq-cv-iguk6 | Ingestion PDF pipeline — chunking, embeddings, Qdrant write |
-| shen | tl-a1n | Power-up shop UI |
-
----
-
-*Last updated: 2026-04-05 by Petra*
+*Last updated: 2026-04-05 by carn (tl-fos)*
