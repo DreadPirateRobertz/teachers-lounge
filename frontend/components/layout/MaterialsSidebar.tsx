@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import LeaderboardPanel from './LeaderboardPanel'
+import ErrorBoundary from '@/components/ErrorBoundary'
 
 const MASTERY_TOPICS = [
   { name: 'Atomic Structure', score: 0.88 },
@@ -61,7 +62,11 @@ export default function MaterialsSidebar() {
       {/* Tab content */}
       <div className="flex-1 overflow-y-auto p-3">
         {activeTab === 'mastery' && <MasteryPanel />}
-        {activeTab === 'rankings' && <LeaderboardPanel />}
+        {activeTab === 'rankings' && (
+          <ErrorBoundary componentName="Leaderboard">
+            <LeaderboardPanel />
+          </ErrorBoundary>
+        )}
         {activeTab === 'powerups' && <PowerupsPanel />}
       </div>
     </aside>
