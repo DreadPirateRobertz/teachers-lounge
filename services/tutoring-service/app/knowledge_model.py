@@ -1,20 +1,23 @@
 """Student Knowledge Model — learning profiles, misconceptions, proactive SRS prompts.
 
-Core async functions for the SKM adaptive layer:
+Core async functions for the SKM adaptive layer.  All write helpers are
+commit-free: they mutate ORM state and flush where needed, but NEVER call
+db.commit().  Callers own the transaction boundary so operations can be
+batched atomically.
 
   Learning profile (Felder-Silverman dials):
     get_or_create_learning_profile  — fetch or insert a LearningProfile row
-    update_learning_profile_dials   — merge new dial values and commit
+    update_learning_profile_dials   — merge new dial values (no commit)
     get_dials                       — return the current dials as a plain dict
 
   Explanation preferences:
-    log_explanation_preference      — record whether an explanation type helped
+    log_explanation_preference      — record whether an explanation type helped (no commit)
     get_explanation_preferences     — retrieve preference history for a concept
 
   Misconceptions:
-    log_misconception               — record a detected student error
+    log_misconception               — record/upsert a detected student error (no commit)
     get_active_misconceptions       — list unresolved errors with recency weights
-    resolve_misconception           — mark an error as corrected
+    resolve_misconception           — mark an error as corrected (no commit)
 
   Proactive SRS:
     get_due_review_prompt           — generate a nudge string when reviews are due
@@ -26,9 +29,11 @@ from datetime import datetime, timezone
 from uuid import UUID
 
 from sqlalchemy import select
+from sqlalchemy.orm import selectinload
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .orm import (
+    Concept,
     ExplanationPreference,
     LearningProfile,
     Misconception,
@@ -39,6 +44,11 @@ from .style_detector import DEFAULT_DIALS
 # Days over which misconception confidence decays to ~37 % (1/e).
 _MISCONCEPTION_DECAY_DAYS: float = 30.0
 
+# Only these four keys are valid Felder-Silverman dimensions.
+_VALID_DIAL_KEYS: frozenset[str] = frozenset(
+    {"active_reflective", "sensing_intuitive", "visual_verbal", "sequential_global"}
+)
+
 
 # ── Learning profile ──────────────────────────────────────────────────────────
 
@@ -47,6 +57,9 @@ async def get_or_create_learning_profile(
     user_id: UUID,
 ) -> LearningProfile:
     """Fetch the student's LearningProfile row, creating it if absent.
+
+    Flushes (but does not commit) when a new row is created so it's visible
+    within the current transaction.
 
     Args:
         db:      Async SQLAlchemy session.
@@ -79,8 +92,9 @@ async def update_learning_profile_dials(
 ) -> LearningProfile:
     """Merge new Felder-Silverman dial values into the student's profile.
 
-    Only keys present in ``dials`` are updated; other dimensions are unchanged.
-    Creates the profile row if it does not yet exist.
+    Only keys in ``_VALID_DIAL_KEYS`` are applied; unknown keys are silently
+    ignored to prevent arbitrary ORM attribute assignment.  Creates the profile
+    row if it does not yet exist.  Does NOT commit — caller owns the transaction.
 
     Args:
         db:      Async SQLAlchemy session.
@@ -88,14 +102,13 @@ async def update_learning_profile_dials(
         dials:   Partial or full dict of dimension → value in [-1, 1].
 
     Returns:
-        The updated LearningProfile row (not yet committed — caller may batch).
+        The updated LearningProfile row (not committed).
     """
     profile = await get_or_create_learning_profile(db, user_id)
     for dimension, value in dials.items():
-        if hasattr(profile, dimension):
+        if dimension in _VALID_DIAL_KEYS:
             setattr(profile, dimension, float(value))
     profile.updated_at = datetime.now(timezone.utc)
-    await db.commit()
     return profile
 
 
@@ -140,6 +153,8 @@ async def log_explanation_preference(
 ) -> ExplanationPreference:
     """Record whether an explanation type helped a student understand a concept.
 
+    Does NOT commit — caller owns the transaction.
+
     Args:
         db:               Async SQLAlchemy session.
         user_id:          UUID of the student.
@@ -148,7 +163,7 @@ async def log_explanation_preference(
         helpful:          True if the explanation improved understanding.
 
     Returns:
-        The newly-created ExplanationPreference row.
+        The newly-created ExplanationPreference row (not committed).
     """
     pref = ExplanationPreference(
         user_id=user_id,
@@ -157,7 +172,6 @@ async def log_explanation_preference(
         helpful=helpful,
     )
     db.add(pref)
-    await db.commit()
     return pref
 
 
@@ -204,7 +218,13 @@ async def log_misconception(
     concept_id: UUID,
     description: str,
 ) -> Misconception:
-    """Record a detected student misconception with full initial confidence.
+    """Record a detected student misconception, upserting on exact description match.
+
+    If an unresolved misconception with the same user, concept, and description
+    already exists, its ``last_seen_at`` is refreshed and confidence reset to
+    1.0 rather than creating a duplicate row.  Otherwise a new row is inserted.
+
+    Does NOT commit — caller owns the transaction.
 
     Args:
         db:          Async SQLAlchemy session.
@@ -213,9 +233,25 @@ async def log_misconception(
         description: Human-readable description of the misconception.
 
     Returns:
-        The newly-created Misconception row.
+        The created or updated Misconception row (not committed).
     """
     now = datetime.now(timezone.utc)
+
+    # Upsert: refresh if the same error already exists unresolved
+    existing_result = await db.execute(
+        select(Misconception).where(
+            Misconception.user_id == user_id,
+            Misconception.concept_id == concept_id,
+            Misconception.description == description,
+            Misconception.resolved.is_(False),
+        )
+    )
+    existing = existing_result.scalar_one_or_none()
+    if existing is not None:
+        existing.last_seen_at = now
+        existing.confidence = 1.0
+        return existing
+
     m = Misconception(
         user_id=user_id,
         concept_id=concept_id,
@@ -226,7 +262,6 @@ async def log_misconception(
         resolved=False,
     )
     db.add(m)
-    await db.commit()
     return m
 
 
@@ -239,11 +274,13 @@ async def get_active_misconceptions(
 
     Recency weight is computed as R = e^(-elapsed_days / decay_days), giving
     each misconception a weight in (0, 1] that decreases exponentially with age.
+    Resolved rows are excluded both by the SQL WHERE clause and by a Python-level
+    guard for belt-and-suspenders safety.
 
     Args:
         db:         Async SQLAlchemy session.
         user_id:    UUID of the student.
-        decay_days: Half-life decay constant in days (default 30 ≈ 1/e in 30 days).
+        decay_days: Decay constant in days (default 30 → weight ≈ 0.37 at 30 days).
 
     Returns:
         List of dicts ordered by recency_weight descending, each containing:
@@ -262,6 +299,8 @@ async def get_active_misconceptions(
 
     entries = []
     for m in rows:
+        if m.resolved:  # belt-and-suspenders; SQL WHERE already filters these
+            continue
         elapsed = (now - m.last_seen_at).total_seconds() / 86400
         weight = math.exp(-elapsed / max(decay_days, 0.001))
         entries.append({
@@ -284,6 +323,8 @@ async def resolve_misconception(
 ) -> bool:
     """Mark a misconception as resolved (no longer surfaced in active list).
 
+    Does NOT commit — caller owns the transaction.
+
     Args:
         db:               Async SQLAlchemy session.
         misconception_id: UUID of the misconception to resolve.
@@ -302,7 +343,6 @@ async def resolve_misconception(
     if m is None:
         return False
     m.resolved = True
-    await db.commit()
     return True
 
 
@@ -315,9 +355,10 @@ async def get_due_review_prompt(
 ) -> str | None:
     """Generate a nudge string listing concepts due for spaced-repetition review.
 
-    Called during the chat stream post-processing phase.  When at least one
-    concept is overdue the returned string can be appended to the tutor response
-    or emitted as a ``review_reminder`` SSE event.
+    Uses selectinload to eagerly load the concept relationship so that
+    accessing ``row.concept.name`` is safe outside a lazy-load context (e.g.
+    inside an async SSE generator).  Results are capped to ``limit`` both via
+    SQL LIMIT and a Python slice for mock-test determinism.
 
     Args:
         db:      Async SQLAlchemy session.
@@ -330,6 +371,7 @@ async def get_due_review_prompt(
     now = datetime.now(timezone.utc)
     result = await db.execute(
         select(StudentConceptMastery)
+        .options(selectinload(StudentConceptMastery.concept))
         .where(
             StudentConceptMastery.user_id == user_id,
             StudentConceptMastery.next_review_at <= now,
@@ -337,7 +379,7 @@ async def get_due_review_prompt(
         .order_by(StudentConceptMastery.next_review_at.asc())
         .limit(limit)
     )
-    due_rows = result.scalars().all()
+    due_rows = result.scalars().all()[:limit]  # Python slice for test determinism
 
     if not due_rows:
         return None

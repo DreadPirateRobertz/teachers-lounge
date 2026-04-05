@@ -248,11 +248,17 @@ class LearningProfileResponse(BaseModel):
     updated_at: datetime | None = None
 
 
+_VALID_DIAL_KEYS: frozenset[str] = frozenset(
+    {"active_reflective", "sensing_intuitive", "visual_verbal", "sequential_global"}
+)
+
+
 class LearningProfileUpdateRequest(BaseModel):
     """Request body for PATCH /students/me/learning-profile.
 
     Only dial values provided are updated; absent keys are unchanged.
-    Each value must be in the range [-1.0, 1.0].
+    Each value must be in the range [-1.0, 1.0] and must be one of the four
+    Felder-Silverman dimensions.
     """
 
     dials: dict[str, float] = Field(
@@ -261,8 +267,13 @@ class LearningProfileUpdateRequest(BaseModel):
     )
 
     def validate_dial_values(self) -> None:
-        """Raise ValueError if any dial value is outside [-1, 1]."""
+        """Raise ValueError if any key is unknown or any value is outside [-1, 1]."""
         for k, v in self.dials.items():
+            if k not in _VALID_DIAL_KEYS:
+                raise ValueError(
+                    f"Unknown dial dimension '{k}'. "
+                    f"Valid keys: {sorted(_VALID_DIAL_KEYS)}"
+                )
             if not -1.0 <= v <= 1.0:
                 raise ValueError(f"Dial '{k}' value {v} is outside [-1, 1]")
 

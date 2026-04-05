@@ -245,24 +245,25 @@ async def send_message(
                     },
                 )
 
-            yield _sse("done", message_id=tutor_msg_id)
-
-            # --- Step 4: Update dials from this message's signals (post-stream, non-fatal) ---
+            # --- Step 4: Update dials from this message's signals (pre-done, non-fatal) ---
             signals = detect_signals(student_message)
             if signals:
                 updated_dials = update_dials(current_dials, signals)
                 try:
                     await update_learning_profile_dials(db, user.user_id, updated_dials)
+                    await db.commit()
                 except Exception:  # noqa: BLE001
                     logger.warning("Failed to persist learning-style dials for user %s", user.user_id)
 
-            # --- Step 5: Proactive SRS review reminder (post-stream, non-fatal) ---
+            # --- Step 5: Proactive SRS review reminder (before done, non-fatal) ---
             try:
                 review_prompt = await get_due_review_prompt(db, user.user_id)
                 if review_prompt:
                     yield _sse("review_reminder", content=review_prompt, message_id=tutor_msg_id)
             except Exception:  # noqa: BLE001
                 logger.warning("Failed to fetch review reminder for user %s", user.user_id)
+
+            yield _sse("done", message_id=tutor_msg_id)
 
         except (APIConnectionError, APITimeoutError) as exc:
             logger.warning("AI Gateway unreachable: %s", exc)

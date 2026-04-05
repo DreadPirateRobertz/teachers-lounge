@@ -7,11 +7,14 @@ Exposes the Student Knowledge Model (SKM) adaptive layer via REST:
   GET  /students/me/misconceptions                             — active errors
   POST /students/me/misconceptions/{concept_id}               — log an error
   PATCH /students/me/misconceptions/{misconception_id}/resolve — dismiss error
+
+Each write route owns its own db.commit() — helpers in knowledge_model.py are
+commit-free so multiple writes can be batched in a single transaction if needed.
 """
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException
-
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import JWTClaims, require_auth
@@ -29,6 +32,7 @@ from .models import (
     MisconceptionEntry,
     MisconceptionLogRequest,
 )
+from .orm import Concept
 
 router = APIRouter(prefix="/students/me", tags=["learning-profile"])
 
@@ -40,7 +44,8 @@ async def get_learning_profile(
 ):
     """Return the authenticated student's Felder-Silverman learning-style dials.
 
-    Creates a default profile (all zeros) if none exists, without writing to the DB.
+    Returns all-zero dials for a student who has never interacted with the
+    adaptive layer, without creating a profile row.
     """
     dials = await get_dials(db, user.user_id)
     return LearningProfileResponse(user_id=user.user_id, dials=dials)
@@ -55,7 +60,8 @@ async def patch_learning_profile(
     """Update one or more of the student's Felder-Silverman learning-style dials.
 
     Only keys present in the request body are updated; other dimensions keep
-    their current values.  Dial values must be in [-1.0, 1.0].
+    their current values.  Unknown dimension keys and values outside [-1, 1]
+    are rejected with 422.
     """
     try:
         body.validate_dial_values()
@@ -63,6 +69,7 @@ async def patch_learning_profile(
         raise HTTPException(status_code=422, detail=str(exc)) from exc
 
     profile = await update_learning_profile_dials(db, user.user_id, body.dials)
+    await db.commit()
     dials = {
         "active_reflective": profile.active_reflective,
         "sensing_intuitive": profile.sensing_intuitive,
@@ -103,17 +110,26 @@ async def add_misconception(
 ):
     """Log a detected misconception for the authenticated student.
 
+    Returns 404 if the concept does not exist.  If an identical unresolved
+    misconception already exists for this concept, its last_seen_at is
+    refreshed rather than creating a duplicate.
+
     Called by the tutoring agent when it detects that the student holds an
     incorrect belief about a concept.
     """
+    concept_result = await db.execute(select(Concept).where(Concept.id == concept_id))
+    if concept_result.scalar_one_or_none() is None:
+        raise HTTPException(status_code=404, detail="Concept not found")
+
     m = await log_misconception(db, user.user_id, concept_id, body.description)
+    await db.commit()
     return MisconceptionEntry(
         id=m.id,
         concept_id=m.concept_id,
         description=m.description,
         confidence=m.confidence,
         recorded_at=m.recorded_at,
-        recency_weight=1.0,  # brand-new, full weight
+        recency_weight=1.0,
     )
 
 
@@ -130,4 +146,5 @@ async def resolve_student_misconception(
     ok = await resolve_misconception(db, misconception_id, user.user_id)
     if not ok:
         raise HTTPException(status_code=404, detail="Misconception not found")
+    await db.commit()
     return {"resolved": True}

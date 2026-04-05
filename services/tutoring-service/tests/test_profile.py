@@ -149,10 +149,9 @@ class TestGetLearningProfile:
 
     @pytest.mark.asyncio
     async def test_returns_zero_dials_when_no_profile(self):
-        """Returns all-zero dials when no profile row exists (auto-creates)."""
+        """Returns all-zero dials when no profile row exists (read-only, no insert)."""
         db = AsyncMock()
         db.add = MagicMock()
-        db.flush = AsyncMock()
         result = MagicMock()
         result.scalar_one_or_none.return_value = None
         db.execute = AsyncMock(return_value=result)
@@ -162,6 +161,7 @@ class TestGetLearningProfile:
             resp = await client.get("/v1/students/me/learning-profile")
 
         assert resp.status_code == 200
+        db.add.assert_not_called()  # get_dials never creates a profile row
 
     @pytest.mark.asyncio
     async def test_unauthenticated_returns_403(self):
@@ -230,6 +230,20 @@ class TestPatchLearningProfile:
             resp = await client.patch(
                 "/v1/students/me/learning-profile",
                 json={"dials": {"visual_verbal": 2.5}},
+            )
+
+        assert resp.status_code == 422
+
+    @pytest.mark.asyncio
+    async def test_patch_with_unknown_dial_key_returns_422(self):
+        """Unknown dimension keys are rejected with 422 to prevent ORM pollution."""
+        db = AsyncMock()
+        _override_db(db)
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.patch(
+                "/v1/students/me/learning-profile",
+                json={"dials": {"__class__": 0.5}},
             )
 
         assert resp.status_code == 422
@@ -316,12 +330,31 @@ class TestLogMisconception:
     def teardown_method(self):
         _clear_overrides()
 
-    @pytest.mark.asyncio
-    async def test_logs_misconception_returns_201(self):
-        """A valid POST creates a misconception and returns 201."""
+    def _build_db(self, concept_exists: bool = True) -> AsyncMock:
+        """Build a mock DB for the add_misconception flow.
+
+        Two sequential execute calls:
+          1. Concept existence check → row or None
+          2. Existing misconception upsert check → None (insert path)
+        """
         db = AsyncMock()
         db.add = MagicMock()
         db.commit = AsyncMock()
+        db.flush = AsyncMock()
+
+        concept_result = MagicMock()
+        concept_result.scalar_one_or_none.return_value = MagicMock() if concept_exists else None
+
+        no_existing = MagicMock()
+        no_existing.scalar_one_or_none.return_value = None
+
+        db.execute = AsyncMock(side_effect=[concept_result, no_existing])
+        return db
+
+    @pytest.mark.asyncio
+    async def test_logs_misconception_returns_201(self):
+        """A valid POST creates a misconception and returns 201."""
+        db = self._build_db()
         _override_db(db)
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -333,6 +366,20 @@ class TestLogMisconception:
         assert resp.status_code == 201
         db.add.assert_called_once()
         db.commit.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_missing_concept_returns_404(self):
+        """POST for a non-existent concept returns 404."""
+        db = self._build_db(concept_exists=False)
+        _override_db(db)
+
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            resp = await client.post(
+                f"/v1/students/me/misconceptions/{CONCEPT_ID}",
+                json={"description": "test"},
+            )
+
+        assert resp.status_code == 404
 
     @pytest.mark.asyncio
     async def test_missing_description_returns_422(self):

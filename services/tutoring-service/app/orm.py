@@ -193,7 +193,9 @@ class LearningProfile(Base):
 
     __tablename__ = "learning_profiles"
 
-    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    user_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), primary_key=True
+    )
     active_reflective: Mapped[float] = mapped_column(Float, default=0.0)
     sensing_intuitive: Mapped[float] = mapped_column(Float, default=0.0)
     visual_verbal: Mapped[float] = mapped_column(Float, default=0.0)
@@ -211,7 +213,9 @@ class ExplanationPreference(Base):
     __tablename__ = "explanation_preferences"
 
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    user_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     concept_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("concepts.id", ondelete="CASCADE"), nullable=False
     )
@@ -230,7 +234,9 @@ class Misconception(Base):
     __tablename__ = "misconceptions"
 
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
-    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    user_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     concept_id: Mapped[UUID] = mapped_column(
         UUID(as_uuid=True), ForeignKey("concepts.id", ondelete="CASCADE"), nullable=False
     )

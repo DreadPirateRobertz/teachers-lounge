@@ -173,7 +173,7 @@ class TestUpdateLearningProfileDials:
         assert out.sensing_intuitive == 0.5
         assert out.visual_verbal == -0.7
         assert out.sequential_global == 0.2
-        db.commit.assert_awaited_once()
+        db.commit.assert_not_awaited()  # helper is commit-free; caller owns the transaction
 
     @pytest.mark.asyncio
     async def test_partial_dials_only_updates_provided_keys(self):
@@ -249,8 +249,8 @@ class TestGetDials:
 
 class TestLogExplanationPreference:
     @pytest.mark.asyncio
-    async def test_adds_and_commits(self):
-        """Adds an ExplanationPreference row and commits."""
+    async def test_adds_row_without_commit(self):
+        """Adds an ExplanationPreference row but does NOT commit (caller's responsibility)."""
         db = AsyncMock()
         db.add = MagicMock()
         db.commit = AsyncMock()
@@ -263,7 +263,7 @@ class TestLogExplanationPreference:
         )
 
         db.add.assert_called_once()
-        db.commit.assert_awaited_once()
+        db.commit.assert_not_awaited()
         pref = added[0]
         assert pref.user_id == USER_ID
         assert pref.concept_id == CONCEPT_ID
@@ -324,12 +324,20 @@ class TestGetExplanationPreferences:
 # ── log_misconception ─────────────────────────────────────────────────────────
 
 class TestLogMisconception:
-    @pytest.mark.asyncio
-    async def test_adds_new_misconception_row(self):
-        """Creates a Misconception ORM row with correct fields."""
+    def _build_db_no_existing(self) -> AsyncMock:
+        """DB mock where no existing misconception is found (insert path)."""
         db = AsyncMock()
         db.add = MagicMock()
         db.commit = AsyncMock()
+        no_existing = MagicMock()
+        no_existing.scalar_one_or_none.return_value = None
+        db.execute = AsyncMock(return_value=no_existing)
+        return db
+
+    @pytest.mark.asyncio
+    async def test_adds_new_misconception_row_without_commit(self):
+        """Creates a Misconception ORM row with correct fields; does NOT commit."""
+        db = self._build_db_no_existing()
 
         added = []
         db.add.side_effect = added.append
@@ -337,7 +345,7 @@ class TestLogMisconception:
         await log_misconception(db, USER_ID, CONCEPT_ID, "Confuses div with grad")
 
         db.add.assert_called_once()
-        db.commit.assert_awaited_once()
+        db.commit.assert_not_awaited()
         m = added[0]
         assert m.user_id == USER_ID
         assert m.concept_id == CONCEPT_ID
@@ -347,9 +355,7 @@ class TestLogMisconception:
     @pytest.mark.asyncio
     async def test_new_misconception_has_full_confidence(self):
         """A freshly logged misconception starts with confidence=1.0."""
-        db = AsyncMock()
-        db.add = MagicMock()
-        db.commit = AsyncMock()
+        db = self._build_db_no_existing()
 
         added = []
         db.add.side_effect = added.append
@@ -357,6 +363,25 @@ class TestLogMisconception:
         await log_misconception(db, USER_ID, CONCEPT_ID, "wrong sign")
 
         assert added[0].confidence == 1.0
+
+    @pytest.mark.asyncio
+    async def test_upserts_existing_misconception(self):
+        """When the same description already exists unresolved, refreshes last_seen_at."""
+        db = AsyncMock()
+        db.add = MagicMock()
+        db.commit = AsyncMock()
+        existing = _make_misconception(description="wrong sign")
+        existing.resolved = False
+        found_result = MagicMock()
+        found_result.scalar_one_or_none.return_value = existing
+        db.execute = AsyncMock(return_value=found_result)
+
+        m = await log_misconception(db, USER_ID, CONCEPT_ID, "wrong sign")
+
+        # Should update existing row, NOT add a new one
+        db.add.assert_not_called()
+        assert m is existing
+        assert m.confidence == 1.0
 
 
 # ── get_active_misconceptions ─────────────────────────────────────────────────
@@ -406,24 +431,31 @@ class TestGetActiveMisconceptions:
 
     @pytest.mark.asyncio
     async def test_resolved_misconceptions_excluded(self):
-        """The DB query filters out resolved misconceptions (tested via query construction)."""
-        # This test confirms that the query is issued (execute called once)
+        """A resolved misconception is filtered out even if the mock returns it.
+
+        get_active_misconceptions applies a Python-level resolved guard in
+        addition to the SQL WHERE clause, so this verifies the belt-and-suspenders
+        filter directly.
+        """
         db = AsyncMock()
+        resolved_m = _make_misconception(recorded_at=NOW)
+        resolved_m.resolved = True  # mark as resolved
         result = MagicMock()
-        result.scalars.return_value.all.return_value = []
+        result.scalars.return_value.all.return_value = [resolved_m]
         db.execute = AsyncMock(return_value=result)
 
-        await get_active_misconceptions(db, USER_ID)
+        entries = await get_active_misconceptions(db, USER_ID)
 
-        db.execute.assert_awaited_once()
+        # Python-level guard must exclude the resolved misconception
+        assert entries == []
 
 
 # ── resolve_misconception ─────────────────────────────────────────────────────
 
 class TestResolveMisconception:
     @pytest.mark.asyncio
-    async def test_sets_resolved_true_and_commits(self):
-        """Marks the misconception resolved and commits."""
+    async def test_sets_resolved_true_without_commit(self):
+        """Marks the misconception resolved; does NOT commit (caller's responsibility)."""
         db = AsyncMock()
         db.commit = AsyncMock()
         misc_id = uuid4()
@@ -437,7 +469,7 @@ class TestResolveMisconception:
 
         assert ok is True
         assert m.resolved is True
-        db.commit.assert_awaited_once()
+        db.commit.assert_not_awaited()
 
     @pytest.mark.asyncio
     async def test_returns_false_when_not_found(self):
@@ -486,7 +518,11 @@ class TestGetDueReviewPrompt:
 
     @pytest.mark.asyncio
     async def test_respects_limit_parameter(self):
-        """The prompt mentions at most `limit` concepts."""
+        """The prompt mentions at most `limit` concepts.
+
+        The mock returns all 5 rows (ignoring SQL LIMIT), so this test verifies
+        the Python-level [:limit] slice in get_due_review_prompt.
+        """
         db = AsyncMock()
         rows = [
             _make_mastery_row(concept_id=uuid4(), next_review_at=NOW - timedelta(days=i + 1))
@@ -502,6 +538,6 @@ class TestGetDueReviewPrompt:
         prompt = await get_due_review_prompt(db, USER_ID, limit=2)
 
         assert prompt is not None
-        # Only 2 concepts should appear (concept names start with "Concept")
+        # Python [:2] slice means exactly 2 concept names appear in the prompt
         mentioned = [f"Concept {i}" in prompt for i in range(5)]
-        assert sum(mentioned) <= 2
+        assert sum(mentioned) == 2
