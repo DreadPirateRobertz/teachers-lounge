@@ -7,11 +7,7 @@
 
 'use client'
 
-import React, {
-  forwardRef,
-  useImperativeHandle,
-  type ReactNode,
-} from 'react'
+import React, { forwardRef, useImperativeHandle, type ReactNode } from 'react'
 import { useParticleBurst, type BurstOrigin } from './useParticleBurst'
 
 /** Imperative handle exposed by ParticleBurst via forwardRef. */
@@ -43,57 +39,58 @@ export interface ParticleBurstProps {
  * burstRef.current?.triggerCorrect({ x: 100, y: 200 })
  * ```
  */
-const ParticleBurst = forwardRef<ParticleBurstHandle, ParticleBurstProps>(
-  function ParticleBurst({ children }, ref) {
-    const { particles, trigger } = useParticleBurst()
+const ParticleBurst = forwardRef<ParticleBurstHandle, ParticleBurstProps>(function ParticleBurst(
+  { children },
+  ref,
+) {
+  const { particles, trigger } = useParticleBurst()
 
-    useImperativeHandle(ref, () => ({
-      triggerCorrect(origin: BurstOrigin) {
-        trigger('correct', origin)
-      },
-      triggerWrong(origin: BurstOrigin) {
-        trigger('wrong', origin)
-      },
-    }))
+  useImperativeHandle(ref, () => ({
+    triggerCorrect(origin: BurstOrigin) {
+      trigger('correct', origin)
+    },
+    triggerWrong(origin: BurstOrigin) {
+      trigger('wrong', origin)
+    },
+  }))
 
-    return (
-      <div style={{ position: 'relative', width: '100%', height: '100%' }}>
-        {children}
-        {/* Particle overlay — pointer-events: none so clicks pass through */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            inset: 0,
-            pointerEvents: 'none',
-            overflow: 'hidden',
-          }}
-        >
-          {particles.map((p) => {
-            const opacity = p.life / p.maxLife
-            return (
-              <div
-                key={p.id}
-                style={{
-                  position: 'absolute',
-                  left: p.x,
-                  top: p.y,
-                  width: p.size,
-                  height: p.size,
-                  borderRadius: '50%',
-                  backgroundColor: p.color,
-                  opacity,
-                  transform: 'translate(-50%, -50%)',
-                  boxShadow: `0 0 ${p.size * 2}px ${p.color}`,
-                }}
-              />
-            )
-          })}
-        </div>
+  return (
+    <div style={{ position: 'relative', width: '100%', height: '100%' }}>
+      {children}
+      {/* Particle overlay — pointer-events: none so clicks pass through */}
+      <div
+        aria-hidden="true"
+        style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          overflow: 'hidden',
+        }}
+      >
+        {particles.map((p) => {
+          const opacity = p.life / p.maxLife
+          return (
+            <div
+              key={p.id}
+              style={{
+                position: 'absolute',
+                left: p.x,
+                top: p.y,
+                width: p.size,
+                height: p.size,
+                borderRadius: '50%',
+                backgroundColor: p.color,
+                opacity,
+                transform: 'translate(-50%, -50%)',
+                boxShadow: `0 0 ${p.size * 2}px ${p.color}`,
+              }}
+            />
+          )
+        })}
       </div>
-    )
-  },
-)
+    </div>
+  )
+})
 
 ParticleBurst.displayName = 'ParticleBurst'
 

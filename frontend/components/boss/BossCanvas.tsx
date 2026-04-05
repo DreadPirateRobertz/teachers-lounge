@@ -119,8 +119,7 @@ export function BossCanvas({
     // Expose mutable refs so parent prop changes propagate into the loop
     // without recreating the effect.
     ;(bossGroup as unknown as { _stateRef: typeof stateRef })._stateRef = stateRef
-    ;(bossGroup as unknown as { _progressRef: typeof progressRef })._progressRef =
-      progressRef
+    ;(bossGroup as unknown as { _progressRef: typeof progressRef })._progressRef = progressRef
 
     return () => {
       cancelAnimationFrame(frameId)

@@ -88,15 +88,11 @@ const BOSS_NAMES: Record<BossId, string> = {
 
 describe('BossCharacter', () => {
   it('renders without throwing for the_atom', () => {
-    expect(() =>
-      render(<BossCharacter bossId="the_atom" hp={100} maxHp={100} />),
-    ).not.toThrow()
+    expect(() => render(<BossCharacter bossId="the_atom" hp={100} maxHp={100} />)).not.toThrow()
   })
 
   it.each(ALL_BOSS_IDS)('renders without throwing for %s', (bossId) => {
-    expect(() =>
-      render(<BossCharacter bossId={bossId} hp={75} maxHp={100} />),
-    ).not.toThrow()
+    expect(() => render(<BossCharacter bossId={bossId} hp={75} maxHp={100} />)).not.toThrow()
   })
 
   it.each(ALL_BOSS_IDS)('shows the correct boss name for %s', (bossId) => {

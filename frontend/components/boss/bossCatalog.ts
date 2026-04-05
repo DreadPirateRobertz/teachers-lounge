@@ -16,7 +16,7 @@ export const bossCatalog: BossConfig[] = [
     tier: 1,
     topic: 'general_chemistry',
     taunt: 'Your electrons are all over the place!',
-    color: '#00aaff',       // neon-blue
+    color: '#00aaff', // neon-blue
     accentColor: '#00ff88', // neon-green
     scale: 1.0,
     geometryType: 'atom',
@@ -27,7 +27,7 @@ export const bossCatalog: BossConfig[] = [
     tier: 2,
     topic: 'molecular_bonding',
     taunt: 'Weak bonds break — just like that answer!',
-    color: '#00ff88',       // neon-green
+    color: '#00ff88', // neon-green
     accentColor: '#00aaff', // neon-blue
     scale: 1.1,
     geometryType: 'dumbbell',
@@ -38,7 +38,7 @@ export const bossCatalog: BossConfig[] = [
     tier: 3,
     topic: 'nomenclature',
     taunt: 'You dare mislabel compounds in MY presence?!',
-    color: '#ffdc00',       // neon-gold
+    color: '#ffdc00', // neon-gold
     accentColor: '#ff00aa', // neon-pink
     scale: 1.0,
     geometryType: 'grid',
@@ -49,7 +49,7 @@ export const bossCatalog: BossConfig[] = [
     tier: 4,
     topic: 'stereochemistry',
     taunt: 'Mirror, mirror — and your knowledge is shattered!',
-    color: '#ff00aa',       // neon-pink
+    color: '#ff00aa', // neon-pink
     accentColor: '#ffdc00', // neon-gold
     scale: 1.2,
     geometryType: 'tetrahedron',
@@ -60,7 +60,7 @@ export const bossCatalog: BossConfig[] = [
     tier: 5,
     topic: 'organic_reactions',
     taunt: 'Your reaction mechanism is a catastrophic failure!',
-    color: '#ff4400',       // hot orange
+    color: '#ff4400', // hot orange
     accentColor: '#ff00aa', // neon-pink
     scale: 1.3,
     geometryType: 'flask',

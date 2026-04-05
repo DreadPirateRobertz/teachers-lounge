@@ -7,12 +7,7 @@
 
 'use client'
 
-import React, {
-  forwardRef,
-  useImperativeHandle,
-  useRef,
-  type ReactNode,
-} from 'react'
+import React, { forwardRef, useImperativeHandle, useRef, type ReactNode } from 'react'
 import ParticleBurst, { type ParticleBurstHandle } from './ParticleBurst'
 import { useScreenShake } from './useScreenShake'
 import { useMoleculeMorph } from './useMoleculeMorph'
@@ -84,58 +79,59 @@ export interface BattleEffectsProps {
  * effectsRef.current?.triggerMorph()
  * ```
  */
-const BattleEffects = forwardRef<BattleEffectsHandle, BattleEffectsProps>(
-  function BattleEffects({ comboCount, children }, ref) {
-    const burstRef = useRef<ParticleBurstHandle>(null)
-    const { shakeStyle, triggerShake } = useScreenShake()
-    const { triggerMorph } = useMoleculeMorph()
-    const { triggerDissolve } = useDeathDissolution()
+const BattleEffects = forwardRef<BattleEffectsHandle, BattleEffectsProps>(function BattleEffects(
+  { comboCount, children },
+  ref,
+) {
+  const burstRef = useRef<ParticleBurstHandle>(null)
+  const { shakeStyle, triggerShake } = useScreenShake()
+  const { triggerMorph } = useMoleculeMorph()
+  const { triggerDissolve } = useDeathDissolution()
 
-    useImperativeHandle(ref, () => ({
-      triggerCorrect(origin: BurstOrigin) {
-        burstRef.current?.triggerCorrect(origin)
-      },
-      triggerWrong(origin: BurstOrigin) {
-        burstRef.current?.triggerWrong(origin)
-      },
-      triggerCrit() {
-        triggerShake(1.0)
-      },
-      triggerMorph() {
-        triggerMorph()
-      },
-      triggerDissolve() {
-        triggerDissolve()
-      },
-    }))
+  useImperativeHandle(ref, () => ({
+    triggerCorrect(origin: BurstOrigin) {
+      burstRef.current?.triggerCorrect(origin)
+    },
+    triggerWrong(origin: BurstOrigin) {
+      burstRef.current?.triggerWrong(origin)
+    },
+    triggerCrit() {
+      triggerShake(1.0)
+    },
+    triggerMorph() {
+      triggerMorph()
+    },
+    triggerDissolve() {
+      triggerDissolve()
+    },
+  }))
 
-    return (
+  return (
+    <div
+      style={{
+        position: 'relative',
+        width: '100%',
+        height: '100%',
+        transform: shakeStyle || undefined,
+      }}
+    >
+      {/* Combo streak badge — top-right overlay */}
       <div
         style={{
-          position: 'relative',
-          width: '100%',
-          height: '100%',
-          transform: shakeStyle || undefined,
+          position: 'absolute',
+          top: 12,
+          right: 12,
+          zIndex: 10,
         }}
       >
-        {/* Combo streak badge — top-right overlay */}
-        <div
-          style={{
-            position: 'absolute',
-            top: 12,
-            right: 12,
-            zIndex: 10,
-          }}
-        >
-          <ComboStreakBadge comboCount={comboCount} />
-        </div>
-
-        {/* Particle burst overlay wrapping the main content */}
-        <ParticleBurst ref={burstRef}>{children}</ParticleBurst>
+        <ComboStreakBadge comboCount={comboCount} />
       </div>
-    )
-  },
-)
+
+      {/* Particle burst overlay wrapping the main content */}
+      <ParticleBurst ref={burstRef}>{children}</ParticleBurst>
+    </div>
+  )
+})
 
 BattleEffects.displayName = 'BattleEffects'
 

@@ -43,8 +43,7 @@ export interface BossCharacterProps {
  */
 export const BossCharacter = forwardRef<BossCharacterHandle, BossCharacterProps>(
   function BossCharacter({ bossId, hp, maxHp, onAnimationComplete }, ref) {
-    const { state, progress, triggerAttack, triggerDamage, triggerDeath } =
-      useBossAnimation()
+    const { state, progress, triggerAttack, triggerDamage, triggerDeath } = useBossAnimation()
 
     const config = bossCatalog.find((b) => b.id === bossId)!
 

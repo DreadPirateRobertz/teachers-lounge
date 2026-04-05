@@ -21,13 +21,7 @@ const EXPECTED_NAMES: Record<BossId, string> = {
   the_reactor: 'THE REACTOR',
 }
 
-const VALID_GEOMETRY_TYPES: GeometryType[] = [
-  'atom',
-  'dumbbell',
-  'grid',
-  'tetrahedron',
-  'flask',
-]
+const VALID_GEOMETRY_TYPES: GeometryType[] = ['atom', 'dumbbell', 'grid', 'tetrahedron', 'flask']
 
 describe('bossCatalog', () => {
   it('contains exactly 5 bosses', () => {
@@ -52,47 +46,35 @@ describe('bossCatalog', () => {
     expect(tiers).toEqual([1, 2, 3, 4, 5])
   })
 
-  it.each(EXPECTED_IDS)(
-    'boss %s has all required fields',
-    (id) => {
-      const boss = bossCatalog.find((b) => b.id === id) as BossConfig
-      expect(boss).toBeDefined()
-      expect(typeof boss.id).toBe('string')
-      expect(typeof boss.name).toBe('string')
-      expect(typeof boss.tier).toBe('number')
-      expect(typeof boss.topic).toBe('string')
-      expect(typeof boss.taunt).toBe('string')
-      expect(typeof boss.color).toBe('string')
-      expect(typeof boss.accentColor).toBe('string')
-      expect(typeof boss.scale).toBe('number')
-      expect(typeof boss.geometryType).toBe('string')
-    },
-  )
+  it.each(EXPECTED_IDS)('boss %s has all required fields', (id) => {
+    const boss = bossCatalog.find((b) => b.id === id) as BossConfig
+    expect(boss).toBeDefined()
+    expect(typeof boss.id).toBe('string')
+    expect(typeof boss.name).toBe('string')
+    expect(typeof boss.tier).toBe('number')
+    expect(typeof boss.topic).toBe('string')
+    expect(typeof boss.taunt).toBe('string')
+    expect(typeof boss.color).toBe('string')
+    expect(typeof boss.accentColor).toBe('string')
+    expect(typeof boss.scale).toBe('number')
+    expect(typeof boss.geometryType).toBe('string')
+  })
 
-  it.each(EXPECTED_IDS)(
-    'boss %s name matches expected display name',
-    (id) => {
-      const boss = bossCatalog.find((b) => b.id === id) as BossConfig
-      expect(boss.name).toBe(EXPECTED_NAMES[id])
-    },
-  )
+  it.each(EXPECTED_IDS)('boss %s name matches expected display name', (id) => {
+    const boss = bossCatalog.find((b) => b.id === id) as BossConfig
+    expect(boss.name).toBe(EXPECTED_NAMES[id])
+  })
 
-  it.each(EXPECTED_IDS)(
-    'boss %s tier is between 1 and 5',
-    (id) => {
-      const boss = bossCatalog.find((b) => b.id === id) as BossConfig
-      expect(boss.tier).toBeGreaterThanOrEqual(1)
-      expect(boss.tier).toBeLessThanOrEqual(5)
-    },
-  )
+  it.each(EXPECTED_IDS)('boss %s tier is between 1 and 5', (id) => {
+    const boss = bossCatalog.find((b) => b.id === id) as BossConfig
+    expect(boss.tier).toBeGreaterThanOrEqual(1)
+    expect(boss.tier).toBeLessThanOrEqual(5)
+  })
 
-  it.each(EXPECTED_IDS)(
-    'boss %s has a valid geometryType',
-    (id) => {
-      const boss = bossCatalog.find((b) => b.id === id) as BossConfig
-      expect(VALID_GEOMETRY_TYPES).toContain(boss.geometryType)
-    },
-  )
+  it.each(EXPECTED_IDS)('boss %s has a valid geometryType', (id) => {
+    const boss = bossCatalog.find((b) => b.id === id) as BossConfig
+    expect(VALID_GEOMETRY_TYPES).toContain(boss.geometryType)
+  })
 
   it('all geometry types are distinct', () => {
     const geoTypes = bossCatalog.map((b) => b.geometryType)

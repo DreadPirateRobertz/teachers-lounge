@@ -29,8 +29,4 @@ export { default as ComboStreakBadge } from './ComboStreakBadge'
 export type { ComboStreakBadgeProps } from './ComboStreakBadge'
 
 export { default as BattleEffects } from './BattleEffects'
-export type {
-  BattleEffectsHandle,
-  BattleEffectsProps,
-  BurstOrigin,
-} from './BattleEffects'
+export type { BattleEffectsHandle, BattleEffectsProps, BurstOrigin } from './BattleEffects'
