@@ -59,7 +59,42 @@ func (s *Store) ListUnread(ctx context.Context, userID string) ([]model.Notifica
 	return out, rows.Err()
 }
 
-// Migrate creates the notifications table if it does not exist.
+// SavePushToken upserts a device push token for a user. If the (user_id, token)
+// pair already exists, only the platform and updated_at fields are refreshed.
+func (s *Store) SavePushToken(ctx context.Context, userID, token, platform string) error {
+	const q = `
+		INSERT INTO push_tokens (user_id, token, platform, updated_at)
+		VALUES ($1, $2, $3, NOW())
+		ON CONFLICT (user_id, token) DO UPDATE
+		SET platform = EXCLUDED.platform, updated_at = NOW()`
+	if _, err := s.db.Exec(ctx, q, userID, token, platform); err != nil {
+		return fmt.Errorf("store: save push token: %w", err)
+	}
+	return nil
+}
+
+// GetPushTokens returns all FCM device tokens registered for a user.
+// Returns an empty (non-nil) slice when the user has no tokens.
+func (s *Store) GetPushTokens(ctx context.Context, userID string) ([]string, error) {
+	const q = `SELECT token FROM push_tokens WHERE user_id = $1`
+	rows, err := s.db.Query(ctx, q, userID)
+	if err != nil {
+		return nil, fmt.Errorf("store: get push tokens: %w", err)
+	}
+	defer rows.Close()
+
+	tokens := []string{}
+	for rows.Next() {
+		var t string
+		if err := rows.Scan(&t); err != nil {
+			return nil, fmt.Errorf("store: scan push token: %w", err)
+		}
+		tokens = append(tokens, t)
+	}
+	return tokens, rows.Err()
+}
+
+// Migrate creates the notifications and push_tokens tables if they do not exist.
 // Called once on startup before the server accepts traffic.
 func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 	const ddl = `
@@ -73,7 +108,15 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 		);
 		CREATE INDEX IF NOT EXISTS notifications_user_unread
 			ON notifications (user_id, read)
-			WHERE read = false;`
+			WHERE read = false;
+
+		CREATE TABLE IF NOT EXISTS push_tokens (
+			user_id    TEXT        NOT NULL,
+			token      TEXT        NOT NULL,
+			platform   TEXT        NOT NULL DEFAULT 'web',
+			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+			PRIMARY KEY (user_id, token)
+		);`
 
 	if _, err := db.Exec(ctx, ddl); err != nil {
 		return fmt.Errorf("store: migrate: %w", err)
