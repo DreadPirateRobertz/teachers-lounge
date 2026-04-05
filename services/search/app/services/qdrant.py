@@ -20,6 +20,18 @@ from app.models import ChunkResult, DiagramResult
 logger = logging.getLogger(__name__)
 _tracer = trace.get_tracer("search-service.qdrant")
 
+
+def _log_safe(val: object) -> str:
+    """Sanitize a value for log output to prevent log injection.
+
+    Args:
+        val: Any value to sanitize.
+
+    Returns:
+        String with newlines escaped.
+    """
+    return str(val).replace("\n", "\\n").replace("\r", "\\r")
+
 _client: AsyncQdrantClient | None = None
 
 
@@ -134,7 +146,7 @@ async def dense_search(
         )
 
     logger.info(
-        "dense_search course_id=%s limit=%d → %d results", course_id, limit, len(results)
+        "dense_search course_id=%s limit=%d → %d results", _log_safe(course_id), limit, len(results)
     )
     return results
 
@@ -246,7 +258,7 @@ async def sparse_search(
 
     logger.info(
         "sparse_search course_id=%s terms=%d limit=%d → %d results",
-        course_id,
+        _log_safe(course_id),
         len(indices),
         limit,
         len(results),
@@ -308,5 +320,5 @@ async def diagram_search(
             )
         )
 
-    logger.info("diagram_search course_id=%s limit=%d → %d results", course_id, limit, len(results))
+    logger.info("diagram_search course_id=%s limit=%d → %d results", _log_safe(course_id), limit, len(results))
     return results

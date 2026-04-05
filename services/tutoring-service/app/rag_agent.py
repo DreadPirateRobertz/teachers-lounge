@@ -39,6 +39,18 @@ from .search_client import SearchResult, fetch_curriculum_chunks
 logger = logging.getLogger(__name__)
 _tracer = trace.get_tracer("tutoring-service.rag_agent")
 
+
+def _log_safe(val: object) -> str:
+    """Sanitize a value for log output to prevent log injection.
+
+    Args:
+        val: Any value to sanitize.
+
+    Returns:
+        String with newline characters escaped.
+    """
+    return str(val).replace("\n", "\\n").replace("\r", "\\r")
+
 PROFESSOR_NOVA_SYSTEM_PROMPT = """\
 You are Professor Nova, the AI tutor for TeachersLounge — a gamified learning \
 platform. You are brilliant, patient, encouraging, and a little bit nerdy. You \
@@ -104,7 +116,7 @@ async def build_rag_context(
                     if gaps:
                         logger.info(
                             "prereq_gaps student_id=%s target_concept=%s gaps=%d",
-                            student_id, target.name, len(gaps),
+                            _log_safe(student_id), _log_safe(target.name), len(gaps),
                         )
         except Exception:
             # Non-fatal: concept graph is best-effort; skip rather than break chat.
@@ -123,7 +135,7 @@ async def build_rag_context(
         span.set_attribute("gap_count", len(gaps))
         logger.info(
             "rag_context student_id=%s course_id=%s chunks=%d gaps=%d",
-            student_id, course_id, len(chunks), len(gaps),
+            _log_safe(student_id), _log_safe(course_id), len(chunks), len(gaps),
         )
 
         return system_prompt, chunks

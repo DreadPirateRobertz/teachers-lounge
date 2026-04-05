@@ -17,6 +17,19 @@ from .config import settings
 
 log = logging.getLogger(__name__)
 
+
+def _log_safe(val: object) -> str:
+    """Sanitize a value for log output to prevent log injection.
+
+    Args:
+        val: Any value to sanitize.
+
+    Returns:
+        String with newlines escaped.
+    """
+    return str(val).replace("\n", "\\n").replace("\r", "\\r")
+
+
 # Injected at startup via init_cache() — None if Redis is unavailable.
 _redis: aioredis.Redis | None = None
 
@@ -80,7 +93,7 @@ async def get_cached_history(session_id: UUID) -> list[dict[str, Any]] | None:
             return None
         return json.loads(raw)
     except Exception as exc:  # noqa: BLE001
-        log.debug("cache get_history miss/error for %s: %s", session_id, exc)
+        log.debug("cache get_history miss/error for %s: %s", _log_safe(session_id), exc)
         return None
 
 
@@ -113,7 +126,7 @@ async def set_cached_history(
 
         await pipe.execute()
     except Exception as exc:  # noqa: BLE001
-        log.debug("cache set_history error for %s: %s", session_id, exc)
+        log.debug("cache set_history error for %s: %s", _log_safe(session_id), exc)
 
 
 async def invalidate_session_history(session_id: UUID) -> None:
@@ -127,4 +140,4 @@ async def invalidate_session_history(session_id: UUID) -> None:
     try:
         await _redis.delete(_history_key(session_id))
     except Exception as exc:  # noqa: BLE001
-        log.debug("cache invalidate error for %s: %s", session_id, exc)
+        log.debug("cache invalidate error for %s: %s", _log_safe(session_id), exc)
