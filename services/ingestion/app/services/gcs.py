@@ -93,3 +93,41 @@ async def upload_raw_file(
         safe_filename,
         content_type,
     )
+
+
+def _upload_figure_sync(image_path: Path, gcs_blob_name: str) -> str:
+    """Synchronous figure upload to GCS. Called via run_in_executor.
+
+    Args:
+        image_path: Local path to the extracted figure image file.
+        gcs_blob_name: Destination blob path within ``settings.gcs_figures_bucket``.
+
+    Returns:
+        The full ``gs://`` URI of the uploaded figure.
+    """
+    from google.cloud import storage  # lazy
+
+    client = storage.Client(project=settings.gcp_project)
+    bucket = client.bucket(settings.gcs_figures_bucket)
+    blob = bucket.blob(gcs_blob_name)
+    blob.upload_from_filename(str(image_path), content_type="image/png")
+    gcs_uri = f"gs://{settings.gcs_figures_bucket}/{gcs_blob_name}"
+    logger.info("uploaded figure %s → %s", image_path.name, gcs_uri)
+    return gcs_uri
+
+
+async def upload_figure(image_path: Path, gcs_blob_name: str) -> str:
+    """Upload an extracted figure image to GCS without blocking the event loop.
+
+    Runs the synchronous upload in the default thread executor so the calling
+    async context is not blocked during the network I/O.
+
+    Args:
+        image_path: Local path to the extracted figure image file.
+        gcs_blob_name: Destination blob path within ``settings.gcs_figures_bucket``.
+
+    Returns:
+        The full ``gs://`` URI of the uploaded figure.
+    """
+    loop = asyncio.get_running_loop()
+    return await loop.run_in_executor(None, _upload_figure_sync, image_path, gcs_blob_name)

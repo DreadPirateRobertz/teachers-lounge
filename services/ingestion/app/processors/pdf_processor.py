@@ -9,7 +9,7 @@ from uuid import UUID, uuid4
 # This keeps test collection fast for modules that only need routing logic.
 from app.config import settings
 from app.models import IngestJobMessage, ProcessingStatus
-from app.services import clip_embedder, db, embeddings, qdrant
+from app.services import clip_embedder, db, embeddings, gcs, qdrant
 
 logger = logging.getLogger(__name__)
 
@@ -457,11 +457,18 @@ async def _process_figures(
                 continue
 
             diagram_id = uuid4()
-            # GCS path: figures are stored alongside the raw upload
-            gcs_path = (
-                f"gs://{settings.gcs_figures_bucket}/"
-                f"{course_id}/{material_id}/figures/{diagram_id}.png"
-            )
+            gcs_blob_name = f"{course_id}/{material_id}/figures/{diagram_id}.png"
+
+            # Upload extracted figure to GCS so the frontend can serve it.
+            # Degrade gracefully — a failed upload is logged and the figure skipped
+            # rather than aborting the entire ingestion job.
+            try:
+                gcs_path = await gcs.upload_figure(image_path, gcs_blob_name)
+            except Exception as exc:
+                logger.warning(
+                    "job_id=%s GCS figure upload failed for %s: %s", job_id, diagram_id, exc
+                )
+                continue
 
             diagram_ids.append(diagram_id)
             vectors.append(vector)

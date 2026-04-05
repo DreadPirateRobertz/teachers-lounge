@@ -9,6 +9,7 @@ from app.processors.pdf_processor import (
     _build_hierarchical_chunks,
     _flush_segments,
     _make_chunk,
+    _process_figures,
     process_pdf,
 )
 
@@ -359,3 +360,176 @@ class TestDbInsertChunks:
         from app.services.db import insert_chunks
         # Should return early without connecting
         await insert_chunks([])
+
+
+class TestProcessFigures:
+    """Tests for _process_figures — figure extraction, CLIP embedding, GCS upload."""
+
+    def _make_image_element(self, image_path: str, text: str = ""):
+        """Build a mock unstructured Image element with metadata.image_path set."""
+        from unittest.mock import MagicMock
+        from unstructured.documents.elements import Image
+
+        meta = MagicMock()
+        meta.image_path = image_path
+        meta.page_number = 1
+        el = Image(text=text)
+        el.metadata = meta
+        return el
+
+    @pytest.mark.asyncio
+    @patch("app.processors.pdf_processor.qdrant")
+    @patch("app.processors.pdf_processor.gcs")
+    @patch("app.processors.pdf_processor.clip_embedder")
+    async def test_figures_uploaded_to_gcs_and_upserted(
+        self, mock_clip, mock_gcs, mock_qdrant, tmp_path
+    ):
+        """Figure with valid image_path → CLIP embed → GCS upload → Qdrant upsert."""
+        img = tmp_path / "figure.png"
+        img.write_bytes(b"\x89PNG\r\n")  # minimal PNG header
+
+        mock_clip.embed_image = AsyncMock(return_value=[0.1] * 768)
+        mock_gcs.upload_figure = AsyncMock(return_value="gs://tvtutor-raw-uploads/c/m/figures/d.png")
+        mock_qdrant.upsert_diagrams = AsyncMock()
+
+        el = self._make_image_element(str(img))
+        count = await _process_figures(
+            elements=[el],
+            material_id=uuid.uuid4(),
+            course_id=uuid.uuid4(),
+            job_id=uuid.uuid4(),
+            local_pdf_path=tmp_path / "test.pdf",
+        )
+
+        assert count == 1
+        mock_gcs.upload_figure.assert_awaited_once()
+        mock_qdrant.upsert_diagrams.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    @patch("app.processors.pdf_processor.qdrant")
+    @patch("app.processors.pdf_processor.gcs")
+    @patch("app.processors.pdf_processor.clip_embedder")
+    async def test_clip_failure_skips_figure_gracefully(
+        self, mock_clip, mock_gcs, mock_qdrant, tmp_path
+    ):
+        """CLIP embed failure → figure skipped, pipeline does not abort."""
+        img = tmp_path / "figure.png"
+        img.write_bytes(b"\x89PNG")
+
+        mock_clip.embed_image = AsyncMock(side_effect=RuntimeError("CLIP unavailable"))
+        mock_gcs.upload_figure = AsyncMock()
+        mock_qdrant.upsert_diagrams = AsyncMock()
+
+        el = self._make_image_element(str(img))
+        count = await _process_figures(
+            elements=[el],
+            material_id=uuid.uuid4(),
+            course_id=uuid.uuid4(),
+            job_id=uuid.uuid4(),
+            local_pdf_path=tmp_path / "test.pdf",
+        )
+
+        assert count == 0
+        mock_gcs.upload_figure.assert_not_awaited()
+        mock_qdrant.upsert_diagrams.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @patch("app.processors.pdf_processor.qdrant")
+    @patch("app.processors.pdf_processor.gcs")
+    @patch("app.processors.pdf_processor.clip_embedder")
+    async def test_gcs_upload_failure_skips_figure_gracefully(
+        self, mock_clip, mock_gcs, mock_qdrant, tmp_path
+    ):
+        """GCS upload failure → figure skipped, Qdrant upsert not called."""
+        img = tmp_path / "figure.png"
+        img.write_bytes(b"\x89PNG")
+
+        mock_clip.embed_image = AsyncMock(return_value=[0.1] * 768)
+        mock_gcs.upload_figure = AsyncMock(side_effect=RuntimeError("GCS unavailable"))
+        mock_qdrant.upsert_diagrams = AsyncMock()
+
+        el = self._make_image_element(str(img))
+        count = await _process_figures(
+            elements=[el],
+            material_id=uuid.uuid4(),
+            course_id=uuid.uuid4(),
+            job_id=uuid.uuid4(),
+            local_pdf_path=tmp_path / "test.pdf",
+        )
+
+        assert count == 0
+        mock_qdrant.upsert_diagrams.assert_not_awaited()
+
+    @pytest.mark.asyncio
+    @patch("app.processors.pdf_processor.qdrant")
+    @patch("app.processors.pdf_processor.gcs")
+    async def test_no_image_elements_returns_zero(self, mock_gcs, mock_qdrant):
+        """Elements with no Image types → count=0, no GCS or Qdrant calls."""
+        from unstructured.documents.elements import NarrativeText
+
+        el = NarrativeText(text="Plain text, no figures here.")
+        count = await _process_figures(
+            elements=[el],
+            material_id=uuid.uuid4(),
+            course_id=uuid.uuid4(),
+            job_id=uuid.uuid4(),
+            local_pdf_path=None,
+        )
+
+        assert count == 0
+        mock_gcs.upload_figure.assert_not_called()
+        mock_qdrant.upsert_diagrams.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("app.processors.pdf_processor.qdrant")
+    @patch("app.processors.pdf_processor.gcs")
+    @patch("app.processors.pdf_processor.clip_embedder")
+    async def test_missing_image_path_skips_figure(
+        self, mock_clip, mock_gcs, mock_qdrant, tmp_path
+    ):
+        """Image element with no metadata.image_path → skipped without error."""
+        from unstructured.documents.elements import Image
+
+        el = Image(text="")
+        meta = MagicMock()
+        meta.image_path = None
+        el.metadata = meta
+
+        count = await _process_figures(
+            elements=[el],
+            material_id=uuid.uuid4(),
+            course_id=uuid.uuid4(),
+            job_id=uuid.uuid4(),
+            local_pdf_path=tmp_path / "test.pdf",
+        )
+
+        assert count == 0
+        mock_gcs.upload_figure.assert_not_called()
+
+    @pytest.mark.asyncio
+    @patch("app.processors.pdf_processor.qdrant")
+    @patch("app.processors.pdf_processor.gcs")
+    @patch("app.processors.pdf_processor.clip_embedder")
+    async def test_gcs_path_stored_in_qdrant_payload(
+        self, mock_clip, mock_gcs, mock_qdrant, tmp_path
+    ):
+        """The gcs_path returned by upload_figure is forwarded to the Qdrant payload."""
+        img = tmp_path / "figure.png"
+        img.write_bytes(b"\x89PNG")
+        expected_gcs = "gs://tvtutor-raw-uploads/course/mat/figures/abc.png"
+
+        mock_clip.embed_image = AsyncMock(return_value=[0.1] * 768)
+        mock_gcs.upload_figure = AsyncMock(return_value=expected_gcs)
+        mock_qdrant.upsert_diagrams = AsyncMock()
+
+        el = self._make_image_element(str(img))
+        await _process_figures(
+            elements=[el],
+            material_id=uuid.uuid4(),
+            course_id=uuid.uuid4(),
+            job_id=uuid.uuid4(),
+            local_pdf_path=tmp_path / "test.pdf",
+        )
+
+        _, payloads = mock_qdrant.upsert_diagrams.call_args[0][1], mock_qdrant.upsert_diagrams.call_args[0][2]
+        assert payloads[0]["gcs_path"] == expected_gcs
