@@ -34,7 +34,9 @@ describe('GET /api/flashcards/due', () => {
 
     expect(res.status).toBe(200)
     expect(data).toEqual(dueCards)
-    expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe(`${GAMING_URL}/gaming/flashcards/due`)
+    expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe(
+      `${GAMING_URL}/gaming/flashcards/due`,
+    )
   })
 
   it('forwards Authorization header', async () => {
@@ -42,10 +44,7 @@ describe('GET /api/flashcards/due', () => {
     global.fetch = jest.fn().mockImplementation((_url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>
       return Promise.resolve(
-        new Response(JSON.stringify([]), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
       )
     })
 
@@ -64,10 +63,7 @@ describe('GET /api/flashcards/due', () => {
     global.fetch = jest.fn().mockImplementation((_url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>
       return Promise.resolve(
-        new Response(JSON.stringify([]), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
       )
     })
 
@@ -86,10 +82,7 @@ describe('GET /api/flashcards/due', () => {
     global.fetch = jest.fn().mockImplementation((_url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>
       return Promise.resolve(
-        new Response(JSON.stringify([]), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        }),
+        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
       )
     })
 
