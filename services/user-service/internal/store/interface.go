@@ -32,7 +32,11 @@ type Storer interface {
 	UpdateSubscriptionByUserID(ctx context.Context, userID uuid.UUID, p UpdateSubscriptionParams) error
 
 	WriteAuditLog(ctx context.Context, p AuditLogParams) error
+	QueryAuditLog(ctx context.Context, p QueryAuditLogParams) ([]*models.AuditEntry, error)
 	CreateExportJob(ctx context.Context, userID uuid.UUID) (uuid.UUID, error)
+	GetExportJob(ctx context.Context, jobID, userID uuid.UUID) (*models.ExportJob, error)
+	BuildUserExport(ctx context.Context, jobID, userID uuid.UUID) (*models.UserExport, error)
+	UpdateGuardianConsent(ctx context.Context, userID uuid.UUID, guardianEmail string) error
 
 	// Teacher profiles
 	CreateTeacherProfile(ctx context.Context, p CreateTeacherProfileParams) (*models.TeacherProfile, error)

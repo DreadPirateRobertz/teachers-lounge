@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"time"
 
@@ -10,6 +11,9 @@ import (
 
 	"github.com/google/uuid"
 )
+
+func marshalJSON(v any) ([]byte, error)   { return json.Marshal(v) }
+func unmarshalJSON(b []byte, v any) error { return json.Unmarshal(b, v) }
 
 // Store is the Postgres data layer for the User Service.
 type Store struct {
@@ -74,7 +78,7 @@ func (s *Store) CreateUser(ctx context.Context, p CreateUserParams) (*models.Use
 		INSERT INTO users (email, password_hash, display_name, avatar_emoji, account_type, date_of_birth, guardian_email)
 		VALUES ($1, $2, $3, $4, $5, $6, $7)
 		RETURNING id, email, password_hash, display_name, avatar_emoji, account_type,
-		          date_of_birth, guardian_email, guardian_consent_at, created_at, updated_at`
+		          is_admin, date_of_birth, guardian_email, guardian_consent_at, created_at, updated_at`
 
 	row := s.pool.QueryRow(ctx, q,
 		p.Email, p.PasswordHash, p.DisplayName, p.AvatarEmoji, p.AccountType,
@@ -86,7 +90,7 @@ func (s *Store) CreateUser(ctx context.Context, p CreateUserParams) (*models.Use
 func (s *Store) GetUserByEmail(ctx context.Context, email string) (*models.User, error) {
 	const q = `
 		SELECT id, email, password_hash, display_name, avatar_emoji, account_type,
-		       date_of_birth, guardian_email, guardian_consent_at, created_at, updated_at
+		       is_admin, date_of_birth, guardian_email, guardian_consent_at, created_at, updated_at
 		FROM users WHERE email = $1`
 	row := s.pool.QueryRow(ctx, q, email)
 	return scanUser(row)
@@ -95,7 +99,7 @@ func (s *Store) GetUserByEmail(ctx context.Context, email string) (*models.User,
 func (s *Store) GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error) {
 	const q = `
 		SELECT id, email, password_hash, display_name, avatar_emoji, account_type,
-		       date_of_birth, guardian_email, guardian_consent_at, created_at, updated_at
+		       is_admin, date_of_birth, guardian_email, guardian_consent_at, created_at, updated_at
 		FROM users WHERE id = $1`
 	row := s.pool.QueryRow(ctx, q, id)
 	return scanUser(row)
@@ -109,7 +113,7 @@ func (s *Store) UpdateUser(ctx context.Context, id uuid.UUID, p UpdateUserParams
 		    updated_at    = NOW()
 		WHERE id = $1
 		RETURNING id, email, password_hash, display_name, avatar_emoji, account_type,
-		          date_of_birth, guardian_email, guardian_consent_at, created_at, updated_at`
+		          is_admin, date_of_birth, guardian_email, guardian_consent_at, created_at, updated_at`
 	row := s.pool.QueryRow(ctx, q, id, p.DisplayName, p.AvatarEmoji)
 	return scanUser(row)
 }
@@ -511,4 +515,209 @@ func (s *Store) ListClassMaterials(ctx context.Context, classID uuid.UUID) ([]*m
 		assignments = append(assignments, a)
 	}
 	return assignments, rows.Err()
+}
+
+// ============================================================
+// AUDIT LOG — QUERY (admin)
+// ============================================================
+
+// QueryAuditLog returns audit entries filtered by the given params.
+// Limit is clamped to 500; default is 100.
+func (s *Store) QueryAuditLog(ctx context.Context, p QueryAuditLogParams) ([]*models.AuditEntry, error) {
+	limit := p.Limit
+	if limit <= 0 {
+		limit = 100
+	}
+	if limit > 500 {
+		limit = 500
+	}
+
+	const q = `
+		SELECT id, timestamp, accessor_id, student_id, action, data_accessed, purpose, ip_address
+		FROM audit_log
+		WHERE ($1::uuid IS NULL OR student_id = $1)
+		  AND ($2::timestamptz IS NULL OR timestamp >= $2)
+		  AND ($3::timestamptz IS NULL OR timestamp <= $3)
+		ORDER BY timestamp DESC
+		LIMIT $4 OFFSET $5`
+
+	rows, err := s.pool.Query(ctx, q, p.StudentID, p.From, p.To, limit, p.Offset)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var entries []*models.AuditEntry
+	for rows.Next() {
+		e := &models.AuditEntry{}
+		var ip *string
+		if err := rows.Scan(&e.ID, &e.Timestamp, &e.AccessorID, &e.StudentID,
+			&e.Action, &e.DataAccessed, &e.Purpose, &ip); err != nil {
+			return nil, err
+		}
+		if ip != nil {
+			e.IPAddress = *ip
+		}
+		entries = append(entries, e)
+	}
+	if entries == nil {
+		entries = []*models.AuditEntry{}
+	}
+	return entries, rows.Err()
+}
+
+// ============================================================
+// EXPORT JOBS — GET + BUILD
+// ============================================================
+
+// GetExportJob fetches an export job by ID, scoped to the owning user.
+func (s *Store) GetExportJob(ctx context.Context, jobID, userID uuid.UUID) (*models.ExportJob, error) {
+	const q = `
+		SELECT id, user_id, status, gcs_path, result_data, created_at, completed_at
+		FROM export_jobs WHERE id = $1 AND user_id = $2`
+	row := s.pool.QueryRow(ctx, q, jobID, userID)
+
+	job := &models.ExportJob{}
+	var resultJSON []byte
+	err := row.Scan(&job.ID, &job.UserID, &job.Status, &job.GCSPath,
+		&resultJSON, &job.CreatedAt, &job.CompletedAt)
+	if err != nil {
+		if err == ErrNotFound {
+			return nil, ErrNotFound
+		}
+		return nil, err
+	}
+	if resultJSON != nil {
+		job.ResultData = &models.UserExport{}
+		if err := unmarshalJSON(resultJSON, job.ResultData); err != nil {
+			return nil, fmt.Errorf("unmarshal result_data: %w", err)
+		}
+	}
+	return job, nil
+}
+
+// BuildUserExport collects all PII for a user and stores it in the export_jobs row.
+// It transitions the job from pending → processing → complete atomically.
+func (s *Store) BuildUserExport(ctx context.Context, jobID, userID uuid.UUID) (*models.UserExport, error) {
+	// Mark processing
+	_, err := s.pool.Exec(ctx,
+		`UPDATE export_jobs SET status = 'processing' WHERE id = $1 AND user_id = $2`,
+		jobID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("mark processing: %w", err)
+	}
+
+	export := &models.UserExport{ExportedAt: time.Now().UTC()}
+
+	// User
+	export.User, err = s.GetUserByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get user: %w", err)
+	}
+
+	// Learning profile
+	export.LearningProfile, _ = s.GetLearningProfile(ctx, userID)
+
+	// Subscription
+	export.Subscription, _ = s.GetSubscriptionByUserID(ctx, userID)
+
+	// Interactions (last 1000)
+	export.Interactions, err = s.listInteractionsForExport(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get interactions: %w", err)
+	}
+
+	// Quiz results
+	export.QuizResults, err = s.listQuizResultsForExport(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("get quiz results: %w", err)
+	}
+
+	// Serialise and store
+	resultBytes, err := marshalJSON(export)
+	if err != nil {
+		return nil, fmt.Errorf("marshal export: %w", err)
+	}
+
+	_, err = s.pool.Exec(ctx, `
+		UPDATE export_jobs
+		SET status = 'complete', result_data = $3, completed_at = NOW()
+		WHERE id = $1 AND user_id = $2`,
+		jobID, userID, resultBytes)
+	if err != nil {
+		return nil, fmt.Errorf("store result: %w", err)
+	}
+
+	return export, nil
+}
+
+func (s *Store) listInteractionsForExport(ctx context.Context, userID uuid.UUID) ([]models.InteractionExport, error) {
+	const q = `
+		SELECT session_id, role, content, created_at
+		FROM interactions WHERE user_id = $1
+		ORDER BY created_at DESC LIMIT 1000`
+	rows, err := s.pool.Query(ctx, q, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []models.InteractionExport
+	for rows.Next() {
+		var e models.InteractionExport
+		if err := rows.Scan(&e.SessionID, &e.Role, &e.Content, &e.CreatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	if out == nil {
+		out = []models.InteractionExport{}
+	}
+	return out, rows.Err()
+}
+
+func (s *Store) listQuizResultsForExport(ctx context.Context, userID uuid.UUID) ([]models.QuizResultExport, error) {
+	const q = `
+		SELECT question_id, correct, answer_given, xp_earned, answered_at
+		FROM quiz_results WHERE user_id = $1
+		ORDER BY answered_at DESC LIMIT 1000`
+	rows, err := s.pool.Query(ctx, q, userID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var out []models.QuizResultExport
+	for rows.Next() {
+		var e models.QuizResultExport
+		if err := rows.Scan(&e.QuestionID, &e.Correct, &e.AnswerGiven, &e.XPEarned, &e.AnsweredAt); err != nil {
+			return nil, err
+		}
+		out = append(out, e)
+	}
+	if out == nil {
+		out = []models.QuizResultExport{}
+	}
+	return out, rows.Err()
+}
+
+// ============================================================
+// CONSENT MANAGEMENT
+// ============================================================
+
+// UpdateGuardianConsent records guardian consent for a minor user.
+// guardianEmail must match the guardian_email stored on the account.
+func (s *Store) UpdateGuardianConsent(ctx context.Context, userID uuid.UUID, guardianEmail string) error {
+	result, err := s.pool.Exec(ctx, `
+		UPDATE users
+		SET guardian_consent_at = NOW(), updated_at = NOW()
+		WHERE id = $1 AND guardian_email = $2`,
+		userID, guardianEmail)
+	if err != nil {
+		return err
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }

@@ -31,14 +31,19 @@ type mockStore struct {
 	byID  map[uuid.UUID]*models.User
 	subs  map[uuid.UUID]*models.Subscription
 	toks  map[string]*models.AuthToken // keyed by token hash
+	// FERPA/GDPR test helpers
+	auditEntries   []*models.AuditEntry
+	lastAuditQuery *store.QueryAuditLogParams
+	exportJobs     map[uuid.UUID]*models.ExportJob
 }
 
 func newMockStore() *mockStore {
 	return &mockStore{
-		users: map[string]*models.User{},
-		byID:  map[uuid.UUID]*models.User{},
-		subs:  map[uuid.UUID]*models.Subscription{},
-		toks:  map[string]*models.AuthToken{},
+		users:      map[string]*models.User{},
+		byID:       map[uuid.UUID]*models.User{},
+		subs:       map[uuid.UUID]*models.Subscription{},
+		toks:       map[string]*models.AuthToken{},
+		exportJobs: map[uuid.UUID]*models.ExportJob{},
 	}
 }
 
@@ -287,6 +292,10 @@ func (m *mockCache) ReleaseRefreshLock(_ context.Context, key string) error {
 }
 
 func (m *mockCache) DeleteSession(_ context.Context, _ string) error { return nil }
+
+func (m *mockCache) IncrWithTTL(_ context.Context, _ string, _ time.Duration) (int64, error) {
+	return 1, nil
+}
 
 // ============================================================
 // HELPERS
