@@ -29,6 +29,7 @@ from .chat_simple import router as chat_simple_router
 from .concepts import router as concepts_router
 from .config import settings
 from .database import Base, engine
+from .logging_config import configure_logging
 from .metrics import metrics_app
 from .metrics_middleware import PrometheusMiddleware
 from .profile import router as profile_router
@@ -36,7 +37,7 @@ from .quiz import router as quiz_router
 from .reviews import router as reviews_router
 from .sessions import router as sessions_router
 
-logging.basicConfig(level=settings.log_level.upper())
+configure_logging(service_name="tutoring-service", log_level=settings.log_level)
 logger = logging.getLogger(__name__)
 
 # ── OpenTelemetry setup ───────────────────────────────────────────────────────

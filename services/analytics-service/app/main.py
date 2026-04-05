@@ -11,11 +11,12 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .config import settings
+from .logging_config import configure_logging
 from .metrics import metrics_app
 from .metrics_middleware import PrometheusMiddleware
 from .routes.student import router as student_router
 
-logging.basicConfig(level=settings.log_level.upper())
+configure_logging(service_name="analytics-service", log_level=settings.log_level)
 logger = logging.getLogger(__name__)
 
 app = FastAPI(

@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from app.logging_config import configure_logging
 from app.metrics import metrics_app
 from app.metrics_middleware import PrometheusMiddleware
 from app.routers import ingest
@@ -12,7 +13,7 @@ from app.services import qdrant as qdrant_svc
 from app.services.db import close_pool
 from app.services.pubsub import start_subscriber
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+configure_logging(service_name="ingestion", log_level="INFO")
 logger = logging.getLogger(__name__)
 
 
