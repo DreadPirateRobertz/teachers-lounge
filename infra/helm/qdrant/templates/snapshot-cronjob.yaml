@@ -1,0 +1,79 @@
+{{- if .Values.snapshots.enabled }}
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: {{ include "qdrant.fullname" . }}-snapshot
+  labels:
+    {{- include "qdrant.labels" . | nindent 4 }}
+spec:
+  schedule: {{ .Values.snapshots.schedule | quote }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 3600
+      template:
+        metadata:
+          labels:
+            {{- include "qdrant.selectorLabels" . | nindent 12 }}
+            role: snapshot
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: {{ .Values.snapshots.serviceAccountName }}
+          containers:
+            - name: snapshot
+              image: "{{ .Values.snapshots.image.repository }}:{{ .Values.snapshots.image.tag }}"
+              env:
+                - name: QDRANT_URL
+                  value: "http://{{ include "qdrant.fullname" . }}:{{ .Values.service.httpPort }}"
+                {{- if .Values.apiKey }}
+                - name: QDRANT_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: {{ .Values.apiKeySecretName }}
+                      key: {{ .Values.apiKeySecretKey }}
+                {{- end }}
+                - name: GCS_BUCKET
+                  value: {{ .Values.snapshots.gcsBucket | quote }}
+              command:
+                - /bin/sh
+                - -ec
+                - |
+                  set -euo pipefail
+                  DATE=$(date -u +%Y%m%d-%H%M%S)
+
+                  COLLECTIONS=$(curl -sf ${QDRANT_API_KEY:+-H "api-key: $QDRANT_API_KEY"} \
+                    "$QDRANT_URL/collections" | python3 -c "import sys,json; print(' '.join(c['name'] for c in json.load(sys.stdin)['result']['collections']))")
+
+                  for COLLECTION in $COLLECTIONS; do
+                    echo "Snapshotting collection: $COLLECTION"
+                    SNAP=$(curl -sf -X POST ${QDRANT_API_KEY:+-H "api-key: $QDRANT_API_KEY"} \
+                      "$QDRANT_URL/collections/$COLLECTION/snapshots" | python3 -c "import sys,json; print(json.load(sys.stdin)['result']['name'])")
+                    echo "Created snapshot: $SNAP"
+
+                    curl -sf ${QDRANT_API_KEY:+-H "api-key: $QDRANT_API_KEY"} \
+                      "$QDRANT_URL/collections/$COLLECTION/snapshots/$SNAP" \
+                      -o "/tmp/$SNAP"
+
+                    gcloud storage cp "/tmp/$SNAP" \
+                      "gs://$GCS_BUCKET/qdrant/$COLLECTION/$DATE/$SNAP"
+                    echo "Uploaded $SNAP → gs://$GCS_BUCKET/qdrant/$COLLECTION/$DATE/$SNAP"
+
+                    rm -f "/tmp/$SNAP"
+
+                    curl -sf -X DELETE ${QDRANT_API_KEY:+-H "api-key: $QDRANT_API_KEY"} \
+                      "$QDRANT_URL/collections/$COLLECTION/snapshots/$SNAP"
+                    echo "Cleaned up remote snapshot: $SNAP"
+                  done
+
+                  echo "All snapshots uploaded successfully"
+              resources:
+                requests:
+                  cpu: 100m
+                  memory: 256Mi
+                limits:
+                  cpu: 500m
+                  memory: 512Mi
+{{- end }}

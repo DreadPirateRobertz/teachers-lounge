@@ -1,0 +1,43 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "qdrant.fullname" . }}-config
+  labels:
+    {{- include "qdrant.labels" . | nindent 4 }}
+data:
+  config.yaml: |
+    storage:
+      storage_path: /qdrant/storage
+      snapshots_path: /qdrant/snapshots
+
+      performance:
+        max_search_threads: 0
+
+      optimizers:
+        default_segment_number: 2
+        max_segment_size_kb: 200000
+        indexing_threshold_kb: 20000
+
+      hnsw_index:
+        m: {{ .Values.hnsw.m }}
+        ef_construct: {{ .Values.hnsw.efConstruct }}
+        full_scan_threshold: {{ .Values.hnsw.fullScanThreshold }}
+        on_disk: {{ .Values.hnsw.onDisk }}
+
+      quantization:
+        scalar:
+          type: {{ .Values.quantization.scalar.type }}
+          quantile: {{ .Values.quantization.scalar.quantile }}
+          always_ram: {{ .Values.quantization.scalar.alwaysRam }}
+
+    service:
+      grpc_port: 6334
+      http_port: 6333
+      {{- if .Values.apiKey }}
+      api_key_enabled: true
+      {{- end }}
+
+    cluster:
+      enabled: {{ .Values.cluster.enabled }}
+      p2p:
+        port: 6335

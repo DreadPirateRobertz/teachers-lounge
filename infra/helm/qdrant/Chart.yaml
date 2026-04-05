@@ -1,0 +1,6 @@
+apiVersion: v2
+name: qdrant
+description: Qdrant vector database for TeachersLounge curriculum search
+type: application
+version: 0.1.0
+appVersion: "1.13"
