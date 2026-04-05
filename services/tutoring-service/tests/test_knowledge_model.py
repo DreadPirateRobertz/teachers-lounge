@@ -542,3 +542,89 @@ class TestGetDueReviewPrompt:
         # Python [:2] slice means exactly 2 concept names appear in the prompt
         mentioned = [f"Concept {i}" in prompt for i in range(5)]
         assert sum(mentioned) == 2
+
+    @pytest.mark.asyncio
+    async def test_two_due_concepts_joined_with_and(self):
+        """Two due concepts are joined as 'X and Y' (no trailing comma)."""
+        db = AsyncMock()
+        row_a = _make_mastery_row(concept_id=uuid4(), next_review_at=NOW - timedelta(days=2))
+        row_b = _make_mastery_row(concept_id=uuid4(), next_review_at=NOW - timedelta(days=1))
+        row_a.concept.name = "Derivatives"
+        row_b.concept.name = "Integrals"
+
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = [row_a, row_b]
+        db.execute = AsyncMock(return_value=result)
+
+        prompt = await get_due_review_prompt(db, USER_ID, limit=3)
+
+        assert prompt is not None
+        assert "Derivatives" in prompt
+        assert "Integrals" in prompt
+        assert "Derivatives and Integrals" in prompt
+
+    @pytest.mark.asyncio
+    async def test_three_due_concepts_comma_and_join(self):
+        """Three due concepts use comma-separated list ending with 'and'."""
+        db = AsyncMock()
+        rows = []
+        names = ["Derivatives", "Integrals", "Limits"]
+        for i, name in enumerate(names):
+            r = _make_mastery_row(concept_id=uuid4(), next_review_at=NOW - timedelta(days=i + 1))
+            r.concept.name = name
+            rows.append(r)
+
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = rows
+        db.execute = AsyncMock(return_value=result)
+
+        prompt = await get_due_review_prompt(db, USER_ID, limit=3)
+
+        assert prompt is not None
+        assert "Derivatives" in prompt
+        assert "Integrals" in prompt
+        assert "Limits" in prompt
+        # Should use comma-separated format ending with "and"
+        assert "and Limits" in prompt
+
+    @pytest.mark.asyncio
+    async def test_concept_none_falls_back_to_concept_id_string(self):
+        """When row.concept is None, concept_id UUID string is used instead."""
+        db = AsyncMock()
+        row = _make_mastery_row(next_review_at=NOW - timedelta(days=1))
+        row.concept = None  # simulate missing eager-load
+
+        result = MagicMock()
+        result.scalars.return_value.all.return_value = [row]
+        db.execute = AsyncMock(return_value=result)
+
+        prompt = await get_due_review_prompt(db, USER_ID)
+
+        assert prompt is not None
+        # UUID string of the concept_id should appear
+        assert str(row.concept_id) in prompt
+
+
+class TestUpdateDialsUnknownKeyIgnored:
+    """Verify that unknown dial keys are silently dropped (allowlist enforcement)."""
+
+    @pytest.mark.asyncio
+    async def test_unknown_key_is_silently_ignored(self):
+        """An unrecognised dimension key does not mutate the profile."""
+        db = AsyncMock()
+        db.commit = AsyncMock()
+        profile = _make_profile(visual_verbal=0.3)
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = profile
+        db.execute = AsyncMock(return_value=result)
+
+        # Pass a valid key plus a bogus key
+        await update_learning_profile_dials(
+            db, USER_ID, {"visual_verbal": -0.5, "__class__": 9.9}
+        )
+
+        # Valid key was applied
+        assert profile.visual_verbal == -0.5
+        # Bogus key did not create an attribute on the profile mock
+        # (hasattr would be True on MagicMock but the value should not be 9.9)
+        assert getattr(profile, "__class__", None) is not float

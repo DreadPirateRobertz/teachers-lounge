@@ -107,6 +107,14 @@ async def test_sse_stream_happy_path(client, auth_headers, user_id, session_id):
         patch("app.chat.get_history", AsyncMock(return_value=[])),
         patch("app.chat.append_message", AsyncMock()),
         patch("app.chat.get_gateway_client", return_value=fake_openai),
+        patch("app.chat.get_dials", AsyncMock(return_value={
+            "active_reflective": 0.0,
+            "sensing_intuitive": 0.0,
+            "visual_verbal": 0.0,
+            "sequential_global": 0.0,
+        })),
+        patch("app.chat.update_learning_profile_dials", AsyncMock()),
+        patch("app.chat.get_due_review_prompt", AsyncMock(return_value=None)),
     ):
         resp = await client.post(
             f"/v1/sessions/{session_id}/messages",
@@ -175,6 +183,14 @@ async def test_sse_stream_rag_emits_sources_event(client, auth_headers, user_id,
         patch("app.chat.append_message", AsyncMock()),
         patch("app.chat.get_gateway_client", return_value=fake_openai),
         patch("app.chat.build_rag_context", AsyncMock(return_value=("system prompt", [fake_chunk]))),
+        patch("app.chat.get_dials", AsyncMock(return_value={
+            "active_reflective": 0.0,
+            "sensing_intuitive": 0.0,
+            "visual_verbal": 0.0,
+            "sequential_global": 0.0,
+        })),
+        patch("app.chat.update_learning_profile_dials", AsyncMock()),
+        patch("app.chat.get_due_review_prompt", AsyncMock(return_value=None)),
     ):
         resp = await client.post(
             f"/v1/sessions/{session_id}/messages",
@@ -228,6 +244,14 @@ async def test_sse_stream_no_sources_event_when_chunks_empty(
         patch("app.chat.append_message", AsyncMock()),
         patch("app.chat.get_gateway_client", return_value=fake_openai),
         patch("app.chat.build_rag_context", AsyncMock(return_value=("system prompt", []))),
+        patch("app.chat.get_dials", AsyncMock(return_value={
+            "active_reflective": 0.0,
+            "sensing_intuitive": 0.0,
+            "visual_verbal": 0.0,
+            "sequential_global": 0.0,
+        })),
+        patch("app.chat.update_learning_profile_dials", AsyncMock()),
+        patch("app.chat.get_due_review_prompt", AsyncMock(return_value=None)),
     ):
         resp = await client.post(
             f"/v1/sessions/{session_id}/messages",
@@ -242,6 +266,67 @@ async def test_sse_stream_no_sources_event_when_chunks_empty(
     ]
     assert "sources" not in [e["type"] for e in events]
     assert events[-1]["type"] == "done"
+
+
+# ── SSE stream — review_reminder event ──────────────────────────────────────
+
+@pytest.mark.asyncio
+async def test_sse_stream_emits_review_reminder_when_concepts_due(
+    client, auth_headers, user_id, session_id
+):
+    """When get_due_review_prompt returns a prompt, a review_reminder event is emitted
+    before the done event so the client can surface it to the student."""
+    fake_session = MagicMock()
+    fake_session.user_id = uuid.UUID(user_id)
+    fake_session.course_id = None
+
+    async def _fake_stream():
+        yield _make_chunk("Great question.")
+        yield _make_chunk(None)
+
+    fake_completions = AsyncMock()
+    fake_completions.create = AsyncMock(return_value=_fake_stream())
+
+    fake_openai = MagicMock()
+    fake_openai.chat.completions = fake_completions
+
+    reminder_text = "You have 2 concepts due for review: Derivatives and Integrals."
+
+    with (
+        patch("app.chat.get_session", AsyncMock(return_value=fake_session)),
+        patch("app.chat.get_history", AsyncMock(return_value=[])),
+        patch("app.chat.append_message", AsyncMock()),
+        patch("app.chat.get_gateway_client", return_value=fake_openai),
+        patch("app.chat.get_dials", AsyncMock(return_value={
+            "active_reflective": 0.0,
+            "sensing_intuitive": 0.0,
+            "visual_verbal": 0.0,
+            "sequential_global": 0.0,
+        })),
+        patch("app.chat.update_learning_profile_dials", AsyncMock()),
+        patch("app.chat.get_due_review_prompt", AsyncMock(return_value=reminder_text)),
+    ):
+        resp = await client.post(
+            f"/v1/sessions/{session_id}/messages",
+            json={"content": "Explain derivatives."},
+            headers=auth_headers,
+        )
+
+    assert resp.status_code == 200
+    events = [
+        json.loads(line[len("data: "):])
+        for line in resp.text.splitlines()
+        if line.startswith("data: ")
+    ]
+
+    types = [e["type"] for e in events]
+    assert "review_reminder" in types
+    assert types[-1] == "done"
+    # review_reminder must come before done
+    assert types.index("review_reminder") < types.index("done")
+
+    reminder_event = next(e for e in events if e["type"] == "review_reminder")
+    assert reminder_event["content"] == reminder_text
 
 
 # ── POST /v1/chat (stateless plain-text stream) ──────────────────────────────
