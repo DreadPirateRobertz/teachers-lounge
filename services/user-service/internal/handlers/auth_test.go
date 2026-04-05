@@ -293,6 +293,10 @@ func (m *mockCache) ReleaseRefreshLock(_ context.Context, key string) error {
 
 func (m *mockCache) DeleteSession(_ context.Context, _ string) error { return nil }
 
+func (m *mockCache) IncrWithTTL(_ context.Context, _ string, _ time.Duration) (int64, error) {
+	return 1, nil
+}
+
 // ============================================================
 // HELPERS
 // ============================================================
