@@ -166,9 +166,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:-localdevjwtsecret-replace-in-prod}
       LOG_LEVEL: info
     ports:
-      - "127.0.0.1:8000:8000"
+      - "127.0.0.1:8000:8080"
     healthcheck:
-      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8000/health')\""]
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://localhost:8080/health')\""]
       interval: 30s
       timeout: 5s
       retries: 3
