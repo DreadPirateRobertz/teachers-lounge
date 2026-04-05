@@ -114,20 +114,19 @@ describe('BossBattleClient — ErrorBoundary around BossScene', () => {
     // apiFetch will throw (fetch is not mocked) which is fine — we just need
     // the component to attempt rendering BossScene.
     // Instead, drive phase directly by mocking fetch to return a valid session.
-    global.fetch = jest.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify({
-          session: {
-            session_id: 'sess-1',
-            boss_hp: 100,
-            boss_max_hp: 100,
-            player_hp: 50,
-            player_max_hp: 50,
-          },
-        }),
-        { status: 200, headers: { 'Content-Type': 'application/json' } },
-      ),
-    )
+    global.fetch = jest.fn().mockResolvedValue({
+      ok: true,
+      status: 200,
+      json: jest.fn().mockResolvedValue({
+        session: {
+          session_id: 'sess-1',
+          boss_hp: 100,
+          boss_max_hp: 100,
+          player_hp: 50,
+          player_max_hp: 50,
+        },
+      }),
+    })
 
     const startBtn = getByRole('button', { name: /begin battle/i })
     startBtn.click()
