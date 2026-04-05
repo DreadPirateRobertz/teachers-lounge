@@ -60,6 +60,15 @@ type Storer interface {
 	CreateAssessmentSession(ctx context.Context, userID string) (*model.AssessmentSession, error)
 	GetAssessmentSession(ctx context.Context, sessionID string) (*model.AssessmentSession, error)
 	RecordAssessmentAnswer(ctx context.Context, sessionID, userID, questionID, chosenKey string) (*model.AssessmentSession, error)
+
+	// Flashcard system
+	CreateFlashcard(ctx context.Context, card *model.Flashcard) (*model.Flashcard, error)
+	GetFlashcard(ctx context.Context, id string) (*model.Flashcard, error)
+	ListFlashcards(ctx context.Context, userID string) ([]*model.Flashcard, error)
+	DueFlashcards(ctx context.Context, userID string) ([]*model.Flashcard, error)
+	ReviewFlashcard(ctx context.Context, cardID, userID string, quality int) (*model.Flashcard, error)
+	FlashcardsForSession(ctx context.Context, sessionID string) ([]*model.Flashcard, error)
+	AllFlashcardsForExport(ctx context.Context, userID string) ([]*model.Flashcard, error)
 }
 
 // Handler holds the store, taunt generator, and logger.
