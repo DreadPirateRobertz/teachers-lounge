@@ -21,3 +21,8 @@ variable "cluster_name" {
   type        = string
   default     = "tl-cluster"
 }
+
+variable "project_number" {
+  description = "GCP project number (numeric). Required for KMS IAM grants to managed service accounts (Cloud SQL, GCS)."
+  type        = string
+}

@@ -60,11 +60,24 @@ type Bucket struct {
 	Rate float64
 }
 
-// Pre-defined buckets for XP and quiz endpoints.
+// Pre-defined buckets for all gaming-service write endpoints.
 var (
 	BucketXP         = Bucket{Name: "xp", Capacity: 10, Rate: 10.0 / 60}          // 10 req/min
 	BucketQuizStart  = Bucket{Name: "quiz_start", Capacity: 5, Rate: 5.0 / 60}    // 5 req/min
 	BucketQuizAnswer = Bucket{Name: "quiz_answer", Capacity: 20, Rate: 20.0 / 60} // 20 req/min
+	// BucketBossAttack limits boss-attack actions to 30 per minute per user.
+	// Boss battles are turn-based, so this is generous enough for normal play
+	// while blocking rapid-fire abuse that could corrupt battle state.
+	BucketBossAttack = Bucket{Name: "boss_attack", Capacity: 30, Rate: 30.0 / 60} // 30 req/min
+	// BucketBossStart limits new battle sessions to 5 per minute — prevents
+	// session flooding where an attacker could exhaust session storage.
+	BucketBossStart = Bucket{Name: "boss_start", Capacity: 5, Rate: 5.0 / 60} // 5 req/min
+	// BucketStreak limits streak check-ins to 5 per minute — prevents XP farming
+	// via rapid repeated check-in attempts.
+	BucketStreak = Bucket{Name: "streak", Capacity: 5, Rate: 5.0 / 60} // 5 req/min
+	// BucketQuestProgress limits quest-progress updates to 30 per minute — allows
+	// normal gameplay event bursts while blocking automated XP farming.
+	BucketQuestProgress = Bucket{Name: "quest_progress", Capacity: 30, Rate: 30.0 / 60} // 30 req/min
 )
 
 // Result holds the outcome of an Allow call.

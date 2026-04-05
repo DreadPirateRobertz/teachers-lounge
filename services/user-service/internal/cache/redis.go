@@ -2,6 +2,7 @@ package cache
 
 import (
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -14,8 +15,19 @@ type Client struct {
 	rdb *redis.Client
 }
 
-func New(addr, password string, db int) *Client {
-	rdb := redis.NewClient(&redis.Options{
+// Options configures the Redis client.
+type Options struct {
+	// TLSEnabled enables TLS when connecting to Redis (required for Memorystore in prod).
+	TLSEnabled bool
+	// TLSServerName is the hostname used for TLS certificate verification.
+	// Typically the Memorystore host without the port suffix.
+	TLSServerName string
+}
+
+// New creates a Client using the provided address, password, DB index, and options.
+// Pass a zero-value Options{} for plaintext (dev/local) connections.
+func New(addr, password string, db int, opts Options) *Client {
+	redisOpts := &redis.Options{
 		Addr:         addr,
 		Password:     password,
 		DB:           db,
@@ -24,12 +36,27 @@ func New(addr, password string, db int) *Client {
 		WriteTimeout: 3 * time.Second,
 		PoolSize:     10,
 		MinIdleConns: 2,
-	})
-	return &Client{rdb: rdb}
+	}
+
+	if opts.TLSEnabled {
+		redisOpts.TLSConfig = &tls.Config{
+			ServerName: opts.TLSServerName,
+			MinVersion: tls.VersionTLS12,
+		}
+	}
+
+	return &Client{rdb: redis.NewClient(redisOpts)}
 }
 
 func (c *Client) Ping(ctx context.Context) error {
 	return c.rdb.Ping(ctx).Err()
+}
+
+// Cmdable exposes the underlying Redis client as redis.Cmdable so callers
+// (e.g. the ratelimit.Limiter) can execute Lua scripts and other commands
+// directly without going through the domain-specific helpers on this type.
+func (c *Client) Cmdable() redis.Cmdable {
+	return c.rdb
 }
 
 func (c *Client) Close() error {

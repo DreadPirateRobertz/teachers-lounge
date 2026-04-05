@@ -4,6 +4,10 @@ image:
 env:
   DB_HOST: "postgres.prod.svc.cluster.local"
   REDIS_HOST: "redis.prod.svc.cluster.local"
+  ## Redis TLS — required for Memorystore in prod (in-transit encryption).
+  REDIS_TLS_ENABLED: "true"
+  ## TLS_SERVER_NAME must match the Memorystore instance host (no port).
+  REDIS_TLS_SERVER_NAME: "redis.prod.svc.cluster.local"
   LOG_LEVEL: "warn"
 
 autoscaling:

@@ -175,6 +175,10 @@ func TestAllow_PredefinedBuckets(t *testing.T) {
 		ratelimit.BucketXP,
 		ratelimit.BucketQuizStart,
 		ratelimit.BucketQuizAnswer,
+		ratelimit.BucketBossAttack,
+		ratelimit.BucketBossStart,
+		ratelimit.BucketStreak,
+		ratelimit.BucketQuestProgress,
 	}
 	for _, b := range buckets {
 		res, err := lim.Allow(context.Background(), b, "user-predef")
@@ -184,5 +188,71 @@ func TestAllow_PredefinedBuckets(t *testing.T) {
 		if !res.Allowed {
 			t.Errorf("bucket %q: first request should be allowed", b.Name)
 		}
+	}
+}
+
+// TestBucketBossAttack_LimitsAfterBurst verifies BucketBossAttack enforces its
+// 30-per-minute burst limit, blocking the 31st request in the same window.
+func TestBucketBossAttack_LimitsAfterBurst(t *testing.T) {
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("start miniredis: %v", err)
+	}
+	t.Cleanup(mr.Close)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { rdb.Close() })
+
+	fakeNow := float64(time.Now().Unix())
+	lim := ratelimit.New(rdb)
+	lim.NowFunc = func() float64 { return fakeNow } // freeze clock
+
+	b := ratelimit.BucketBossAttack
+
+	// Drain full capacity (30 tokens)
+	for i := 0; i < int(b.Capacity); i++ {
+		res, err := lim.Allow(context.Background(), b, "attacker")
+		if err != nil {
+			t.Fatalf("request %d: %v", i+1, err)
+		}
+		if !res.Allowed {
+			t.Fatalf("request %d: expected allowed within burst capacity", i+1)
+		}
+	}
+
+	// 31st request must be denied
+	res, err := lim.Allow(context.Background(), b, "attacker")
+	if err != nil {
+		t.Fatalf("31st request: %v", err)
+	}
+	if res.Allowed {
+		t.Error("31st request: expected denied after burst exhausted")
+	}
+	if res.RetryAfter == 0 {
+		t.Error("expected non-zero RetryAfter when denied")
+	}
+}
+
+// TestBucketBossAttack_IndependentPerUser verifies one attacker's exhausted bucket
+// does not affect another user's bucket.
+func TestBucketBossAttack_IndependentPerUser(t *testing.T) {
+	lim, _ := newTestLimiter(t)
+	b := ratelimit.BucketBossAttack
+
+	// Exhaust user-attacker (use small capacity bucket to avoid 30 iterations)
+	smallB := ratelimit.Bucket{Name: b.Name, Capacity: 2, Rate: b.Rate}
+	lim.Allow(context.Background(), smallB, "user-attacker") //nolint:errcheck
+	lim.Allow(context.Background(), smallB, "user-attacker") //nolint:errcheck
+	res, _ := lim.Allow(context.Background(), smallB, "user-attacker")
+	if res.Allowed {
+		t.Fatal("user-attacker should be exhausted")
+	}
+
+	// Different user should be unaffected
+	res, err := lim.Allow(context.Background(), smallB, "user-defender")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !res.Allowed {
+		t.Error("user-defender should have their own independent bucket")
 	}
 }

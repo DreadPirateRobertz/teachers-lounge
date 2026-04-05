@@ -21,6 +21,7 @@ import (
 	tlmetrics "github.com/teacherslounge/user-service/internal/metrics"
 	"github.com/teacherslounge/user-service/internal/middleware"
 	"github.com/teacherslounge/user-service/internal/models"
+	"github.com/teacherslounge/user-service/internal/ratelimit"
 	"github.com/teacherslounge/user-service/internal/store"
 )
 
@@ -45,7 +46,10 @@ func main() {
 	}
 	defer db.Close()
 
-	redisClient := cache.New(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB)
+	redisClient := cache.New(cfg.RedisAddr, cfg.RedisPassword, cfg.RedisDB, cache.Options{
+		TLSEnabled:    cfg.RedisTLSEnabled,
+		TLSServerName: cfg.RedisTLSServerName,
+	})
 	if err := redisClient.Ping(context.Background()); err != nil {
 		slog.Error("connecting to redis", "err", err)
 		os.Exit(1)
@@ -92,9 +96,12 @@ func main() {
 	// Prometheus metrics endpoint
 	r.Handle("/metrics", promhttp.Handler())
 
+	// Token-bucket rate limiter for unauthenticated registration (keyed by IP).
+	regLimiter := ratelimit.New(redisClient.Cmdable())
+
 	// Auth routes (no JWT required — these issue tokens)
 	r.Route("/auth", func(r chi.Router) {
-		r.Post("/register", authH.Register)
+		r.With(middleware.IPRateLimit(regLimiter, ratelimit.BucketUserCreate)).Post("/register", authH.Register)
 		r.Post("/login", authH.Login)
 		r.Post("/refresh", authH.Refresh)
 		r.Post("/logout", authH.Logout)
