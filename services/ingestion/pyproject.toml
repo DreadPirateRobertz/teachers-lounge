@@ -1,14 +1,6 @@
-[tool.ruff]
-line-length = 100
-
-[tool.ruff.lint]
-select = ["E", "F", "I", "W"]
-ignore = ["E501", "I001"]
-
-[tool.ruff.lint.per-file-ignores]
-# Test files: F401 (conftest re-exports), F841 (assigned-but-unused mocks),
-# I001 (import ordering less critical in test files with inline imports).
-"tests/**" = ["F401", "F841", "I001"]
+# Ruff lint rules are configured in ruff.toml (takes precedence over this file).
+# The [tool.ruff] section below is intentionally empty so pyproject.toml
+# remains the source of truth for non-lint tooling only.
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"

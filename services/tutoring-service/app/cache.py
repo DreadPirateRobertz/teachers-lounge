@@ -69,10 +69,26 @@ async def close_cache() -> None:
 # ── Session history cache ─────────────────────────────────────────────────────
 
 def _history_key(session_id: UUID) -> str:
+    """Return the Redis key for a session's message history.
+
+    Args:
+        session_id: UUID of the tutoring session.
+
+    Returns:
+        Redis key string under the session-history prefix.
+    """
     return f"{_SESSION_HISTORY_PREFIX}{session_id}"
 
 
 def _user_sessions_key(user_id: UUID) -> str:
+    """Return the Redis key for the recent-sessions list of a user.
+
+    Args:
+        user_id: UUID of the student.
+
+    Returns:
+        Redis key string under the user-sessions prefix.
+    """
     return f"{_USER_SESSIONS_PREFIX}{user_id}"
 
 

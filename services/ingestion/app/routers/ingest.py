@@ -18,15 +18,23 @@ async def upload_file(
     course_id: uuid.UUID,
     user_id: Annotated[uuid.UUID, Depends(require_auth)],
 ) -> UploadResponse:
-    """
-    Accept a course material upload, store in GCS, enqueue for processing.
+    """Accept a course material upload, store in GCS, and enqueue for processing.
 
-    - Validates file type against allowlist
-    - Enforces max upload size
-    - Stores raw file in gs://tvtutor-raw-uploads/{user_id}/{course_id}/{job_id}/{filename}
-    - Inserts materials row (status=pending)
-    - Publishes IngestJobMessage to ingest-jobs Pub/Sub topic
-    - Returns job_id for status polling
+    Validates file type against the allowlist, enforces the max upload size,
+    stores the raw bytes in GCS, persists a materials row at status=pending,
+    publishes an IngestJobMessage to the ingest-jobs Pub/Sub topic, and returns
+    the job_id for status polling.
+
+    Args:
+        file: Uploaded file from the multipart form.
+        course_id: UUID of the course this material belongs to.
+        user_id: Authenticated user UUID extracted from the Bearer token.
+
+    Returns:
+        UploadResponse with job_id, material_id, status, and gcs_path.
+
+    Raises:
+        HTTPException: 415 for unsupported MIME type, 413 for oversized files.
     """
     # Validate MIME type
     content_type = file.content_type or ""

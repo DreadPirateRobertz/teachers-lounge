@@ -130,6 +130,15 @@ async def _download_from_gcs(gcs_path: str, job_id: UUID) -> Path:
 
 
 def _download_from_gcs_sync(gcs_path: str, job_id: UUID) -> Path:
+    """Synchronous GCS download called via run_in_executor.
+
+    Args:
+        gcs_path: Full GCS URI, e.g. ``gs://bucket/path/to/file.pdf``.
+        job_id: UUID of the ingest job, used to prefix the temp file name.
+
+    Returns:
+        Path to the downloaded local temporary file.
+    """
     # gcs_path is like gs://bucket/path/to/file.pdf
     from google.cloud import storage  # lazy import — avoids heavy dep at module load
 
@@ -328,6 +337,21 @@ def _make_chunk(
     page: int | None,
     content_type: str,
 ) -> dict:
+    """Build a chunk dict ready for Postgres and Qdrant insertion.
+
+    Args:
+        content: Extracted text content for this chunk.
+        material_id: UUID of the parent material.
+        course_id: UUID of the course this material belongs to.
+        chapter: Chapter heading, if detected.
+        section: Section heading, if detected.
+        page: Source page number, if available.
+        content_type: One of ``text``, ``table``, ``equation``, ``figure``.
+
+    Returns:
+        Dict with keys id, material_id, course_id, content, chapter, section,
+        page, content_type, metadata.
+    """
     return {
         "id": uuid4(),
         "material_id": material_id,

@@ -55,6 +55,18 @@ def _get_model_and_processor():
 
 
 def _random_unit_vector(seed: int) -> list[float]:
+    """Return a deterministic unit vector of length clip_embedding_dim.
+
+    Used as a CLIP stub when transformers/torch are unavailable. The same
+    seed always produces the same vector, allowing test assertions on shape
+    and normalisation without loading model weights.
+
+    Args:
+        seed: Integer seed for the random number generator.
+
+    Returns:
+        List of floats with L2-norm equal to 1.0.
+    """
     rng = random.Random(seed)
     raw = [rng.gauss(0, 1) for _ in range(settings.clip_embedding_dim)]
     norm = math.sqrt(sum(x * x for x in raw))

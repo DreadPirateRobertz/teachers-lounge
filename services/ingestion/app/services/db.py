@@ -68,6 +68,14 @@ async def update_material_status(
     status: ProcessingStatus,
     chunk_count: int | None = None,
 ) -> None:
+    """Update the processing status (and optionally chunk count) for a material.
+
+    Args:
+        material_id: UUID of the material row to update.
+        status: New processing status value.
+        chunk_count: Number of chunks produced, written when ingestion completes.
+            Omit to leave the existing value unchanged.
+    """
     conn = await _connect()
     try:
         if chunk_count is not None:

@@ -13,6 +13,13 @@ _api_key: str | None = None
 
 
 def init_client() -> None:
+    """Store the OpenAI API key for use by embed_texts.
+
+    Called once at application startup before the first embedding request.
+    The key is stored at module level; the actual AsyncOpenAI client is
+    created per-call to avoid event-loop binding issues with the Pub/Sub
+    subscriber thread.
+    """
     global _api_key
     _api_key = settings.openai_api_key
     logger.info("openai embedding config stored (model=%s, dim=%d)",
