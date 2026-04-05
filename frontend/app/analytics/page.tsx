@@ -5,6 +5,7 @@ import Link from 'next/link'
 import StatCard from '@/components/analytics/StatCard'
 import QuizBreakdownChart from '@/components/analytics/QuizBreakdownChart'
 import ActivityChart from '@/components/analytics/ActivityChart'
+import ErrorBoundary from '@/components/ErrorBoundary'
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -172,7 +173,9 @@ export default function AnalyticsPage() {
               <h2 className="text-xs font-mono uppercase tracking-widest text-text-dim mb-4">
                 Quiz Performance by Topic
               </h2>
-              <QuizBreakdownChart topics={topics} />
+              <ErrorBoundary componentName="Quiz Breakdown">
+                <QuizBreakdownChart topics={topics} />
+              </ErrorBoundary>
             </section>
 
             {/* Activity heatmap */}
