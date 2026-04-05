@@ -1,0 +1,19 @@
+{{- if gt (int .Values.replicaCount) 1 }}
+## PodDisruptionBudget — ensures at least 2 of 3 Qdrant pods remain available
+## during voluntary disruptions (node upgrades, drains).
+##
+## With replicaCount=3 and minAvailable=2, one pod can be evicted at a time.
+## This keeps the cluster quorate (Raft requires ⌊N/2⌋+1 = 2 peers for writes).
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: {{ include "qdrant.fullname" . }}
+  labels:
+    {{- include "qdrant.labels" . | nindent 4 }}
+spec:
+  ## minAvailable=2 ensures quorum is maintained during rolling node maintenance.
+  minAvailable: 2
+  selector:
+    matchLabels:
+      {{- include "qdrant.selectorLabels" . | nindent 6 }}
+{{- end }}
