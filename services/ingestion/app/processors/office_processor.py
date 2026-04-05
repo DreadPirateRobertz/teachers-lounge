@@ -18,6 +18,13 @@ import logging
 from pathlib import Path
 from uuid import UUID
 
+import openpyxl
+from docx import Document
+from docx.oxml.ns import qn
+from docx.table import Table as DocxTable
+from docx.text.paragraph import Paragraph
+from pptx import Presentation
+
 from app.config import settings
 from app.models import IngestJobMessage, ProcessingStatus
 from app.processors.common import (
@@ -112,11 +119,6 @@ def _extract_docx_chunks(
     Returns:
         List of chunk dicts ready for embedding and storage.
     """
-    from docx import Document
-    from docx.oxml.ns import qn
-    from docx.table import Table as DocxTable
-    from docx.text.paragraph import Paragraph
-
     doc = Document(str(path))
     max_chars = settings.chunk_max_tokens * 4
     overlap_chars = settings.chunk_overlap_tokens * 4
@@ -186,10 +188,6 @@ def _iter_block_items(doc):
     Yields:
         ``docx.text.paragraph.Paragraph`` or ``docx.table.Table`` objects.
     """
-    from docx.oxml.ns import qn
-    from docx.table import Table as DocxTable
-    from docx.text.paragraph import Paragraph
-
     parent = doc.element.body
     for child in parent.iterchildren():
         if child.tag == qn("w:p"):
@@ -251,8 +249,6 @@ def _extract_pptx_chunks(
     Returns:
         List of chunk dicts ready for embedding and storage.
     """
-    from pptx import Presentation
-
     prs = Presentation(str(path))
     max_chars = settings.chunk_max_tokens * 4
     overlap_chars = settings.chunk_overlap_tokens * 4
@@ -319,8 +315,6 @@ def _extract_xlsx_chunks(
     Returns:
         List of chunk dicts ready for embedding and storage.
     """
-    import openpyxl
-
     wb = openpyxl.load_workbook(str(path), read_only=True, data_only=True)
     max_chars = settings.chunk_max_tokens * 4
     overlap_chars = settings.chunk_overlap_tokens * 4
