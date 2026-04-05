@@ -36,7 +36,25 @@ class JWTClaims(BaseModel):
 def require_auth(
     credentials: HTTPAuthorizationCredentials = Depends(_bearer),
 ) -> JWTClaims:
-    """FastAPI dependency — validates Bearer JWT and returns parsed claims."""
+    """Validate a Bearer JWT issued by the User Service and return its claims.
+
+    Verifies the token signature (HS256), expiry, and audience claim against
+    ``settings.jwt_audience``.  Tokens that are missing the ``aud`` claim are
+    rejected even when python-jose would not raise (library version variance).
+
+    Args:
+        credentials: Injected by FastAPI's HTTPBearer scheme — contains the
+            raw token string from the ``Authorization: Bearer <token>`` header.
+
+    Returns:
+        Parsed and validated ``JWTClaims`` with ``user_id``, ``email``,
+        ``account_type``, and ``sub_status`` populated from the token payload.
+
+    Raises:
+        HTTPException: 401 Unauthorized if the token is expired, has an invalid
+            signature, carries the wrong audience, or is missing the ``uid``/
+            ``sub`` identity claim.
+    """
     token = credentials.credentials
     try:
         payload = jwt.decode(
