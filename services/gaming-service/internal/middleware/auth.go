@@ -49,6 +49,13 @@ func UserIDFromContext(ctx context.Context) string {
 	return v
 }
 
+// ContextWithUserID returns a new context with the given user ID injected,
+// identical to what Authenticate middleware does. Intended for use in tests
+// that need an authenticated request context without a full middleware chain.
+func ContextWithUserID(ctx context.Context, userID string) context.Context {
+	return context.WithValue(ctx, ctxKeyUserID{}, userID)
+}
+
 func extractBearer(r *http.Request) string {
 	h := r.Header.Get("Authorization")
 	if h == "" {

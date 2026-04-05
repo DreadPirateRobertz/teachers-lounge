@@ -27,6 +27,7 @@ type Storer interface {
 	LeaderboardGetCourse(ctx context.Context, userID, courseID string) ([]model.LeaderboardEntry, *model.LeaderboardEntry, error)
 	LeaderboardGetFriends(ctx context.Context, userID string, friendIDs []string) ([]model.LeaderboardEntry, *model.LeaderboardEntry, error)
 	RandomQuote(ctx context.Context) (*model.Quote, error)
+	RandomQuoteForUser(ctx context.Context, userID, quotectx string) (*model.Quote, error)
 
 	// Quiz system
 	GetRandomQuestions(ctx context.Context, topic string, n int) ([]*model.Question, error)
@@ -263,11 +264,29 @@ func (h *Handler) GetFriendLeaderboard(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, model.FriendLeaderboardResponse{Friends: friends, UserRank: userRank})
 }
 
-// RandomQuote handles GET /gaming/quotes/random
+// RandomQuote handles GET /gaming/quotes/random?context=<ctx>
+//
+// Optional query param "context" filters by quote context type
+// (session_start, boss_fight, correct, wrong, victory, defeat, streak,
+// achievement, comeback). Omitting it returns any context.
+//
+// When the caller is authenticated, seen-quote dedup is applied per user
+// per day via Redis so the same quote is not repeated within a calendar day.
 func (h *Handler) RandomQuote(w http.ResponseWriter, r *http.Request) {
-	quote, err := h.store.RandomQuote(r.Context())
+	quotectx := r.URL.Query().Get("context")
+	userID := middleware.UserIDFromContext(r.Context())
+
+	var (
+		quote *model.Quote
+		err   error
+	)
+	if userID != "" {
+		quote, err = h.store.RandomQuoteForUser(r.Context(), userID, quotectx)
+	} else {
+		quote, err = h.store.RandomQuote(r.Context())
+	}
 	if err != nil {
-		h.logger.Error("random quote", zap.Error(err))
+		h.logger.Error("random quote", zap.String("user_id", userID), zap.String("context", quotectx), zap.Error(err))
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
