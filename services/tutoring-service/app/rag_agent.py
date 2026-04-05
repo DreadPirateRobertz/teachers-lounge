@@ -1,4 +1,4 @@
-"""Agentic RAG pipeline — Phase 2 + Phase 5 (prerequisite-aware) implementation.
+"""Agentic RAG pipeline — Phase 2 + Phase 5 (prerequisite-aware) + Phase 7 tracing.
 
 Phase 2 scope (tl-dkm):
   Step 1 — Student context: recent interaction history
@@ -13,12 +13,18 @@ Phase 5 additions (tl-vki):
   to a target concept; detect prerequisite gaps below MASTERY_THRESHOLD;
   inject a gap-redirect block into the system prompt when gaps are found.
 
+Phase 7 additions (tl-dkg):
+  OpenTelemetry custom span: rag_agent.build_context wraps the full pipeline.
+  Records chunk_count, gap_count, and course_id as span attributes for
+  latency-per-step analysis in Grafana Cloud Trace.
+
 Exit criteria (tl-vki): when a student asks about a concept they lack
 prerequisites for, Professor Nova redirects to the gaps before answering.
 """
 import logging
 from uuid import UUID
 
+from opentelemetry import trace
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .graph import (
@@ -31,6 +37,7 @@ from .history import get_history
 from .search_client import SearchResult, fetch_curriculum_chunks
 
 logger = logging.getLogger(__name__)
+_tracer = trace.get_tracer("tutoring-service.rag_agent")
 
 PROFESSOR_NOVA_SYSTEM_PROMPT = """\
 You are Professor Nova, the AI tutor for TeachersLounge — a gamified learning \
@@ -74,45 +81,52 @@ async def build_rag_context(
     Returns:
         Tuple of (system_prompt, source_chunks).
     """
-    # Step 1: Student context — interaction count as simple engagement signal.
-    recent_history = await get_history(db, session_id, limit=20)
-    student_turns = sum(1 for i in recent_history if i.role == "student")
+    with _tracer.start_as_current_span("rag_agent.build_context") as span:
+        span.set_attribute("student_id", str(student_id))
+        span.set_attribute("session_id", str(session_id))
+        span.set_attribute("course_id", str(course_id))
 
-    # Step 2: Concept graph prerequisite check (tl-vki).
-    # Keyword-match the question to a course concept, then detect mastery gaps
-    # in its transitive prerequisites. Non-fatal: skip on any DB error.
-    gaps: list[dict] = []
-    try:
-        concepts = await get_course_concepts(db, course_id)
-        if concepts:
-            mastery = await get_student_mastery(db, student_id, course_id)
-            target = _find_concept_for_question(question, concepts)
-            if target is not None:
-                gaps = detect_gaps(target.id, concepts, mastery)
-                if gaps:
-                    logger.info(
-                        "prereq_gaps student_id=%s target_concept=%s gaps=%d",
-                        student_id, target.name, len(gaps),
-                    )
-    except Exception:
-        # Non-fatal: concept graph is best-effort; skip rather than break chat.
-        logger.exception("step2 concept graph check failed — skipping")
+        # Step 1: Student context — interaction count as simple engagement signal.
+        recent_history = await get_history(db, session_id, limit=20)
+        student_turns = sum(1 for i in recent_history if i.role == "student")
 
-    # Step 3: Retrieve curriculum chunks via hybrid vector search.
-    chunks = await fetch_curriculum_chunks(question, course_id, limit=8)
+        # Step 2: Concept graph prerequisite check (tl-vki).
+        # Keyword-match the question to a course concept, then detect mastery gaps
+        # in its transitive prerequisites. Non-fatal: skip on any DB error.
+        gaps: list[dict] = []
+        try:
+            concepts = await get_course_concepts(db, course_id)
+            if concepts:
+                mastery = await get_student_mastery(db, student_id, course_id)
+                target = _find_concept_for_question(question, concepts)
+                if target is not None:
+                    gaps = detect_gaps(target.id, concepts, mastery)
+                    if gaps:
+                        logger.info(
+                            "prereq_gaps student_id=%s target_concept=%s gaps=%d",
+                            student_id, target.name, len(gaps),
+                        )
+        except Exception:
+            # Non-fatal: concept graph is best-effort; skip rather than break chat.
+            logger.exception("step2 concept graph check failed — skipping")
 
-    # Step 4: Cross-student insights (72% struggle here, visual works better) — Phase 7
+        # Step 3: Retrieve curriculum chunks via hybrid vector search.
+        chunks = await fetch_curriculum_chunks(question, course_id, limit=8)
 
-    # Step 5: Build enriched system prompt including retrieved context and gaps.
-    system_prompt = _build_system_prompt(chunks, student_turns, gaps=gaps)
+        # Step 4: Cross-student insights (72% struggle here, visual works better) — Phase 7
 
-    # Step 6: Interaction embedding + spaced-repetition scheduling — Phase 5
-    logger.info(
-        "rag_context student_id=%s course_id=%s chunks=%d gaps=%d",
-        student_id, course_id, len(chunks), len(gaps),
-    )
+        # Step 5: Build enriched system prompt including retrieved context and gaps.
+        system_prompt = _build_system_prompt(chunks, student_turns, gaps=gaps)
 
-    return system_prompt, chunks
+        # Step 6: Interaction embedding + spaced-repetition scheduling — Phase 5
+        span.set_attribute("chunk_count", len(chunks))
+        span.set_attribute("gap_count", len(gaps))
+        logger.info(
+            "rag_context student_id=%s course_id=%s chunks=%d gaps=%d",
+            student_id, course_id, len(chunks), len(gaps),
+        )
+
+        return system_prompt, chunks
 
 
 def _find_concept_for_question(question: str, concepts: list[Concept]) -> Concept | None:

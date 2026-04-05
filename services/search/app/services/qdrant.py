@@ -3,6 +3,7 @@ import re
 from collections import Counter
 from uuid import UUID
 
+from opentelemetry import trace
 from qdrant_client import AsyncQdrantClient
 from qdrant_client.models import (
     FieldCondition,
@@ -16,6 +17,7 @@ from app.config import settings
 from app.models import ChunkResult, DiagramResult
 
 logger = logging.getLogger(__name__)
+_tracer = trace.get_tracer("search-service.qdrant")
 
 _client: AsyncQdrantClient | None = None
 
@@ -66,14 +68,19 @@ async def dense_search(
 
     query_filter = _build_filter(course_id, chapter)
 
-    hits = await client.search(
-        collection_name=settings.curriculum_collection,
-        query_vector=("dense", query_vector),
-        query_filter=query_filter,
-        limit=limit,
-        with_payload=True,
-        with_vectors=False,
-    )
+    with _tracer.start_as_current_span("qdrant.search") as span:
+        span.set_attribute("search_type", "dense")
+        span.set_attribute("course_id", str(course_id))
+        span.set_attribute("limit", limit)
+
+        hits = await client.search(
+            collection_name=settings.curriculum_collection,
+            query_vector=("dense", query_vector),
+            query_filter=query_filter,
+            limit=limit,
+            with_payload=True,
+            with_vectors=False,
+        )
 
     results = []
     for hit in hits:
@@ -147,22 +154,26 @@ async def sparse_search(
 
     query_filter = _build_filter(course_id, chapter)
 
-    try:
-        hits = await client.search(
-            collection_name=settings.curriculum_collection,
-            query_vector=NamedSparseVector(
-                name="sparse",
-                vector=SparseVector(indices=indices, values=values),
-            ),
-            query_filter=query_filter,
-            limit=limit,
-            with_payload=True,
-            with_vectors=False,
-        )
-    except Exception as exc:
-        # Collection may not have sparse vectors indexed yet (pre-ingestion).
-        logger.debug("sparse_search skipped (no sparse index?): %s", exc)
-        return []
+    with _tracer.start_as_current_span("qdrant.search") as span:
+        span.set_attribute("search_type", "sparse")
+        span.set_attribute("course_id", str(course_id))
+        span.set_attribute("limit", limit)
+        try:
+            hits = await client.search(
+                collection_name=settings.curriculum_collection,
+                query_vector=NamedSparseVector(
+                    name="sparse",
+                    vector=SparseVector(indices=indices, values=values),
+                ),
+                query_filter=query_filter,
+                limit=limit,
+                with_payload=True,
+                with_vectors=False,
+            )
+        except Exception as exc:
+            # Collection may not have sparse vectors indexed yet (pre-ingestion).
+            logger.debug("sparse_search skipped (no sparse index?): %s", exc)
+            return []
 
     results = []
     for hit in hits:
@@ -212,18 +223,22 @@ async def diagram_search(
         must=[FieldCondition(key="course_id", match=MatchValue(value=str(course_id)))]
     )
 
-    try:
-        hits = await client.search(
-            collection_name=settings.diagrams_collection,
-            query_vector=query_vector,
-            query_filter=query_filter,
-            limit=limit,
-            with_payload=True,
-            with_vectors=False,
-        )
-    except Exception as exc:
-        logger.debug("diagram_search unavailable (collection missing?): %s", exc)
-        return []
+    with _tracer.start_as_current_span("qdrant.search") as span:
+        span.set_attribute("search_type", "diagram")
+        span.set_attribute("course_id", str(course_id))
+        span.set_attribute("limit", limit)
+        try:
+            hits = await client.search(
+                collection_name=settings.diagrams_collection,
+                query_vector=query_vector,
+                query_filter=query_filter,
+                limit=limit,
+                with_payload=True,
+                with_vectors=False,
+            )
+        except Exception as exc:
+            logger.debug("diagram_search unavailable (collection missing?): %s", exc)
+            return []
 
     results = []
     for hit in hits:

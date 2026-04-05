@@ -1,0 +1,53 @@
+# Weekly evaluation CronJob — RAGAS + learning effectiveness
+# Runs every Sunday at 03:00 UTC (tl-dkg Phase 7)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: eval-weekly
+  namespace: teachers-lounge
+  labels:
+    app: eval-service
+    component: weekly-eval
+spec:
+  schedule: "0 3 * * 0"       # Sunday 03:00 UTC
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid    # Skip if previous run still in progress
+  successfulJobsHistoryLimit: 3
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 7200   # 2 hours max
+      template:
+        metadata:
+          labels:
+            app: eval-service
+            component: weekly-eval
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: eval-service   # Workload Identity for BigQuery + Cloud SQL
+          containers:
+            - name: eval-weekly
+              image: gcr.io/teachers-lounge/eval-service:latest
+              command: ["python", "weekly_eval.py"]
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: cloudsql-credentials
+                      key: database-url
+                - name: BIGQUERY_PROJECT
+                  value: "teachers-lounge"
+                - name: BIGQUERY_DATASET
+                  value: "analytics"
+                - name: RAGAS_WEEKLY_SAMPLE_SIZE
+                  value: "100"
+                - name: FAITHFULNESS_ALERT_THRESHOLD
+                  value: "0.7"
+              resources:
+                requests:
+                  cpu: "500m"
+                  memory: "1Gi"
+                limits:
+                  cpu: "2"
+                  memory: "2Gi"

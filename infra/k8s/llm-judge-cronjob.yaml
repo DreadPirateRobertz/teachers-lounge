@@ -1,0 +1,54 @@
+# Nightly LLM judge CronJob — evaluates sampled tutor interactions via Claude Haiku
+# Runs every night at 02:00 UTC (tl-dkg Phase 7)
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: eval-llm-judge
+  namespace: teachers-lounge
+  labels:
+    app: eval-service
+    component: llm-judge
+spec:
+  schedule: "0 2 * * *"       # Every night at 02:00 UTC
+  timeZone: "Etc/UTC"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 7
+  failedJobsHistoryLimit: 3
+  jobTemplate:
+    spec:
+      backoffLimit: 2
+      activeDeadlineSeconds: 1800   # 30 minutes max
+      template:
+        metadata:
+          labels:
+            app: eval-service
+            component: llm-judge
+        spec:
+          restartPolicy: OnFailure
+          serviceAccountName: eval-service
+          containers:
+            - name: llm-judge
+              image: gcr.io/teachers-lounge/eval-service:latest
+              command: ["python", "nightly_judge.py"]
+              env:
+                - name: DATABASE_URL
+                  valueFrom:
+                    secretKeyRef:
+                      name: cloudsql-credentials
+                      key: database-url
+                - name: ANTHROPIC_API_KEY
+                  valueFrom:
+                    secretKeyRef:
+                      name: anthropic-credentials
+                      key: api-key
+                - name: JUDGE_MODEL
+                  value: "claude-haiku-4-5-20251001"
+                - name: LLM_JUDGE_NIGHTLY_SAMPLE
+                  value: "20"
+              resources:
+                requests:
+                  cpu: "250m"
+                  memory: "512Mi"
+                limits:
+                  cpu: "1"
+                  memory: "1Gi"
