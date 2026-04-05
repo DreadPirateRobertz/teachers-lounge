@@ -14,9 +14,7 @@
  *   </AgeGate>
  */
 import Link from 'next/link'
-
-/** Possible account types returned by the user-service. */
-export type AccountType = 'standard' | 'minor'
+import { type AccountType } from '@/lib/auth'
 
 interface AgeGateProps {
   /** The user's account type.  Undefined for unauthenticated guests. */

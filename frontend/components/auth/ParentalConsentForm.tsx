@@ -58,7 +58,7 @@ export default function ParentalConsentForm({ userId, onSuccess }: ParentalConse
       const res = await fetch('/api/user/parental-consent', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ user_id: userId, guardian_email: email }),
+        body: JSON.stringify({ user_id: userId, guardian_email: email.trim() }),
       })
       const data = await res.json()
       if (!res.ok) {
