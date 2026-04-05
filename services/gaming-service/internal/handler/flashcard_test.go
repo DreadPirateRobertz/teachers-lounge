@@ -234,6 +234,9 @@ func (noopStore) AllFlashcardsForExport(_ context.Context, _ string) ([]*model.F
 func (noopStore) BuyPowerUp(_ context.Context, _ string, _ model.PowerUpType, _ int) (int, int, error) {
 	return 0, 0, nil
 }
+func (noopStore) GetDefeatedBossIDs(_ context.Context, _ string) ([]string, error) {
+	return nil, nil
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
