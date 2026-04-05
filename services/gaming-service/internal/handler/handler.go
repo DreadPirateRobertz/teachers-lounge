@@ -51,6 +51,9 @@ type Storer interface {
 	SaveTaunt(ctx context.Context, bossID string, round int, tauntText string) error
 	GetRandomTaunt(ctx context.Context, bossID string, round int) (tauntText string, ok bool, err error)
 
+	// Shop methods
+	BuyPowerUp(ctx context.Context, userID string, pu model.PowerUpType, gemCost int) (gemsLeft, newCount int, err error)
+
 	// Loot / achievement methods
 	GrantAchievement(ctx context.Context, userID, achievementType, badgeName string) (*model.Achievement, bool, error)
 	GetAchievements(ctx context.Context, userID string) ([]model.Achievement, error)

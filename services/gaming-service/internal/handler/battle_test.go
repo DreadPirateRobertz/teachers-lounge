@@ -311,3 +311,6 @@ func (b *battleStore) FlashcardsForSession(_ context.Context, _ string) ([]*mode
 func (b *battleStore) AllFlashcardsForExport(_ context.Context, _ string) ([]*model.Flashcard, error) {
 	return nil, nil
 }
+func (b *battleStore) BuyPowerUp(_ context.Context, _ string, _ model.PowerUpType, _ int) (int, int, error) {
+	return 0, 0, nil
+}

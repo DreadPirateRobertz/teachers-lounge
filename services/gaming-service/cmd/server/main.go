@@ -123,6 +123,10 @@ func main() {
 		r.Get("/gaming/boss/catalog", h.GetBossCatalog)
 		r.Get("/gaming/boss/catalog/{bossId}", h.GetBossByID)
 
+		// Gem shop routes
+		r.Get("/gaming/shop/catalog", h.GetShopCatalog)
+		r.Post("/gaming/shop/buy", h.BuyPowerUp)
+
 		// Achievement / loot routes
 		r.Get("/gaming/achievements/{userId}", h.GetAchievements)
 
