@@ -6,11 +6,7 @@ import { NextRequest } from 'next/server'
 
 const MOCK_TOKEN = 'analytics-test-token'
 
-function makeRequest(opts: {
-  path?: string
-  token?: string | null
-  search?: string
-}): NextRequest {
+function makeRequest(opts: { path?: string; token?: string | null; search?: string }): NextRequest {
   const headers: Record<string, string> = {}
   if (opts.token !== null) {
     headers['Cookie'] = `tl_token=${opts.token ?? MOCK_TOKEN}`

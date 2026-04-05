@@ -133,9 +133,7 @@ describe('GET /api/gaming/quests — gaming-service proxy', () => {
   })
 
   it('returns error response when upstream GET fails', async () => {
-    global.fetch = jest.fn().mockResolvedValue(
-      new Response('service down', { status: 503 }),
-    )
+    global.fetch = jest.fn().mockResolvedValue(new Response('service down', { status: 503 }))
 
     const { GET } = await import('./route')
     const res = await GET(makeGetRequest())
@@ -184,9 +182,7 @@ describe('POST /api/gaming/quests — gaming-service proxy', () => {
   })
 
   it('returns error response when upstream POST fails', async () => {
-    global.fetch = jest.fn().mockResolvedValue(
-      new Response('bad request', { status: 400 }),
-    )
+    global.fetch = jest.fn().mockResolvedValue(new Response('bad request', { status: 400 }))
 
     const { POST } = await import('./route')
     const res = await POST(makePostRequest())

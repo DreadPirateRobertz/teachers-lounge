@@ -107,7 +107,11 @@ describe('POST /api/chat — tutoring service proxy', () => {
 
   it('forwards Authorization from cookie to tutoring service', async () => {
     let capturedHeaders: Record<string, string> = {}
-    const fakeStream = new ReadableStream({ start(c) { c.close() } })
+    const fakeStream = new ReadableStream({
+      start(c) {
+        c.close()
+      },
+    })
     global.fetch = jest.fn().mockImplementation((_url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>
       return Promise.resolve(new Response(fakeStream, { status: 200 }))

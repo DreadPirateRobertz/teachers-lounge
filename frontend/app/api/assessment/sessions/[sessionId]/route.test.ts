@@ -155,10 +155,7 @@ describe('POST /api/assessment/sessions/[sessionId]', () => {
     })
 
     const { POST } = await import('./route')
-    await POST(
-      makeRequest({ method: 'POST', token: MOCK_TOKEN }),
-      makeParams('sess-42'),
-    )
+    await POST(makeRequest({ method: 'POST', token: MOCK_TOKEN }), makeParams('sess-42'))
 
     expect(capturedHeaders['Authorization']).toBe(`Bearer ${MOCK_TOKEN}`)
   })
@@ -172,10 +169,7 @@ describe('POST /api/assessment/sessions/[sessionId]', () => {
     )
 
     const { POST } = await import('./route')
-    const res = await POST(
-      makeRequest({ method: 'POST', body: {} }),
-      makeParams('sess-42'),
-    )
+    const res = await POST(makeRequest({ method: 'POST', body: {} }), makeParams('sess-42'))
     expect(res.status).toBe(422)
   })
 })

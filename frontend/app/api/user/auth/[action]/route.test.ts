@@ -6,11 +6,7 @@ import { NextRequest } from 'next/server'
 
 const MOCK_TOKEN = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1c2VyLTEifQ.sig'
 
-function makeRequest(opts: {
-  action: string
-  body?: unknown
-  cookie?: string
-}): NextRequest {
+function makeRequest(opts: { action: string; body?: unknown; cookie?: string }): NextRequest {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
   if (opts.cookie) {
     headers['Cookie'] = opts.cookie

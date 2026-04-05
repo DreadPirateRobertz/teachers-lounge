@@ -27,7 +27,10 @@ function makeRequest(opts: {
   }`
 
   const formData = new FormData()
-  formData.append('file', opts.file ?? new File(['content'], 'test.pdf', { type: 'application/pdf' }))
+  formData.append(
+    'file',
+    opts.file ?? new File(['content'], 'test.pdf', { type: 'application/pdf' }),
+  )
 
   return new NextRequest(url, { method: 'POST', headers, body: formData })
 }
@@ -120,10 +123,10 @@ describe('POST /api/materials/upload — ingestion service proxy', () => {
       capturedUrl = url
       capturedHeaders = init.headers as Record<string, string>
       return Promise.resolve(
-        new Response(
-          JSON.stringify({ job_id: 'job-x', material_id: 'mat-x', status: 'pending' }),
-          { status: 200, headers: { 'Content-Type': 'application/json' } },
-        ),
+        new Response(JSON.stringify({ job_id: 'job-x', material_id: 'mat-x', status: 'pending' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
       )
     })
 
