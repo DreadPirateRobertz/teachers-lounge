@@ -2,7 +2,7 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -177,3 +177,65 @@ class InteractionQuality(Base):
     score_grounding: Mapped[int | None] = mapped_column(Integer, nullable=True)   # 1–5
     judged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     judge_model: Mapped[str] = mapped_column(String(64), nullable=False, default="claude-haiku-4-5-20251001")
+
+
+# ── Student Knowledge Model — learning profiles + misconceptions ───────────────
+
+class LearningProfile(Base):
+    """Per-student Felder-Silverman learning-style dials stored in Postgres.
+
+    Four bipolar dimensions in [-1.0, 1.0]:
+      active_reflective:  -1=active,     +1=reflective
+      sensing_intuitive:  -1=sensing,    +1=intuitive
+      visual_verbal:      -1=visual,     +1=verbal
+      sequential_global:  -1=sequential, +1=global
+    """
+
+    __tablename__ = "learning_profiles"
+
+    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    active_reflective: Mapped[float] = mapped_column(Float, default=0.0)
+    sensing_intuitive: Mapped[float] = mapped_column(Float, default=0.0)
+    visual_verbal: Mapped[float] = mapped_column(Float, default=0.0)
+    sequential_global: Mapped[float] = mapped_column(Float, default=0.0)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+
+
+class ExplanationPreference(Base):
+    """Log of which explanation types helped a student understand a concept.
+
+    Accumulated from interaction signals; used by the tutor to personalise
+    future explanations for the same concept.
+    """
+
+    __tablename__ = "explanation_preferences"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    concept_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("concepts.id", ondelete="CASCADE"), nullable=False
+    )
+    explanation_type: Mapped[str] = mapped_column(String(50), nullable=False)
+    helpful: Mapped[bool] = mapped_column(Boolean, nullable=False)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+
+
+class Misconception(Base):
+    """Tracked student error with recency-weighted confidence.
+
+    confidence decays over time in application logic (exponential decay).
+    resolved=True dismisses the entry from the active misconceptions list.
+    """
+
+    __tablename__ = "misconceptions"
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
+    concept_id: Mapped[UUID] = mapped_column(
+        UUID(as_uuid=True), ForeignKey("concepts.id", ondelete="CASCADE"), nullable=False
+    )
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, default=1.0)
+    recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    resolved: Mapped[bool] = mapped_column(Boolean, default=False)
