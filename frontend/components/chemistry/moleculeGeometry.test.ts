@@ -113,7 +113,8 @@ describe('MOLECULES', () => {
     for (let axis = 0; axis < 3; axis++) {
       expect(typeof atom.position[axis]).toBe('number')
     }
-    void moleculeName; void index // suppress unused-var lint
+    void moleculeName
+    void index // suppress unused-var lint
   }
 
   /**
@@ -124,12 +125,7 @@ describe('MOLECULES', () => {
    * @param index - Bond index within the molecule.
    * @param atomCount - Total atoms in the molecule (to range-check indices).
    */
-  function assertBondShape(
-    bond: Bond,
-    moleculeName: string,
-    index: number,
-    atomCount: number,
-  ) {
+  function assertBondShape(bond: Bond, moleculeName: string, index: number, atomCount: number) {
     expect(typeof bond.from).toBe('number')
     expect(typeof bond.to).toBe('number')
     expect(bond.from).toBeGreaterThanOrEqual(0)
@@ -137,7 +133,8 @@ describe('MOLECULES', () => {
     expect(bond.to).toBeGreaterThanOrEqual(0)
     expect(bond.to).toBeLessThan(atomCount)
     expect([1, 2, 3]).toContain(bond.order)
-    void moleculeName; void index // suppress unused-var lint
+    void moleculeName
+    void index // suppress unused-var lint
   }
 
   it('exports the expected molecule keys', () => {
@@ -170,9 +167,7 @@ describe('MOLECULES', () => {
 
   it('every bond has valid from/to indices and a bond order of 1, 2, or 3', () => {
     for (const [key, mol] of Object.entries(MOLECULES)) {
-      mol.bonds.forEach((bond, i) =>
-        assertBondShape(bond, key, i, mol.atoms.length),
-      )
+      mol.bonds.forEach((bond, i) => assertBondShape(bond, key, i, mol.atoms.length))
     }
   })
 

@@ -74,9 +74,7 @@ describe('MaterialUpload', () => {
    * @returns The RTL render result.
    */
   function setup() {
-    return render(
-      <MaterialUpload courseId={courseId} onUploadComplete={onUploadComplete} />,
-    )
+    return render(<MaterialUpload courseId={courseId} onUploadComplete={onUploadComplete} />)
   }
 
   it('renders drop zone with browse text', () => {
@@ -98,9 +96,7 @@ describe('MaterialUpload', () => {
     const badFile = makeFile('notes.txt', 'text/plain')
     fireEvent.change(input, { target: { files: [badFile] } })
 
-    expect(
-      screen.getByText(/unsupported type/i),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/unsupported type/i)).toBeInTheDocument()
 
     // The upload button must NOT appear for an unsupported file.
     expect(screen.queryByRole('button', { name: /upload material/i })).not.toBeInTheDocument()

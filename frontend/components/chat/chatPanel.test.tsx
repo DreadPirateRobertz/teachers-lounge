@@ -39,11 +39,7 @@ jest.mock('./ChatInput', () => ({
     disabled?: boolean
   }) => (
     <>
-      <input
-        data-testid="chat-input"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-      />
+      <input data-testid="chat-input" value={value} onChange={(e) => onChange(e.target.value)} />
       <button data-testid="send-btn" onClick={onSubmit}>
         Send
       </button>
@@ -111,9 +107,7 @@ function makeHangingFetch(): { fetch: jest.Mock; resolve: () => void } {
         status: 200,
         body: new ReadableStream({
           start(controller) {
-            controller.enqueue(
-              new TextEncoder().encode('data: {"type":"delta","content":"Hi"}\n'),
-            )
+            controller.enqueue(new TextEncoder().encode('data: {"type":"delta","content":"Hi"}\n'))
             controller.close()
           },
         }),

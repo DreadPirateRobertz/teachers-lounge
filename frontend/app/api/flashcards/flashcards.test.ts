@@ -85,9 +85,7 @@ function mockUpstreamResponse(payload: object, status = 200) {
 
 describe('GET /api/flashcards', () => {
   it('proxies to /gaming/flashcards and passes Authorization from cookie', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockUpstreamResponse({ flashcards: [] }),
-    )
+    mockFetch.mockResolvedValueOnce(mockUpstreamResponse({ flashcards: [] }))
 
     const req = makeRequest('GET', { token: 'my-secret-token' })
     const res = await GET(req)
@@ -106,9 +104,7 @@ describe('GET /api/flashcards', () => {
   })
 
   it('forwards upstream 401 back to the caller', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockUpstreamResponse({ detail: 'Unauthorized' }, 401),
-    )
+    mockFetch.mockResolvedValueOnce(mockUpstreamResponse({ detail: 'Unauthorized' }, 401))
 
     const req = makeRequest('GET')
     const res = await GET(req)
@@ -188,9 +184,7 @@ describe('POST /api/flashcards', () => {
   })
 
   it('forwards upstream error status codes through to the caller', async () => {
-    mockFetch.mockResolvedValueOnce(
-      mockUpstreamResponse({ detail: 'Bad request' }, 422),
-    )
+    mockFetch.mockResolvedValueOnce(mockUpstreamResponse({ detail: 'Bad request' }, 422))
 
     const req = makeRequest('POST', { body: '{"bad": true}' })
     const res = await POST(req)

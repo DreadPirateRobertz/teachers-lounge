@@ -34,7 +34,12 @@ jest.mock('@/lib/auth', () => ({
   /** Mock register to resolve successfully by default. */
   register: jest.fn().mockResolvedValue({
     access_token: 'token',
-    user: { id: '1', email: 'test@test.com', display_name: 'ChemWizard', subscription_status: 'trial' },
+    user: {
+      id: '1',
+      email: 'test@test.com',
+      display_name: 'ChemWizard',
+      subscription_status: 'trial',
+    },
   }),
 }))
 
