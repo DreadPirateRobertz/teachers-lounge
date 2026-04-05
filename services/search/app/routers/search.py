@@ -1,6 +1,6 @@
 import asyncio
 import uuid
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query
 
@@ -31,11 +31,8 @@ async def search(
         Query(max_length=200, description="Filter results to a specific section within a chapter"),
     ] = None,
     content_type: Annotated[
-        str | None,
-        Query(
-            max_length=50,
-            description="Filter by content type: text, table, equation, figure, quiz",
-        ),
+        Literal["text", "table", "equation", "figure", "quiz"] | None,
+        Query(description="Filter by content type: text, table, equation, figure, quiz"),
     ] = None,
     limit: Annotated[
         int,
@@ -76,7 +73,7 @@ async def _run_search(
     limit: int,
     chapter: str | None = None,
     section: str | None = None,
-    content_type: str | None = None,
+    content_type: Literal["text", "table", "equation", "figure", "quiz"] | None = None,
 ) -> tuple[list[float], list, list]:
     """Run embedding, dense search, and sparse search concurrently.
 

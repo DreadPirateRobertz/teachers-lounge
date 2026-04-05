@@ -68,6 +68,7 @@ func (h *Handler) GenerateFlashcards(w http.ResponseWriter, r *http.Request) {
 
 	sessionID := req.SessionID
 	var created []*model.Flashcard
+	var createErrors int
 
 	for _, qID := range session.QuestionIDs {
 		if existingByQuestion[qID] {
@@ -104,11 +105,19 @@ func (h *Handler) GenerateFlashcards(w http.ResponseWriter, r *http.Request) {
 
 		saved, err := h.store.CreateFlashcard(r.Context(), card)
 		if err != nil {
-			h.logger.Error("generate flashcards: create", zap.String("question_id", qID), zap.Error(err))
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
+			// Log and continue: already-created cards remain accessible and the
+			// endpoint is idempotent, so the caller can retry to create the rest.
+			h.logger.Error("generate flashcards: create skipped", zap.String("question_id", qID), zap.Error(err))
+			createErrors++
+			continue
 		}
 		created = append(created, saved)
+	}
+
+	// If every card failed to create, report an error rather than a misleading 201.
+	if createErrors > 0 && len(created) == 0 {
+		writeError(w, http.StatusInternalServerError, "failed to create flashcards")
+		return
 	}
 
 	writeJSON(w, http.StatusCreated, model.GenerateFlashcardsResponse{
@@ -275,7 +284,9 @@ func (h *Handler) ExportAnki(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Disposition", `attachment; filename="teacherslounge-flashcards.apkg"`)
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(apkgBytes)))
 	w.WriteHeader(http.StatusOK)
-	w.Write(apkgBytes)
+	if _, err := w.Write(apkgBytes); err != nil {
+		h.logger.Error("export anki: write response", zap.String("user_id", callerID), zap.Error(err))
+	}
 }
 
 // correctOptionText finds the text of the correct answer option in a question.

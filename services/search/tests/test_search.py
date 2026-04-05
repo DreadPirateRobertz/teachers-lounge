@@ -270,3 +270,11 @@ class TestContentTypeFiltering:
                     f"/v1/search?q=entropy&course_id={COURSE_ID}&content_type={ct}"
                 )
                 assert resp.status_code == 200, f"expected 200 for content_type={ct}"
+
+    def test_invalid_content_type_rejected(self, client):
+        """Free-form content_type strings outside the allowlist return 422."""
+        for bad in ("video", "audio", "'; DROP TABLE chunks; --", ""):
+            resp = client.get(
+                f"/v1/search?q=entropy&course_id={COURSE_ID}&content_type={bad}"
+            )
+            assert resp.status_code == 422, f"expected 422 for content_type={bad!r}"
