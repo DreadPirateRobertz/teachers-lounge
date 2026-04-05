@@ -59,6 +59,14 @@ export default function useSwipeGesture({
   const startX = useRef<number | null>(null)
   const [swipeDirection, setSwipeDirection] = useState<SwipeDirection | null>(null)
 
+  // Store onSwipe in a ref so the touch-end callback never needs it in its
+  // dependency array.  This keeps onTouchEnd stable even when the consumer
+  // passes an inline arrow (e.g. BossBattleClient's options literal), which
+  // would otherwise cause the callback to be recreated on every render and
+  // defeat useCallback's purpose on low-end mobile devices.
+  const onSwipeRef = useRef(onSwipe)
+  onSwipeRef.current = onSwipe
+
   const onTouchStart = useCallback((e: TouchEvent | React.TouchEvent) => {
     const touch = e.changedTouches[0]
     startX.current = touch.clientX
@@ -75,9 +83,10 @@ export default function useSwipeGesture({
 
       const direction = delta > 0 ? SwipeDirection.Right : SwipeDirection.Left
       setSwipeDirection(direction)
-      onSwipe(direction)
+      onSwipeRef.current(direction)
     },
-    [onSwipe, threshold],
+    // threshold is intentionally the only dep; onSwipeRef is stable by construction.
+    [threshold],
   )
 
   const reset = useCallback(() => {
