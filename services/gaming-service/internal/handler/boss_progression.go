@@ -73,9 +73,7 @@ func (h *Handler) GetBossProgression(w http.ResponseWriter, r *http.Request) {
 
 	// Sort catalog by ascending tier for consistent trail ordering.
 	sorted := make([]*boss.Def, 0, len(boss.Catalog))
-	for _, def := range boss.Catalog {
-		sorted = append(sorted, def)
-	}
+	sorted = append(sorted, boss.Catalog...)
 	sort.Slice(sorted, func(i, j int) bool {
 		return sorted[i].Tier < sorted[j].Tier
 	})
