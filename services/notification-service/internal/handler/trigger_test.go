@@ -11,7 +11,6 @@ import (
 
 	"go.uber.org/zap"
 
-	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/email"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/event"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/handler"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/model"
