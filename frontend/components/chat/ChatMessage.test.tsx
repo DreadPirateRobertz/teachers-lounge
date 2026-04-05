@@ -98,8 +98,10 @@ describe('ChatMessage', () => {
 
   it('renders text around [molecule:...] tag unchanged', () => {
     render(<ChatMessage message={msg({ content: 'Before [molecule:benzene] after' })} />)
-    expect(screen.getByText('Before ')).toBeInTheDocument()
-    expect(screen.getByText(' after')).toBeInTheDocument()
+    // Text is rendered inside nested spans; use regex to match across
+    // element boundaries after whitespace normalization.
+    expect(screen.getByText(/Before/)).toBeInTheDocument()
+    expect(screen.getByText(/after/)).toBeInTheDocument()
   })
 
   it('handles multiple molecule tags in one message', () => {
