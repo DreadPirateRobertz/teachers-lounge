@@ -5,7 +5,8 @@ Phase 2: OpenAI API with in-process LRU cache for repeated queries.
 Phase 4+: migrate to self-hosted e5-large-v2. See docs/embedding-model-decision.md.
 
 When OPENAI_API_KEY is not set (dev/test without API access), falls back to a
-random 1024-d unit vector so the service still boots and existing tests pass.
+random unit vector of dimension settings.embedding_dim so the service still
+boots and existing tests pass.
 """
 import hashlib
 import logging
@@ -36,11 +37,12 @@ def _random_unit_vector(dim: int) -> list[float]:
 
 
 async def embed_query(query: str) -> list[float]:
-    """
-    Embed query text into a 1024-d unit vector.
+    """Embed query text into a dense unit vector of dimension settings.embedding_dim.
 
-    Uses OpenAI text-embedding-3-large when OPENAI_API_KEY is configured.
-    Falls back to a random unit vector for local dev / CI without API access.
+    Uses OpenAI text-embedding-3-large when OPENAI_API_KEY is configured,
+    requesting exactly settings.embedding_dim dimensions (default 1536).
+    Falls back to a random unit vector of the same dimension for local dev /
+    CI without API access.
     Results are cached in-process (up to _CACHE_MAX entries) to avoid
     redundant API calls for repeated questions.
     """

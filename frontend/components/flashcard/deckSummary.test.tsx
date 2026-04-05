@@ -55,7 +55,12 @@ describe('DeckSummary', () => {
   it('calls onExportAnki when export button is clicked', () => {
     const onExportAnki = jest.fn()
     render(
-      <DeckSummary total={10} dueCount={0} onStartReview={jest.fn()} onExportAnki={onExportAnki} />,
+      <DeckSummary
+        total={10}
+        dueCount={0}
+        onStartReview={jest.fn()}
+        onExportAnki={onExportAnki}
+      />,
     )
     fireEvent.click(screen.getByRole('button', { name: /export to anki/i }))
     expect(onExportAnki).toHaveBeenCalledTimes(1)

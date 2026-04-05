@@ -30,6 +30,7 @@ func (s *Store) CreateFlashcard(ctx context.Context, card *model.Flashcard) (*mo
 }
 
 // GetFlashcard retrieves one flashcard by its UUID.
+// Returns (nil, nil) when no row is found; other errors indicate a database failure.
 func (s *Store) GetFlashcard(ctx context.Context, id string) (*model.Flashcard, error) {
 	const q = `
 		SELECT id, user_id, question_id, session_id, front, back, source, topic, course_id,
@@ -39,7 +40,14 @@ func (s *Store) GetFlashcard(ctx context.Context, id string) (*model.Flashcard, 
 		WHERE id = $1`
 
 	row := s.db.QueryRow(ctx, q, id)
-	return scanFlashcard(row)
+	card, err := scanFlashcard(row)
+	if err != nil {
+		if errors.Is(err, pgx.ErrNoRows) {
+			return nil, nil
+		}
+		return nil, err
+	}
+	return card, nil
 }
 
 // ListFlashcards returns all flashcards for a user, newest first.

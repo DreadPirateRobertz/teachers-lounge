@@ -101,7 +101,9 @@ function CardTile({ card }: { card: Flashcard }) {
             {card.topic}
           </span>
         )}
-        <span className="text-[10px] text-text-dim">Interval: {card.interval_days}d</span>
+        <span className="text-[10px] text-text-dim">
+          Interval: {card.interval_days}d
+        </span>
         <span className="text-[10px] text-text-dim ml-auto">
           Next: {formatDate(card.next_review_at)}
         </span>

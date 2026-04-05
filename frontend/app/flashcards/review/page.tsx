@@ -5,31 +5,6 @@ import Link from 'next/link'
 import FlashCard from '@/components/flashcard/FlashCard'
 import type { Flashcard } from '@/components/flashcard/FlashCard'
 
-// ── JWT helper ───────────────────────────────────────────────────────────────
-
-/**
- * Decodes the payload of a JWT token without verification.
- * Returns an empty object if parsing fails.
- */
-function parseJwt(token: string): Record<string, unknown> {
-  try {
-    return JSON.parse(atob(token.split('.')[1]))
-  } catch {
-    return {}
-  }
-}
-
-/**
- * Reads the tl_token cookie from document.cookie and extracts the `sub` claim
- * as the user ID. Returns null if the cookie is absent or invalid.
- */
-function getUserIdFromCookie(): string | null {
-  const match = document.cookie.match(/(?:^|;\s*)tl_token=([^;]+)/)
-  if (!match) return null
-  const claims = parseJwt(decodeURIComponent(match[1]))
-  return (claims.sub as string) ?? null
-}
-
 // ── Types ────────────────────────────────────────────────────────────────────
 
 /** SM-2 quality rating. */
@@ -73,7 +48,6 @@ function LoadingSkeleton() {
  * When all cards are done a completion screen is shown.
  */
 export default function ReviewPage() {
-  const [userId, setUserId] = useState<string | null>(null)
   const [cards, setCards] = useState<Flashcard[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -85,8 +59,6 @@ export default function ReviewPage() {
 
   /** Load due cards on mount. */
   const loadDueCards = useCallback(async () => {
-    const uid = getUserIdFromCookie()
-    setUserId(uid)
     try {
       const res = await fetch('/api/flashcards/due', { cache: 'no-store' })
       if (!res.ok) throw new Error(`HTTP ${res.status}`)
@@ -131,7 +103,7 @@ export default function ReviewPage() {
         const res = await fetch(`/api/flashcards/${card.id}/review`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ user_id: userId, quality }),
+          body: JSON.stringify({ quality }),
         })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
       } catch (e) {
@@ -139,7 +111,7 @@ export default function ReviewPage() {
         setRateError(e instanceof Error ? e.message : 'Review submission failed')
       }
     },
-    [cards, currentIndex, reviewedCount, userId],
+    [cards, currentIndex, reviewedCount],
   )
 
   /** Handles the reveal action. */
@@ -160,7 +132,9 @@ export default function ReviewPage() {
           >
             ← Deck
           </Link>
-          <h1 className="text-sm font-semibold text-text-bright tracking-wide uppercase">Review</h1>
+          <h1 className="text-sm font-semibold text-text-bright tracking-wide uppercase">
+            Review
+          </h1>
           <div className="w-16" />
         </div>
 
@@ -198,7 +172,8 @@ export default function ReviewPage() {
             <div className="text-3xl mb-3">🎉</div>
             <h2 className="text-base font-semibold text-text-bright mb-2">Session complete!</h2>
             <p className="text-xs text-text-dim mb-5">
-              Reviewed <span className="font-mono font-bold text-neon-green">{reviewedCount}</span>{' '}
+              Reviewed{' '}
+              <span className="font-mono font-bold text-neon-green">{reviewedCount}</span>{' '}
               {reviewedCount === 1 ? 'card' : 'cards'}.
             </p>
             <Link

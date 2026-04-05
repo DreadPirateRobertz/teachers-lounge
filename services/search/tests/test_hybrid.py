@@ -1,4 +1,4 @@
-"""Tests for hybrid RRF combiner, re-ranker stub, and embedder."""
+"""Tests for hybrid RRF combiner, re-ranker stub, embedder, and BM25 tokenizer."""
 import math
 import uuid
 from unittest.mock import AsyncMock, patch
@@ -7,6 +7,7 @@ import pytest
 
 from app.models import ChunkResult
 from app.services.hybrid import combine_dense_sparse
+from app.services.qdrant import _tokenize
 
 
 def _chunk(score: float, chunk_id: uuid.UUID | None = None) -> ChunkResult:
@@ -26,16 +27,67 @@ def _chunk(score: float, chunk_id: uuid.UUID | None = None) -> ChunkResult:
 class TestEmbedderStub:
     @pytest.mark.asyncio
     async def test_returns_correct_dimension(self):
+        """Stub embedding dimension matches settings.embedding_dim (default 1536)."""
         from app.services.embedder import embed_query
+        from app.config import settings
         vec = await embed_query("what is entropy?")
-        assert len(vec) == 1024
+        assert len(vec) == settings.embedding_dim
 
     @pytest.mark.asyncio
     async def test_returns_unit_vector(self):
+        """Stub embedding is a unit vector (L2 norm ≈ 1.0)."""
         from app.services.embedder import embed_query
         vec = await embed_query("test query")
         norm = math.sqrt(sum(x * x for x in vec))
         assert abs(norm - 1.0) < 1e-6
+
+
+# ---------------------------------------------------------------------------
+# BM25 tokenizer
+# ---------------------------------------------------------------------------
+
+class TestTokenize:
+    def test_empty_string_returns_empty(self):
+        """Non-alphabetic-only strings that produce no tokens return {}."""
+        assert _tokenize("") == {}
+
+    def test_punctuation_only_returns_empty(self):
+        """Strings with no alphanumeric tokens return {}."""
+        assert _tokenize("!!! ???") == {}
+
+    def test_single_token_has_tf_one(self):
+        """A single unique token has normalized TF = 1.0."""
+        result = _tokenize("entropy")
+        assert len(result) == 1
+        assert abs(list(result.values())[0] - 1.0) < 1e-9
+
+    def test_tfs_sum_to_one(self):
+        """All TF weights for a multi-token text sum to 1.0 (plus any collision sums)."""
+        result = _tokenize("what is entropy in thermodynamics")
+        assert abs(sum(result.values()) - 1.0) < 1e-6
+
+    def test_case_insensitive(self):
+        """Upper and lower case produce identical sparse vectors."""
+        assert _tokenize("Entropy") == _tokenize("entropy")
+
+    def test_repeated_token_increases_weight(self):
+        """A token repeated more gets a higher TF weight than a single-occurrence token."""
+        import hashlib
+        result = _tokenize("a a a b")
+        a_idx = int(hashlib.sha1(b"a").hexdigest()[:8], 16) % 30_000
+        b_idx = int(hashlib.sha1(b"b").hexdigest()[:8], 16) % 30_000
+        if a_idx != b_idx:  # skip if hash collision
+            assert result[a_idx] > result[b_idx]
+
+    def test_deterministic(self):
+        """Same input always produces the same sparse vector."""
+        assert _tokenize("machine learning") == _tokenize("machine learning")
+
+    def test_indices_within_vocab_size(self):
+        """All token indices are in [0, 30000)."""
+        result = _tokenize("the quick brown fox jumps over the lazy dog")
+        for idx in result:
+            assert 0 <= idx < 30_000
 
 
 # ---------------------------------------------------------------------------

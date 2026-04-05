@@ -40,7 +40,6 @@ const ankiDconf = `{"1":{"id":1,"mod":0,"name":"Default","usn":0,"maxTaken":60,"
 // state is left at Anki defaults; Anki will schedule cards from scratch.
 func BuildAPKG(deckName string, cards []AnkiCard) ([]byte, error) {
 	now := time.Now().Unix()
-	nowMs := time.Now().UnixMilli()
 
 	// Use a temp file path so we can VACUUM INTO it and read the raw bytes.
 	tmpPath := fmt.Sprintf("/tmp/anki_%d.db", time.Now().UnixNano())
@@ -87,8 +86,8 @@ func BuildAPKG(deckName string, cards []AnkiCard) ([]byte, error) {
 		VALUES (?, ?, 1, 0, ?, 0, 0, 0, ?, 0, 2500, 0, 0, 0, 0, 0, 0, '')`
 
 	for i, card := range cards {
-		noteID := nowMs + int64(i)
-		cardID := nowMs + int64(len(cards)) + int64(i)
+		noteID := noteIDFromUUID(card.ID)
+		cardID := cardIDFromUUID(card.ID)
 		flds := card.Front + "\x1f" + card.Back
 		csum := fieldChecksum(card.Front)
 
@@ -267,6 +266,25 @@ func buildDecksJSON(deckName string, now int64) (string, error) {
 		return "", err
 	}
 	return string(b), nil
+}
+
+// noteIDFromUUID derives a stable positive int64 for an Anki note row from a card UUID.
+// Using sha1 instead of a timestamp+offset avoids ID collisions for decks of any size
+// and makes exports idempotent (same card always gets the same Anki ID).
+func noteIDFromUUID(uuid string) int64 {
+	h := sha1.Sum([]byte("note:" + uuid))
+	v := int64(uint64(h[0])<<56 | uint64(h[1])<<48 | uint64(h[2])<<40 | uint64(h[3])<<32 |
+		uint64(h[4])<<24 | uint64(h[5])<<16 | uint64(h[6])<<8 | uint64(h[7]))
+	return v & 0x7fffffffffffffff
+}
+
+// cardIDFromUUID derives a stable positive int64 for an Anki card row from a card UUID.
+// The "card:" salt ensures card IDs are distinct from note IDs for the same UUID.
+func cardIDFromUUID(uuid string) int64 {
+	h := sha1.Sum([]byte("card:" + uuid))
+	v := int64(uint64(h[0])<<56 | uint64(h[1])<<48 | uint64(h[2])<<40 | uint64(h[3])<<32 |
+		uint64(h[4])<<24 | uint64(h[5])<<16 | uint64(h[6])<<8 | uint64(h[7]))
+	return v & 0x7fffffffffffffff
 }
 
 // fieldChecksum returns the first 8 decimal digits of the SHA-1 hash of the
