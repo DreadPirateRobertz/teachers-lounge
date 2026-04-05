@@ -10,13 +10,21 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/redis/go-redis/v9"
 	"github.com/teacherslounge/gaming-service/internal/model"
 	"github.com/teacherslounge/gaming-service/internal/quest"
 	"github.com/teacherslounge/gaming-service/internal/rival"
 	"github.com/teacherslounge/gaming-service/internal/xp"
 )
+
+// DB is the subset of *pgxpool.Pool that the store uses.
+// Defined as an interface so tests can substitute a lightweight fake
+// without spinning up a real Postgres connection.
+type DB interface {
+	QueryRow(ctx context.Context, sql string, args ...any) pgx.Row
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
 
 const (
 	streakKeyPrefix   = "streak:"
@@ -32,12 +40,13 @@ const (
 
 // Store holds Postgres and Redis clients.
 type Store struct {
-	db  *pgxpool.Pool
+	db  DB
 	rdb redis.Cmdable
 }
 
 // New creates a Store with the given Postgres pool and Redis client.
-func New(db *pgxpool.Pool, rdb redis.Cmdable) *Store {
+// db must implement the DB interface; *pgxpool.Pool satisfies it.
+func New(db DB, rdb redis.Cmdable) *Store {
 	return &Store{db: db, rdb: rdb}
 }
 
