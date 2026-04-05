@@ -10,7 +10,7 @@ describe('buildCsp', () => {
     const csp = buildCsp()
     expect(csp).toContain("default-src 'self'")
     expect(csp).toContain("frame-ancestors 'none'")
-    expect(csp).toContain('upgrade-insecure-requests')
+    expect(csp).not.toContain('upgrade-insecure-requests')
     expect(csp).toContain("form-action 'self'")
   })
 
