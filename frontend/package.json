@@ -30,6 +30,7 @@
     "@types/react-dom": "^19",
     "@types/three": "^0.183.1",
     "autoprefixer": "^10.4.20",
+    "jest-canvas-mock": "^2.5.2",
     "eslint": "^9",
     "eslint-config-next": "15.2.4",
     "jest": "^30.3.0",
