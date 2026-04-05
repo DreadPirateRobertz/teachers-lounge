@@ -26,7 +26,7 @@ from __future__ import annotations
 
 import math
 from datetime import datetime, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
@@ -252,6 +252,7 @@ async def log_misconception(
         return existing
 
     m = Misconception(
+        id=uuid4(),
         user_id=user_id,
         concept_id=concept_id,
         description=description,
