@@ -196,7 +196,7 @@ func (m *mockStore) UpdateSubscriptionByUserID(_ context.Context, _ uuid.UUID, _
 }
 
 func (m *mockStore) WriteAuditLog(_ context.Context, _ store.AuditLogParams) error { return nil }
-func (m *mockStore) QueryAuditLog(_ context.Context, _ store.AuditLogQueryParams) ([]*models.AuditLogEntry, error) {
+func (m *mockStore) QueryAuditLog(_ context.Context, _ store.QueryAuditLogParams) ([]*models.AuditEntry, error) {
 	return nil, nil
 }
 func (m *mockStore) CreateExportJob(_ context.Context, _ uuid.UUID) (uuid.UUID, error) {
