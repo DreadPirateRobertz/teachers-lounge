@@ -15,10 +15,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-# Pre-install build tools + modern onnx wheel to prevent pip from backtracking
-# to old onnx source-only versions whose sdists lack requirements.txt.
+# Pre-install build tools and modern onnx/onnxruntime wheels.
+# A pip constraints file forces onnx>=1.16.0 even when transitive deps (e.g.
+# effdet via unstructured-inference) request older sdist-only versions whose
+# setup.py lacks requirements.txt and breaks the build.
 RUN pip install --no-cache-dir setuptools wheel grpcio-tools "onnx>=1.16.0" "onnxruntime>=1.18.0"
-RUN pip install --no-cache-dir --no-build-isolation --prefer-binary -r requirements.txt
+RUN printf "onnx>=1.16.0\nonnxruntime>=1.18.0\n" > /tmp/constraints.txt
+RUN pip install --no-cache-dir --no-build-isolation --prefer-binary \
+    -c /tmp/constraints.txt -r requirements.txt
 
 COPY app/ ./app/
 
