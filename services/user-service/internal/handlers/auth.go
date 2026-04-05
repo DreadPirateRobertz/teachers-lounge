@@ -322,11 +322,12 @@ func validateRegisterRequest(req *models.RegisterRequest) error {
 
 func toUserResponse(user *models.User, sub *models.Subscription) *models.UserResponse {
 	resp := &models.UserResponse{
-		ID:          user.ID,
-		Email:       user.Email,
-		DisplayName: user.DisplayName,
-		AvatarEmoji: user.AvatarEmoji,
-		AccountType: user.AccountType,
+		ID:                     user.ID,
+		Email:                  user.Email,
+		DisplayName:            user.DisplayName,
+		AvatarEmoji:            user.AvatarEmoji,
+		AccountType:            user.AccountType,
+		HasCompletedOnboarding: user.HasCompletedOnboarding,
 	}
 	if sub != nil {
 		ss := &models.SubscriptionSummary{

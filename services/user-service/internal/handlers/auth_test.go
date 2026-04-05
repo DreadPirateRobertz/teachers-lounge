@@ -256,6 +256,19 @@ func (m *mockStore) ListClassMaterials(_ context.Context, _ uuid.UUID) ([]*model
 	return nil, nil
 }
 
+func (m *mockStore) CompleteOnboarding(_ context.Context, id uuid.UUID) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	u, ok := m.byID[id]
+	if !ok {
+		return store.ErrNotFound
+	}
+	u.HasCompletedOnboarding = true
+	now := time.Now()
+	u.OnboardedAt = &now
+	return nil
+}
+
 // ============================================================
 // MOCK CACHE
 // ============================================================

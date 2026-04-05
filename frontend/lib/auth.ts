@@ -6,7 +6,9 @@ export interface AuthResponse {
     id: string
     email: string
     display_name: string
+    avatar_emoji: string
     subscription_status: string
+    has_completed_onboarding: boolean
   }
 }
 

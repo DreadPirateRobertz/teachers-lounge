@@ -15,6 +15,7 @@ type Storer interface {
 	GetUserByID(ctx context.Context, id uuid.UUID) (*models.User, error)
 	UpdateUser(ctx context.Context, id uuid.UUID, p UpdateUserParams) (*models.User, error)
 	DeleteUser(ctx context.Context, id uuid.UUID) error
+	CompleteOnboarding(ctx context.Context, userID uuid.UUID) error
 
 	InitLearningProfile(ctx context.Context, userID uuid.UUID) error
 	InitGamingProfile(ctx context.Context, userID uuid.UUID) error
