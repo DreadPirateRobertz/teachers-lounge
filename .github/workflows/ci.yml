@@ -183,9 +183,9 @@ jobs:
         with:
           python-version: '3.13'
           cache: pip
-      - run: pip install setuptools wheel --quiet
+      - run: pip install setuptools wheel grpcio-tools --quiet
         if: steps.check.outputs.exists == 'true'
-      - run: pip install -r requirements.txt --quiet
+      - run: pip install --no-build-isolation -r requirements.txt --quiet
         if: steps.check.outputs.exists == 'true'
       - run: pip install ruff pytest pytest-asyncio --quiet
         if: steps.check.outputs.exists == 'true'
