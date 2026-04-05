@@ -89,7 +89,9 @@ def _override_auth(user_id: UUID = STUDENT_ID):
 
 def _override_db(mock_session):
     """Install DB override and return the session mock."""
-    app.dependency_overrides[get_db] = lambda: _fake_db_gen(mock_session)
+    async def _fake_db():
+        yield mock_session
+    app.dependency_overrides[get_db] = _fake_db
     return mock_session
 
 

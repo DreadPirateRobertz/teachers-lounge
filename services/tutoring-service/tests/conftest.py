@@ -5,6 +5,19 @@ import pytest
 
 from app.config import Settings, settings
 from app.gateway import reset_gateway_client
+from app.main import app
+
+
+@pytest.fixture(autouse=True)
+def disable_lifespan_events(monkeypatch):
+    """Prevent app startup/shutdown from attempting real DB connections in CI.
+
+    The startup handler calls engine.begin() to run Alembic metadata.create_all,
+    which requires a live PostgreSQL connection.  Tests that use AsyncClient with
+    ASGITransport trigger lifespan events, so we clear them here.
+    """
+    monkeypatch.setattr(app.router, "on_startup", [])
+    monkeypatch.setattr(app.router, "on_shutdown", [])
 
 
 @pytest.fixture()

@@ -288,7 +288,7 @@ func TestGenerateFlashcards_HappyPath(t *testing.T) {
 	}
 	h := newFlashcardHandler(s)
 
-	body, _ := json.Marshal(model.GenerateFlashcardsRequest{UserID: "u1", SessionID: "sess-1"})
+	body, _ := json.Marshal(model.GenerateFlashcardsRequest{SessionID: "sess-1"})
 	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/generate", bytes.NewBuffer(body))
 	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
 	rr := httptest.NewRecorder()
@@ -312,7 +312,7 @@ func TestGenerateFlashcards_MissingAuth(t *testing.T) {
 	s := &flashcardStore{}
 	h := newFlashcardHandler(s)
 
-	body, _ := json.Marshal(model.GenerateFlashcardsRequest{UserID: "u1", SessionID: "sess-1"})
+	body, _ := json.Marshal(model.GenerateFlashcardsRequest{SessionID: "sess-1"})
 	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/generate", bytes.NewBuffer(body))
 	rr := httptest.NewRecorder()
 
@@ -332,7 +332,7 @@ func TestGenerateFlashcards_SessionNotCompleted(t *testing.T) {
 	}
 	h := newFlashcardHandler(s)
 
-	body, _ := json.Marshal(model.GenerateFlashcardsRequest{UserID: "u1", SessionID: "sess-1"})
+	body, _ := json.Marshal(model.GenerateFlashcardsRequest{SessionID: "sess-1"})
 	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/generate", bytes.NewBuffer(body))
 	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
 	rr := httptest.NewRecorder()
@@ -362,7 +362,7 @@ func TestGenerateFlashcards_IdempotentSkipsExisting(t *testing.T) {
 	}
 	h := newFlashcardHandler(s)
 
-	body, _ := json.Marshal(model.GenerateFlashcardsRequest{UserID: "u1", SessionID: "sess-1"})
+	body, _ := json.Marshal(model.GenerateFlashcardsRequest{SessionID: "sess-1"})
 	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/generate", bytes.NewBuffer(body))
 	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
 	rr := httptest.NewRecorder()

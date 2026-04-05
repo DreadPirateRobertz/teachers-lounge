@@ -71,7 +71,7 @@ func TestGetAuditLog_EmptySliceWhenNoEntries(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 	var resp map[string]any
-	json.NewDecoder(rec.Body).Decode(&resp)
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
 	arr, _ := resp["entries"].([]any)
 	// JSON null decodes as nil; we expect an empty array (length 0)
 	if len(arr) != 0 {
