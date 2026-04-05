@@ -5,6 +5,15 @@ import React from 'react'
 import { render, screen } from '@testing-library/react'
 import ChatMessage, { type Message } from './ChatMessage'
 
+// MoleculeViewer is loaded via next/dynamic (ssr:false); render a stub so
+// tests run without WebGL.
+jest.mock('next/dynamic', () =>
+  (_loader: unknown, _opts?: unknown) =>
+    function DynamicStub() {
+      return null
+    },
+)
+
 function msg(overrides: Partial<Message> = {}): Message {
   return { id: '1', role: 'user', content: 'Hello', ...overrides }
 }
@@ -77,5 +86,80 @@ describe('ChatMessage', () => {
       <ChatMessage message={msg({ role: 'assistant', content: 'done', streaming: false })} />,
     )
     expect(container.querySelector('.typing-cursor')).toBeNull()
+  })
+
+  // ── Molecule viewer integration ────────────────────────────────────────
+
+  it('strips [molecule:...] tag — raw tag text not visible in DOM', () => {
+    render(
+      <ChatMessage message={msg({ content: 'Look at this [molecule:water]' })} />,
+    )
+    expect(screen.queryByText(/\[molecule:water\]/)).toBeNull()
+  })
+
+  it('renders text around [molecule:...] tag unchanged', () => {
+    render(
+      <ChatMessage message={msg({ content: 'Before [molecule:benzene] after' })} />,
+    )
+    expect(screen.getByText('Before ')).toBeInTheDocument()
+    expect(screen.getByText(' after')).toBeInTheDocument()
+  })
+
+  it('handles multiple molecule tags in one message', () => {
+    render(
+      <ChatMessage
+        message={msg({ content: '[molecule:water] and [molecule:co2]' })}
+      />,
+    )
+    expect(screen.queryByText(/\[molecule:/)).toBeNull()
+  })
+
+  it('renders plain text unchanged when no molecule tags present', () => {
+    render(<ChatMessage message={msg({ content: 'No special tags here.' })} />)
+    expect(screen.getByText('No special tags here.')).toBeInTheDocument()
+  })
+
+  // ── Diagram attachments (Phase 6 CLIP) ────────────────────────────────
+
+  it('renders diagram caption for assistant messages with diagrams', () => {
+    render(
+      <ChatMessage
+        message={msg({
+          role: 'assistant',
+          content: 'Here is a related diagram:',
+          diagrams: [
+            {
+              diagram_id: 'abc',
+              gcs_path: 'gs://bucket/fig.png',
+              caption: 'Benzene ring',
+              figure_type: 'diagram',
+              score: 0.9,
+            },
+          ],
+        })}
+      />,
+    )
+    expect(screen.getByText('Benzene ring')).toBeInTheDocument()
+  })
+
+  it('does not render diagram section for user messages even if diagrams passed', () => {
+    render(
+      <ChatMessage
+        message={msg({
+          role: 'user',
+          content: 'Hi',
+          diagrams: [
+            {
+              diagram_id: 'abc',
+              gcs_path: 'gs://bucket/fig.png',
+              caption: 'Should not appear',
+              figure_type: 'diagram',
+              score: 0.9,
+            },
+          ],
+        })}
+      />,
+    )
+    expect(screen.queryByText('Should not appear')).toBeNull()
   })
 })

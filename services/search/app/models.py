@@ -3,6 +3,27 @@ from uuid import UUID
 from pydantic import BaseModel, Field
 
 
+class DiagramResult(BaseModel):
+    """A diagram retrieved from the Qdrant diagrams collection."""
+
+    diagram_id: UUID
+    material_id: UUID
+    course_id: UUID
+    page: int
+    caption: str
+    score: float
+    image_b64_thumb: str  # base64 PNG thumbnail for inline display
+
+
+class DiagramSearchResponse(BaseModel):
+    """Response from the diagram search endpoint."""
+
+    query: str
+    course_id: UUID
+    results: list[DiagramResult]
+    total: int
+
+
 class ChunkResult(BaseModel):
     chunk_id: UUID
     material_id: UUID

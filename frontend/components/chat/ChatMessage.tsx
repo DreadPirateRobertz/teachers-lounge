@@ -1,7 +1,11 @@
 'use client'
 
 import { type ReactNode, useState } from 'react'
+import dynamic from 'next/dynamic'
 import MathBlock from './MathBlock'
+
+/** Dynamically imported molecule viewer — no SSR so WebGL runs client-side only. */
+const MoleculeViewer = dynamic(() => import('../chemistry/MoleculeViewer'), { ssr: false })
 
 export interface Message {
   id: string
@@ -25,6 +29,12 @@ interface Props {
 }
 
 // ── Content rendering helpers ─────────────────────────────────────────────────
+
+/**
+ * Matches a molecule embed tag: `[molecule:<key>]`.
+ * Group 1 captures the molecule key.
+ */
+const MOLECULE_TAG_RE = /\[molecule:([^\]]+)\]/g
 
 /**
  * Split text at LaTeX display blocks ($$...$$) and render each segment.
@@ -94,17 +104,54 @@ function renderInline(text: string, keyOffset: number): ReactNode[] {
 }
 
 /**
- * Render message content: split on newlines, apply block/inline math and
- * markdown to each line.
+ * Render message content: extract molecule tags first, then split remaining
+ * text on newlines and apply block/inline math and markdown per line.
+ *
+ * Processing order:
+ * 1. `[molecule:key]` tags → MoleculeViewer (Three.js, SSR-disabled)
+ * 2. Remaining text split on newlines → block math → inline math → markdown
  */
-function renderContent(text: string): ReactNode {
-  const lines = text.split('\n')
-  return lines.map((line, i) => (
-    <span key={i}>
-      {renderWithBlockMath(line)}
-      {i < lines.length - 1 && <br />}
-    </span>
-  ))
+function renderContent(text: string): ReactNode[] {
+  // Step 1: split on [molecule:key] tags
+  MOLECULE_TAG_RE.lastIndex = 0
+  const segments: Array<{ type: 'text' | 'molecule'; value: string }> = []
+  let last = 0
+  let match: RegExpExecArray | null
+  while ((match = MOLECULE_TAG_RE.exec(text)) !== null) {
+    if (match.index > last) {
+      segments.push({ type: 'text', value: text.slice(last, match.index) })
+    }
+    segments.push({ type: 'molecule', value: match[1].trim() })
+    last = match.index + match[0].length
+  }
+  if (last < text.length) {
+    segments.push({ type: 'text', value: text.slice(last) })
+  }
+
+  // Step 2: render each segment
+  const nodes: ReactNode[] = []
+  segments.forEach((seg, segIdx) => {
+    if (seg.type === 'molecule') {
+      nodes.push(
+        <div key={`mol-${segIdx}`} className="my-3">
+          <MoleculeViewer molecule={seg.value} />
+        </div>,
+      )
+    } else {
+      // Text: split on newlines, apply math + markdown per line
+      const lines = seg.value.split('\n')
+      lines.forEach((line, lineIdx) => (
+        nodes.push(
+          <span key={`line-${segIdx}-${lineIdx}`}>
+            {renderWithBlockMath(line)}
+            {lineIdx < lines.length - 1 && <br />}
+          </span>,
+        )
+      ))
+    }
+  })
+
+  return nodes
 }
 
 // ── Diagram component ─────────────────────────────────────────────────────────
@@ -174,6 +221,7 @@ function DiagramCard({ diagram }: { diagram: DiagramAttachment }) {
  * - Markdown: **bold**, *italic*, `code`.
  * - LaTeX: inline $...$ and block $$...$$ via KaTeX (MathBlock component).
  * - Inline diagrams with zoom-on-click (Phase 6 CLIP retrieval).
+ * - Three.js molecule viewer via `[molecule:key]` tags (Phase 6 chemistry).
  * - Streaming typing cursor animation.
  */
 export default function ChatMessage({ message }: Props) {
