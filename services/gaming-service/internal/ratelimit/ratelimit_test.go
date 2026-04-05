@@ -130,8 +130,21 @@ func TestAllow_IndependentBucketNames(t *testing.T) {
 }
 
 // TestAllow_RefillAfterFastForward verifies tokens refill after time advances.
+// Uses NowFunc injection to control the clock deterministically — miniredis
+// FastForward does not affect redis.call('TIME') inside Lua scripts.
 func TestAllow_RefillAfterFastForward(t *testing.T) {
-	lim, mr := newTestLimiter(t)
+	mr, err := miniredis.Run()
+	if err != nil {
+		t.Fatalf("start miniredis: %v", err)
+	}
+	t.Cleanup(mr.Close)
+	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { rdb.Close() })
+
+	fakeNow := float64(time.Now().Unix())
+	lim := ratelimit.New(rdb)
+	lim.NowFunc = func() float64 { return fakeNow }
+
 	b := ratelimit.Bucket{Name: "refill", Capacity: 2, Rate: 1} // 1 token/sec
 
 	// Exhaust bucket
@@ -142,11 +155,11 @@ func TestAllow_RefillAfterFastForward(t *testing.T) {
 		t.Fatal("bucket should be empty after exhaustion")
 	}
 
-	// Advance miniredis clock by 3 seconds — should refill at least 2 tokens
-	mr.FastForward(3 * time.Second)
+	// Advance fake clock by 3 seconds — should refill at least 2 tokens (rate=1/s)
+	fakeNow += 3
 
 	// After refill, request should succeed
-	res, err := lim.Allow(context.Background(), b, "user-e")
+	res, err = lim.Allow(context.Background(), b, "user-e")
 	if err != nil {
 		t.Fatal(err)
 	}
