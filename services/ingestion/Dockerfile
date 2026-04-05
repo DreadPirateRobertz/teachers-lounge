@@ -15,7 +15,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# Pre-install build tools so pkg_resources is available for legacy setup.py packages
+RUN pip install --no-cache-dir setuptools wheel grpcio-tools
+# --no-build-isolation ensures onnx/grpcio setup.py runs in its own source dir
+# (with isolation, onnx 1.10.x can't find its own requirements.txt)
+RUN pip install --no-cache-dir --no-build-isolation -r requirements.txt
 
 COPY app/ ./app/
 
