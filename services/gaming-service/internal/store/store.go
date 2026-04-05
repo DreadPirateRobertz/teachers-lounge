@@ -300,7 +300,16 @@ func (s *Store) LeaderboardGetFriends(ctx context.Context, userID string, friend
 	return entries, userRank, nil
 }
 
-// RandomQuote fetches a random row from scifi_quotes.
+// seenQuotesKey returns the Redis key for a user's set of seen quote IDs for today.
+// Key format: quotes:seen:{userID}:{YYYY-MM-DD} — expires after 25 hours.
+func seenQuotesKey(userID string) string {
+	return fmt.Sprintf("quotes:seen:%s:%s", userID, time.Now().UTC().Format("2006-01-02"))
+}
+
+const seenQuotesTTL = 25 * time.Hour // slightly more than a day for timezone safety
+
+// RandomQuote fetches a random row from scifi_quotes with no dedup or context filter.
+// Kept for unauthenticated or fallback callers.
 func (s *Store) RandomQuote(ctx context.Context) (*model.Quote, error) {
 	const q = `
 		SELECT id, quote, attribution, context
@@ -312,6 +321,94 @@ func (s *Store) RandomQuote(ctx context.Context) (*model.Quote, error) {
 	err := s.db.QueryRow(ctx, q).Scan(&quote.ID, &quote.Quote, &quote.Attribution, &quote.Context)
 	if err != nil {
 		return nil, fmt.Errorf("random quote: %w", err)
+	}
+	return quote, nil
+}
+
+// RandomQuoteForUser fetches a random quote for a specific user, applying a
+// context filter (empty string means any context) and excluding quote IDs the
+// user has already seen today, tracked in Redis with a 25-hour TTL.
+//
+// If all matching quotes have been seen today, the seen-list is cleared and
+// the query runs without exclusions so the user always gets a quote.
+func (s *Store) RandomQuoteForUser(ctx context.Context, userID, quotectx string) (*model.Quote, error) {
+	key := seenQuotesKey(userID)
+
+	seenIDs, err := s.rdb.SMembers(ctx, key).Result()
+	if err != nil {
+		// Non-fatal: proceed without exclusion if Redis is unavailable.
+		seenIDs = nil
+	}
+
+	quote, err := s.fetchQuoteExcluding(ctx, quotectx, seenIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	// All quotes exhausted for today: clear dedup set and retry without exclusions.
+	if quote == nil {
+		if len(seenIDs) > 0 {
+			_ = s.rdb.Del(ctx, key)
+		}
+		quote, err = s.fetchQuoteExcluding(ctx, quotectx, nil)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if quote == nil {
+		return nil, fmt.Errorf("no quotes found for context %q", quotectx)
+	}
+
+	// Track this quote as seen today (best-effort: ignore Redis errors).
+	pipe := s.rdb.Pipeline()
+	pipe.SAdd(ctx, key, fmt.Sprintf("%d", quote.ID))
+	pipe.Expire(ctx, key, seenQuotesTTL)
+	_, _ = pipe.Exec(ctx)
+
+	return quote, nil
+}
+
+// fetchQuoteExcluding queries scifi_quotes with an optional context filter and
+// an optional exclusion list of already-seen IDs. Returns nil, nil when no rows
+// match (not an error — callers handle the empty case).
+func (s *Store) fetchQuoteExcluding(ctx context.Context, quotectx string, excludeIDs []string) (*model.Quote, error) {
+	const qWithContext = `
+		SELECT id, quote, attribution, context
+		FROM scifi_quotes
+		WHERE ($1 = '' OR context = $1)
+		  AND NOT (id::text = ANY($2))
+		ORDER BY RANDOM()
+		LIMIT 1`
+
+	const qFull = `
+		SELECT id, quote, attribution, context
+		FROM scifi_quotes
+		WHERE ($1 = '' OR context = $1)
+		ORDER BY RANDOM()
+		LIMIT 1`
+
+	quote := &model.Quote{}
+	var scanErr error
+
+	switch {
+	case len(excludeIDs) == 0 && quotectx == "":
+		// No filter, no exclusion — use plain RandomQuote path.
+		const q = `SELECT id, quote, attribution, context FROM scifi_quotes ORDER BY RANDOM() LIMIT 1`
+		scanErr = s.db.QueryRow(ctx, q).Scan(&quote.ID, &quote.Quote, &quote.Attribution, &quote.Context)
+	case len(excludeIDs) == 0:
+		// Context filter only.
+		scanErr = s.db.QueryRow(ctx, qFull, quotectx).Scan(&quote.ID, &quote.Quote, &quote.Attribution, &quote.Context)
+	default:
+		// Both context filter and exclusion list active.
+		scanErr = s.db.QueryRow(ctx, qWithContext, quotectx, excludeIDs).Scan(&quote.ID, &quote.Quote, &quote.Attribution, &quote.Context)
+	}
+
+	if scanErr != nil {
+		if errors.Is(scanErr, pgx.ErrNoRows) {
+			return nil, nil // exhausted — caller handles reset
+		}
+		return nil, fmt.Errorf("fetch quote: %w", scanErr)
 	}
 	return quote, nil
 }
