@@ -42,7 +42,7 @@ def init_client() -> None:
     if settings.qdrant_api_key is not None:
         kwargs["api_key"] = settings.qdrant_api_key
     _client = AsyncQdrantClient(**kwargs)
-    logger.info("qdrant client initialized → %s:%d", settings.qdrant_host, settings.qdrant_port)
+    logger.info("qdrant client initialized → %s:%d", _log_safe(settings.qdrant_host), settings.qdrant_port)
 
 
 def get_client() -> AsyncQdrantClient:
