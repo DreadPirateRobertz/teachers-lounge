@@ -40,8 +40,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ act
   // Set JS-readable access token cookie for middleware auth check
   if (upstream.ok && typeof body === 'object' && body.access_token) {
     res.cookies.set('tl_token', body.access_token, {
-      httpOnly: false,
-      sameSite: 'lax',
+      // httpOnly: Next.js server-side req.cookies still reads httpOnly cookies,
+      // so middleware auth checks work fine without JS access.
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
       maxAge: 60 * 15, // 15 min — matches User Service access token TTL
       path: '/',
     })

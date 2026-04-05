@@ -120,4 +120,18 @@ describe('POST /api/assessment', () => {
 
     expect(capturedUrl).toContain('/gaming/assessment/start')
   })
+
+  it('propagates 401 when upstream rejects unauthenticated request', async () => {
+    // Route is a transparent proxy — auth is enforced by gaming-service.
+    global.fetch = jest.fn().mockResolvedValue(
+      new Response(JSON.stringify({ detail: 'unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    const { POST } = await import('./route')
+    const res = await POST(makeRequest({ token: null }))
+    expect(res.status).toBe(401)
+  })
 })

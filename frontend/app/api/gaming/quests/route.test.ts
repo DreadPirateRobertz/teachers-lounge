@@ -7,10 +7,11 @@ import { NextRequest } from 'next/server'
 
 const MOCK_TOKEN = 'quests-test-token'
 
-function makeGetRequest(opts: { token?: string } = {}): NextRequest {
+function makeGetRequest(opts: { token?: string | null } = {}): NextRequest {
   const headers: Record<string, string> = {}
-  if (opts.token ?? MOCK_TOKEN) {
-    headers['Cookie'] = `tl_token=${opts.token ?? MOCK_TOKEN}`
+  const token = opts.token !== undefined ? opts.token : MOCK_TOKEN
+  if (token !== null) {
+    headers['Cookie'] = `tl_token=${token}`
   }
   return new NextRequest('http://localhost/api/gaming/quests', { method: 'GET', headers })
 }
@@ -139,6 +140,21 @@ describe('GET /api/gaming/quests — gaming-service proxy', () => {
     const res = await GET(makeGetRequest())
 
     expect(res.status).toBe(503)
+  })
+
+  it('returns 401 when unauthenticated request is rejected by gaming-service', async () => {
+    // Route is a transparent proxy — auth is enforced by gaming-service.
+    global.fetch = jest.fn().mockResolvedValue(
+      new Response(JSON.stringify({ detail: 'unauthorized' }), {
+        status: 401,
+        headers: { 'Content-Type': 'application/json' },
+      }),
+    )
+
+    const { GET } = await import('./route')
+    const res = await GET(makeGetRequest({ token: null }))
+
+    expect(res.status).toBe(401)
   })
 })
 
