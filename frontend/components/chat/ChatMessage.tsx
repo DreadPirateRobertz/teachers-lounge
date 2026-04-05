@@ -3,6 +3,8 @@
 import { type ReactNode, useState } from 'react'
 import dynamic from 'next/dynamic'
 import MathBlock from './MathBlock'
+import TtsPlayer, { type Phrase } from './TtsPlayer'
+import NotesPanel, { type NoteEntry } from './NotesPanel'
 
 /** Dynamically imported molecule viewer — no SSR so WebGL runs client-side only. */
 const MoleculeViewer = dynamic(() => import('../chemistry/MoleculeViewer'), { ssr: false })
@@ -14,6 +16,15 @@ export interface Message {
   streaming?: boolean
   /** Diagrams returned by the CLIP diagram search (Phase 6). */
   diagrams?: DiagramAttachment[]
+  /**
+   * TTS audio URL for auditory learner mode.
+   * The backend TTS service returns this alongside the text response.
+   */
+  audioUrl?: string
+  /** Optional phrase bookmarks for the TTS player. */
+  audioPhrases?: Phrase[]
+  /** Structured notes for read/write learner mode. */
+  notes?: NoteEntry[]
 }
 
 export interface DiagramAttachment {
@@ -261,6 +272,24 @@ export default function ChatMessage({ message }: Props) {
             {message.diagrams.map((d) => (
               <DiagramCard key={d.diagram_id} diagram={d} />
             ))}
+          </div>
+        )}
+
+        {/* TTS audio player — auditory learner mode */}
+        {!isUser && message.audioUrl && (
+          <div className="mt-2">
+            <TtsPlayer
+              audioUrl={message.audioUrl}
+              phrases={message.audioPhrases}
+              label="Listen to explanation"
+            />
+          </div>
+        )}
+
+        {/* Structured notes — read/write learner mode */}
+        {!isUser && message.notes && message.notes.length > 0 && (
+          <div className="mt-2">
+            <NotesPanel notes={message.notes} />
           </div>
         )}
       </div>
