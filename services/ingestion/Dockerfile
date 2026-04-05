@@ -4,7 +4,7 @@ WORKDIR /app
 
 # Install system deps for PDF processing (poppler for pdftotext, tesseract for OCR)
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    libpq-dev gcc python3-dev \
+    libpq-dev gcc python3-dev cmake \
     poppler-utils \
     tesseract-ocr \
     libmagic1 \
