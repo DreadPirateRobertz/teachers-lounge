@@ -65,7 +65,7 @@ func (s *Store) RecordBattleResult(ctx context.Context, result *model.BattleResu
 	if err != nil {
 		return fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Map to existing boss_history table schema.
 	bossResult := "defeat"

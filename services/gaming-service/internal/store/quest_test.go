@@ -140,7 +140,9 @@ func TestUpdateQuestProgress_NoDoubleReward(t *testing.T) {
 	userID := "user-nodbl"
 
 	// Complete the single-step quest
-	s.UpdateQuestProgress(ctx, userID, "streak_checkin")
+	if _, _, _, err := s.UpdateQuestProgress(ctx, userID, "streak_checkin"); err != nil {
+		t.Fatalf("first UpdateQuestProgress: %v", err)
+	}
 
 	// Call again — should not award again
 	_, xpEarned, gemsEarned, err := s.UpdateQuestProgress(ctx, userID, "streak_checkin")

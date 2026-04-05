@@ -7,8 +7,8 @@ SM-2 Reference: Wozniak (1990), SuperMemo 2 algorithm.
 """
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
 import math
+from datetime import datetime, timedelta, timezone
 
 
 # ── Constants ─────────────────────────────────────────────────────────────────

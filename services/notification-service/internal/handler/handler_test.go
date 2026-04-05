@@ -303,7 +303,9 @@ func TestListUnread_ReturnsStoredNotifications(t *testing.T) {
 	}
 
 	var result []model.Notification
-	json.NewDecoder(rr.Body).Decode(&result)
+	if err := json.NewDecoder(rr.Body).Decode(&result); err != nil {
+		t.Fatalf("decode response: %v", err)
+	}
 	if len(result) != 1 {
 		t.Fatalf("expected 1 notification for u1, got %d", len(result))
 	}

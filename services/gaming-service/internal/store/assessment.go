@@ -43,7 +43,7 @@ func (s *Store) RecordAssessmentAnswer(ctx context.Context, sessionID, userID, q
 	if err != nil {
 		return nil, fmt.Errorf("begin tx: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Insert answer row.
 	const insertQ = `

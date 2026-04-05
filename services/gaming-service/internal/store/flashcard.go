@@ -96,7 +96,7 @@ func (s *Store) ReviewFlashcard(ctx context.Context, cardID, userID string, qual
 	if err != nil {
 		return nil, fmt.Errorf("begin review tx: %w", err)
 	}
-	defer tx.Rollback(ctx)
+	defer func() { _ = tx.Rollback(ctx) }()
 
 	// Lock and fetch the current card state.
 	const selectQ = `

@@ -94,7 +94,7 @@ func (c *Client) RefreshSessionTTL(ctx context.Context, key string, ttl time.Dur
 // AcquireRefreshLock attempts to acquire a distributed lock for token rotation.
 // Returns true if the lock was acquired.
 func (c *Client) AcquireRefreshLock(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
-	return c.rdb.SetNX(ctx, key, value, ttl).Result()
+	return c.rdb.SetArgs(ctx, key, value, redis.SetArgs{NX: true, TTL: ttl}).Result()
 }
 
 func (c *Client) ReleaseRefreshLock(ctx context.Context, key string) error {

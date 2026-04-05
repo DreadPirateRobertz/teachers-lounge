@@ -207,7 +207,7 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "concurrent refresh in progress — retry in a moment")
 		return
 	}
-	defer h.cache.ReleaseRefreshLock(r.Context(), lockKey)
+	defer func() { _ = h.cache.ReleaseRefreshLock(r.Context(), lockKey) }()
 
 	token, err := h.store.GetRefreshToken(r.Context(), tokenHash)
 	if err != nil {
