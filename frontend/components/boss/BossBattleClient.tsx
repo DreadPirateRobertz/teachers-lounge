@@ -16,6 +16,7 @@ import Link from 'next/link'
 import { useCallback, useEffect, useState } from 'react'
 import { type AnimationState, type BossVisualDef, getRandomTaunt } from './BossCharacterLibrary'
 import BossHUD, { type PowerUp } from './BossHUD'
+import ErrorBoundary from '@/components/ErrorBoundary'
 
 // BossScene is client-only WebGL; dynamic import prevents SSR errors.
 const BossScene = dynamic(() => import('./BossScene'), { ssr: false })
@@ -223,13 +224,24 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
       {/* Active battle */}
       {(phase === 'active' || animState === 'death') && (
         <div className="flex flex-col items-center gap-6 w-full max-w-md">
-          <BossScene
-            boss={boss}
-            animationState={animState}
-            onDeathComplete={handleDeathComplete}
-            width={360}
-            height={320}
-          />
+          <ErrorBoundary
+            componentName="BossScene"
+            fallback={
+              <div className="flex flex-col items-center justify-center w-[360px] h-[320px] rounded-lg bg-bg-card border border-neon-pink/30 gap-3">
+                <span className="text-3xl">💥</span>
+                <p className="text-xs text-text-dim font-mono">WebGL failed to initialise.</p>
+                <p className="text-[10px] text-text-dim">Try refreshing the page.</p>
+              </div>
+            }
+          >
+            <BossScene
+              boss={boss}
+              animationState={animState}
+              onDeathComplete={handleDeathComplete}
+              width={360}
+              height={320}
+            />
+          </ErrorBoundary>
           <BossHUD
             boss={boss}
             bossHP={bossHP}
