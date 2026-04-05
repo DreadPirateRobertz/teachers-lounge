@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"time"
@@ -142,6 +143,12 @@ func (h *Handler) Attack(w http.ResponseWriter, r *http.Request) {
 	session.ActivePowers = battle.TickPowerUps(session.ActivePowers)
 
 	// Check win/lose conditions.
+	// On a wrong answer while the boss is still alive, fetch or generate a taunt.
+	var bossQuip string
+	if !req.AnswerCorrect && session.BossHP > 0 {
+		bossQuip = h.fetchOrGenerateTaunt(r.Context(), session)
+	}
+
 	resp := model.AttackResponse{
 		PlayerDamageDealt: playerDmg,
 		BossDamageDealt:   bossDmg,
@@ -149,6 +156,7 @@ func (h *Handler) Attack(w http.ResponseWriter, r *http.Request) {
 		PlayerHP:          session.PlayerHP,
 		Phase:             model.PhaseActive,
 		Turn:              session.Turn,
+		Taunt:             bossQuip,
 	}
 
 	if session.BossHP <= 0 {
@@ -274,6 +282,40 @@ func (h *Handler) ForfeitBattle(w http.ResponseWriter, r *http.Request) {
 	result := h.finishBattle(r, session, false)
 
 	writeJSON(w, http.StatusOK, result)
+}
+
+// fetchOrGenerateTaunt returns a contextual boss taunt for the current turn.
+// It first checks the Postgres pool for a cached taunt; on a cache miss it
+// calls the AI generator and persists the result for future reuse. Errors from
+// either layer are logged and do not fail the request — an empty string is
+// returned so the battle continues uninterrupted.
+func (h *Handler) fetchOrGenerateTaunt(ctx context.Context, session *model.BattleSession) string {
+	bossIDStr := string(session.BossID)
+
+	cached, ok, err := h.store.GetRandomTaunt(ctx, bossIDStr, session.Turn)
+	if err != nil {
+		h.logger.Warn("get random taunt", zap.Error(err))
+	}
+	if ok {
+		return cached
+	}
+
+	// Cache miss — ask the AI gateway.
+	boss := battle.BossCatalog[session.BossID]
+	generated, err := h.taunter.Generate(ctx, bossIDStr, boss.Name, string(session.BossID), session.Turn)
+	if err != nil {
+		h.logger.Warn("generate taunt", zap.String("boss_id", bossIDStr), zap.Error(err))
+		return ""
+	}
+
+	// Persist asynchronously so the response isn't delayed by a DB write.
+	go func() {
+		if saveErr := h.store.SaveTaunt(context.Background(), bossIDStr, session.Turn, generated); saveErr != nil {
+			h.logger.Warn("save taunt", zap.Error(saveErr))
+		}
+	}()
+
+	return generated
 }
 
 // finishBattle records the result, awards XP on victory, and cleans up the session.

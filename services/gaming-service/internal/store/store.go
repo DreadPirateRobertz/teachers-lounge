@@ -3,11 +3,13 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"math/rand"
 	"sort"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/teacherslounge/gaming-service/internal/model"
@@ -467,4 +469,33 @@ func (s *Store) AwardQuestRewards(ctx context.Context, userID string, xpDelta, g
 		return 0, 0, false, 0, fmt.Errorf("award quest rewards %s: %w", userID, err)
 	}
 	return newXP, newLevel, leveledUp, newGems, nil
+}
+
+// SaveTaunt persists a generated taunt to the boss_taunts pool for the given
+// boss and round. Multiple taunts per (boss_id, round) are allowed; callers
+// use GetRandomTaunt to draw from the pool.
+func (s *Store) SaveTaunt(ctx context.Context, bossID string, round int, taunt string) error {
+	const q = `INSERT INTO boss_taunts (boss_id, round, taunt) VALUES ($1, $2, $3)`
+	if _, err := s.db.Exec(ctx, q, bossID, round, taunt); err != nil {
+		return fmt.Errorf("store: save taunt: %w", err)
+	}
+	return nil
+}
+
+// GetRandomTaunt returns a random cached taunt for the given boss and round.
+// ok is false when no taunts have been stored for this (boss_id, round) pair yet.
+func (s *Store) GetRandomTaunt(ctx context.Context, bossID string, round int) (taunt string, ok bool, err error) {
+	const q = `
+		SELECT taunt FROM boss_taunts
+		WHERE boss_id = $1 AND round = $2
+		ORDER BY RANDOM()
+		LIMIT 1`
+	err = s.db.QueryRow(ctx, q, bossID, round).Scan(&taunt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return "", false, nil
+	}
+	if err != nil {
+		return "", false, fmt.Errorf("store: get random taunt: %w", err)
+	}
+	return taunt, true, nil
 }

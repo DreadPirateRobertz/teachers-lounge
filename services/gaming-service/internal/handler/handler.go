@@ -11,6 +11,7 @@ import (
 
 	"github.com/teacherslounge/gaming-service/internal/middleware"
 	"github.com/teacherslounge/gaming-service/internal/model"
+	"github.com/teacherslounge/gaming-service/internal/taunt"
 	"github.com/teacherslounge/gaming-service/internal/xp"
 )
 
@@ -46,6 +47,8 @@ type Storer interface {
 	DeleteBattleSession(ctx context.Context, sessionID string) error
 	RecordBattleResult(ctx context.Context, result *model.BattleResult) error
 	DeductGems(ctx context.Context, userID string, amount int) (int, error)
+	SaveTaunt(ctx context.Context, bossID string, round int, tauntText string) error
+	GetRandomTaunt(ctx context.Context, bossID string, round int) (tauntText string, ok bool, err error)
 
 	// Learning style assessment
 	CreateAssessmentSession(ctx context.Context, userID string) (*model.AssessmentSession, error)
@@ -53,15 +56,18 @@ type Storer interface {
 	RecordAssessmentAnswer(ctx context.Context, sessionID, userID, questionID, chosenKey string) (*model.AssessmentSession, error)
 }
 
-// Handler holds the store and logger.
+// Handler holds the store, taunt generator, and logger.
 type Handler struct {
-	store  Storer
-	logger *zap.Logger
+	store   Storer
+	taunter taunt.Generator
+	logger  *zap.Logger
 }
 
 // New creates a Handler.
-func New(store Storer, logger *zap.Logger) *Handler {
-	return &Handler{store: store, logger: logger}
+// taunter is used by Attack to produce contextual boss taunts on wrong answers;
+// pass a taunt.StaticGenerator when the AI gateway is not configured.
+func New(store Storer, taunter taunt.Generator, logger *zap.Logger) *Handler {
+	return &Handler{store: store, taunter: taunter, logger: logger}
 }
 
 // GainXP handles POST /gaming/xp

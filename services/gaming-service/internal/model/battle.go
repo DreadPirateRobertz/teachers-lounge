@@ -89,6 +89,9 @@ type AttackResponse struct {
 	PlayerHP          int         `json:"player_hp"`
 	Phase             BattlePhase `json:"phase"`
 	Turn              int         `json:"turn"`
+	// Taunt is an AI-generated boss taunt shown on a wrong answer. Empty on
+	// correct answers and when taunt generation is unavailable.
+	Taunt string `json:"taunt,omitempty"`
 	// Set when the battle ends.
 	Result *BattleResult `json:"result,omitempty"`
 }

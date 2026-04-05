@@ -20,6 +20,7 @@ import (
 	"github.com/teacherslounge/gaming-service/internal/ratelimit"
 	"github.com/teacherslounge/gaming-service/internal/rival"
 	"github.com/teacherslounge/gaming-service/internal/store"
+	"github.com/teacherslounge/gaming-service/internal/taunt"
 )
 
 func main() {
@@ -47,8 +48,21 @@ func main() {
 	}
 
 	st := store.New(pool, rdb)
-	h := handler.New(st, logger)
 	rl := ratelimit.New(rdb)
+
+	// Wire the taunt generator. Use LiteLLM when AI_GATEWAY_URL is set;
+	// fall back to a static no-op generator so the service starts without
+	// AI credentials configured.
+	var taunter taunt.Generator
+	if cfg.aiGatewayURL != "" {
+		taunter = taunt.NewLiteLLMGenerator(cfg.aiGatewayURL, cfg.aiGatewayKey)
+		logger.Info("boss taunts: LiteLLM generator active", zap.String("gateway", cfg.aiGatewayURL))
+	} else {
+		taunter = taunt.StaticGenerator{Taunt: "You'll never defeat me with answers like that!"}
+		logger.Info("boss taunts: static fallback (AI_GATEWAY_URL not set)")
+	}
+
+	h := handler.New(st, taunter, logger)
 
 	// Seed simulated rivals into the leaderboard (idempotent — ZAddNX).
 	if err := st.SeedRivals(context.Background(), rival.Roster); err != nil {
@@ -132,6 +146,8 @@ type config struct {
 	redisAddr     string
 	redisPassword string
 	jwtSecret     string
+	aiGatewayURL  string
+	aiGatewayKey  string
 }
 
 func loadConfig() config {
@@ -141,6 +157,8 @@ func loadConfig() config {
 		redisAddr:     getEnv("REDIS_ADDR", "localhost:6379"),
 		redisPassword: getEnv("REDIS_PASSWORD", ""),
 		jwtSecret:     requireEnv("JWT_SECRET"),
+		aiGatewayURL:  getEnv("AI_GATEWAY_URL", ""),
+		aiGatewayKey:  getEnv("AI_GATEWAY_KEY", ""),
 	}
 }
 
