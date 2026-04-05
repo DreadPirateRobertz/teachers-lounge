@@ -133,9 +133,7 @@ export default function FlashCard({ card, onRate, isRevealed, onReveal }: Props)
             <p className="text-sm font-medium text-text-bright text-center leading-relaxed">
               {card.front}
             </p>
-            {!isRevealed && (
-              <span className="mt-4 text-[10px] text-text-dim">tap to reveal</span>
-            )}
+            {!isRevealed && <span className="mt-4 text-[10px] text-text-dim">tap to reveal</span>}
           </div>
 
           {/* Back face */}
@@ -158,7 +156,9 @@ export default function FlashCard({ card, onRate, isRevealed, onReveal }: Props)
       {/* Rating buttons — only shown after reveal */}
       {isRevealed && (
         <div className="animate-fade-in">
-          <p className="text-[10px] text-text-dim text-center mb-2">How well did you recall this?</p>
+          <p className="text-[10px] text-text-dim text-center mb-2">
+            How well did you recall this?
+          </p>
           <RatingButtons onRate={onRate} />
         </div>
       )}

@@ -53,9 +53,7 @@ describe('GET /api/flashcards', () => {
 
     expect(res.status).toBe(200)
     expect(data).toEqual(cards)
-    expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe(
-      `${GAMING_URL}/gaming/flashcards`,
-    )
+    expect((global.fetch as jest.Mock).mock.calls[0][0]).toBe(`${GAMING_URL}/gaming/flashcards`)
   })
 
   it('forwards Authorization header to gaming-service', async () => {
@@ -63,7 +61,10 @@ describe('GET /api/flashcards', () => {
     global.fetch = jest.fn().mockImplementation((_url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>
       return Promise.resolve(
-        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
       )
     })
 
@@ -79,7 +80,10 @@ describe('GET /api/flashcards', () => {
     global.fetch = jest.fn().mockImplementation((_url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>
       return Promise.resolve(
-        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
       )
     })
 
@@ -110,7 +114,10 @@ describe('GET /api/flashcards', () => {
     global.fetch = jest.fn().mockImplementation((_url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>
       return Promise.resolve(
-        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
       )
     })
 
@@ -161,7 +168,10 @@ describe('POST /api/flashcards', () => {
     global.fetch = jest.fn().mockImplementation((_url: string, init: RequestInit) => {
       capturedHeaders = init.headers as Record<string, string>
       return Promise.resolve(
-        new Response(JSON.stringify([]), { status: 200, headers: { 'Content-Type': 'application/json' } }),
+        new Response(JSON.stringify([]), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
       )
     })
 

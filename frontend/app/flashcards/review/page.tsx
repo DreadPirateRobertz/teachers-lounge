@@ -132,9 +132,7 @@ export default function ReviewPage() {
           >
             ← Deck
           </Link>
-          <h1 className="text-sm font-semibold text-text-bright tracking-wide uppercase">
-            Review
-          </h1>
+          <h1 className="text-sm font-semibold text-text-bright tracking-wide uppercase">Review</h1>
           <div className="w-16" />
         </div>
 
@@ -172,8 +170,7 @@ export default function ReviewPage() {
             <div className="text-3xl mb-3">🎉</div>
             <h2 className="text-base font-semibold text-text-bright mb-2">Session complete!</h2>
             <p className="text-xs text-text-dim mb-5">
-              Reviewed{' '}
-              <span className="font-mono font-bold text-neon-green">{reviewedCount}</span>{' '}
+              Reviewed <span className="font-mono font-bold text-neon-green">{reviewedCount}</span>{' '}
               {reviewedCount === 1 ? 'card' : 'cards'}.
             </p>
             <Link

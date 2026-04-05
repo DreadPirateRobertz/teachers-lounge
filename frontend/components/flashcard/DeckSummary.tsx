@@ -46,9 +46,7 @@ export default function DeckSummary({ total, dueCount, onStartReview, onExportAn
             {dueCount}
           </span>
           <span className="text-[11px] text-text-dim uppercase tracking-wider">Due today</span>
-          {hasDue && (
-            <span className="text-[9px] text-neon-blue animate-pulse">● ready</span>
-          )}
+          {hasDue && <span className="text-[9px] text-neon-blue animate-pulse">● ready</span>}
         </div>
       </div>
 
