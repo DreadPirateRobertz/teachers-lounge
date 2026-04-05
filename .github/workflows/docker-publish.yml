@@ -20,7 +20,7 @@ concurrency:
 
 env:
   REGISTRY: us-docker.pkg.dev
-  PROJECT_ID: teachers-lounge
+  PROJECT_ID: teachers-lounge-prod
   REPOSITORY: services
 
 jobs:
