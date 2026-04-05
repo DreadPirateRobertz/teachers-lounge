@@ -18,19 +18,19 @@ const TUTORING_SERVICE_URL = process.env.TUTORING_SERVICE_URL || 'http://tutorin
  * - media-src blob:: TTS audio via Web Audio API
  * - worker-src blob:: Three.js OffscreenCanvas workers
  */
-const CSP = buildCsp()
-
-const SECURITY_HEADERS = [
-  { key: 'Content-Security-Policy', value: CSP },
-  { key: 'X-Frame-Options', value: 'DENY' },
-  { key: 'X-Content-Type-Options', value: 'nosniff' },
-  { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
-  { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-  // HSTS only in production — local dev runs plain HTTP
-  ...(process.env.DISABLE_HSTS === 'true'
-    ? []
-    : [{ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' }]),
-]
+function getSecurityHeaders() {
+  const headers = [
+    { key: 'Content-Security-Policy', value: buildCsp() },
+    { key: 'X-Frame-Options', value: 'DENY' },
+    { key: 'X-Content-Type-Options', value: 'nosniff' },
+    { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+    { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
+  ]
+  if (process.env.DISABLE_HSTS !== 'true') {
+    headers.push({ key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' })
+  }
+  return headers
+}
 
 const config: NextConfig = {
   output: 'standalone',
@@ -40,7 +40,7 @@ const config: NextConfig = {
       {
         // Apply security headers to every route.
         source: '/(.*)',
-        headers: SECURITY_HEADERS,
+        headers: getSecurityHeaders(),
       },
     ]
   },
