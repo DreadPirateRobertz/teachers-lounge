@@ -5,7 +5,7 @@ Flow:
   1. Validate JWT → extract user_id
   2. Verify session exists and belongs to this user
   3. Load last 10 exchanges (20 messages) for context window
-  4. Fetch student's Felder-Silverman learning-style dials (non-fatal)
+  4. Fetch student's Felder-Silverman learning-style dials from local DB (non-fatal)
   5. Build messages:
        - If session.course_id is set: agentic RAG (retrieve chunks → enriched prompt)
        - Otherwise: base Professor Nova prompt (no course materials)
@@ -13,13 +13,15 @@ Flow:
   6. Stream from AI Gateway (LiteLLM) via OpenAI-compatible SDK
   7. Persist student message (pre-stream) + completed tutor reply (post-stream)
   8. Update learning-style dials from student message signals (post-stream, non-fatal)
-  9. Emit SSE: delta chunks → sources → done  (error event on failure)
+  9. Check for due SRS reviews and emit review_reminder event when concepts are due
+ 10. Emit SSE: delta chunks → sources → done  (error event on failure)
 
 SSE event format:
-  data: {"type": "delta",   "content": "<token>", "message_id": "<uuid>"}
-  data: {"type": "sources", "content": "",         "message_id": "<uuid>", "sources": [...]}
-  data: {"type": "done",    "content": "",         "message_id": "<uuid>"}
-  data: {"type": "error",   "content": "<msg>",    "message_id": ""}
+  data: {"type": "delta",           "content": "<token>",  "message_id": "<uuid>"}
+  data: {"type": "sources",         "content": "",          "message_id": "<uuid>", "sources": [...]}
+  data: {"type": "review_reminder", "content": "<prompt>",  "message_id": "<uuid>"}
+  data: {"type": "done",            "content": "",          "message_id": "<uuid>"}
+  data: {"type": "error",           "content": "<msg>",     "message_id": ""}
 
 sources event is emitted only when the session has a course_id and chunks were
 retrieved. Each source object contains: chunk_id, chapter, section, page,
@@ -32,7 +34,7 @@ import time
 import uuid
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.responses import StreamingResponse
 from openai import APIConnectionError, APIStatusError, APITimeoutError
 from opentelemetry import trace
@@ -43,11 +45,11 @@ from .config import settings
 from .database import get_db
 from .gateway import get_gateway_client
 from .history import append_message, get_history, get_session
+from .knowledge_model import get_dials, get_due_review_prompt, update_learning_profile_dials
 from .models import MessageRequest
 from .rag_agent import PROFESSOR_NOVA_SYSTEM_PROMPT, build_rag_context
 from .search_client import fetch_diagram_chunks
-from .style_detector import DEFAULT_DIALS, build_style_prompt_section, detect_signals, update_dials
-from .user_client import UserServiceClient
+from .style_detector import build_style_prompt_section, detect_signals, update_dials
 
 # Keywords that suggest the student is asking about something visual / structural.
 # When matched, we fetch a diagram from the CLIP index to embed in the response.
@@ -116,7 +118,6 @@ def _sse(
 async def send_message(
     session_id: UUID,
     body: MessageRequest,
-    request: Request,
     db: AsyncSession = Depends(get_db),
     user: JWTClaims = Depends(require_auth),
 ):
@@ -134,12 +135,17 @@ async def send_message(
     student_message = body.content
     await append_message(db, session_id, user.user_id, role="student", content=student_message)
 
-    # --- Step 1: Fetch student's current learning-style dials (non-fatal) ---
-    raw_token = (request.headers.get("Authorization") or "").removeprefix("Bearer ").strip()
-    user_client = UserServiceClient(base_url=settings.user_service_url, bearer_token=raw_token)
-    current_dials = await user_client.get_felder_silverman_dials(user.user_id)
-    if not current_dials:
-        current_dials = dict(DEFAULT_DIALS)
+    # --- Step 1: Fetch student's current learning-style dials from local DB (non-fatal) ---
+    try:
+        current_dials = await get_dials(db, user.user_id)
+    except Exception:  # noqa: BLE001
+        logger.warning("Failed to load learning-style dials for user %s", user.user_id)
+        current_dials = {
+            "active_reflective": 0.0,
+            "sensing_intuitive": 0.0,
+            "visual_verbal": 0.0,
+            "sequential_global": 0.0,
+        }
 
     # --- Step 2: Build system prompt + retrieve grounding chunks ---
     source_chunks = []
@@ -239,15 +245,25 @@ async def send_message(
                     },
                 )
 
-            yield _sse("done", message_id=tutor_msg_id)
-
-            # --- Step 4: Update dials from this message's signals (post-stream) ---
+            # --- Step 4: Update dials from this message's signals (pre-done, non-fatal) ---
             signals = detect_signals(student_message)
             if signals:
                 updated_dials = update_dials(current_dials, signals)
-                ok = await user_client.patch_felder_silverman_dials(user.user_id, updated_dials)
-                if not ok:
+                try:
+                    await update_learning_profile_dials(db, user.user_id, updated_dials)
+                    await db.commit()
+                except Exception:  # noqa: BLE001
                     logger.warning("Failed to persist learning-style dials for user %s", user.user_id)
+
+            # --- Step 5: Proactive SRS review reminder (before done, non-fatal) ---
+            try:
+                review_prompt = await get_due_review_prompt(db, user.user_id)
+                if review_prompt:
+                    yield _sse("review_reminder", content=review_prompt, message_id=tutor_msg_id)
+            except Exception:  # noqa: BLE001
+                logger.warning("Failed to fetch review reminder for user %s", user.user_id)
+
+            yield _sse("done", message_id=tutor_msg_id)
 
         except (APIConnectionError, APITimeoutError) as exc:
             logger.warning("AI Gateway unreachable: %s", exc)

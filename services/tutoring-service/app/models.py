@@ -227,3 +227,71 @@ class MasteryUpdateResponse(BaseModel):
     mastery_updated: float        # final stored value (the new score)
     decay_rate: float
     last_reviewed_at: datetime
+
+
+# ── Learning profile DTOs ──────────────────────────────────────────────────────
+
+class LearningProfileDials(BaseModel):
+    """Felder-Silverman dial values — all four dimensions, each in [-1, 1]."""
+
+    active_reflective: float = Field(0.0, ge=-1.0, le=1.0)
+    sensing_intuitive: float = Field(0.0, ge=-1.0, le=1.0)
+    visual_verbal: float = Field(0.0, ge=-1.0, le=1.0)
+    sequential_global: float = Field(0.0, ge=-1.0, le=1.0)
+
+
+class LearningProfileResponse(BaseModel):
+    """Response body for GET /students/me/learning-profile."""
+
+    user_id: UUID
+    dials: dict[str, float]
+    updated_at: datetime | None = None
+
+
+_VALID_DIAL_KEYS: frozenset[str] = frozenset(
+    {"active_reflective", "sensing_intuitive", "visual_verbal", "sequential_global"}
+)
+
+
+class LearningProfileUpdateRequest(BaseModel):
+    """Request body for PATCH /students/me/learning-profile.
+
+    Only dial values provided are updated; absent keys are unchanged.
+    Each value must be in the range [-1.0, 1.0] and must be one of the four
+    Felder-Silverman dimensions.
+    """
+
+    dials: dict[str, float] = Field(
+        default_factory=dict,
+        description="Partial or full Felder-Silverman dial updates. Values must be in [-1, 1].",
+    )
+
+    def validate_dial_values(self) -> None:
+        """Raise ValueError if any key is unknown or any value is outside [-1, 1]."""
+        for k, v in self.dials.items():
+            if k not in _VALID_DIAL_KEYS:
+                raise ValueError(
+                    f"Unknown dial dimension '{k}'. "
+                    f"Valid keys: {sorted(_VALID_DIAL_KEYS)}"
+                )
+            if not -1.0 <= v <= 1.0:
+                raise ValueError(f"Dial '{k}' value {v} is outside [-1, 1]")
+
+
+# ── Misconception DTOs ────────────────────────────────────────────────────────
+
+class MisconceptionLogRequest(BaseModel):
+    """Request body for POST /students/me/misconceptions/{concept_id}."""
+
+    description: str = Field(..., max_length=2000, description="Description of the detected misconception.")
+
+
+class MisconceptionEntry(BaseModel):
+    """One misconception in the active list response."""
+
+    id: UUID
+    concept_id: UUID
+    description: str
+    confidence: float
+    recorded_at: datetime
+    recency_weight: float

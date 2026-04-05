@@ -31,6 +31,7 @@ from .config import settings
 from .database import Base, engine
 from .metrics import metrics_app
 from .metrics_middleware import PrometheusMiddleware
+from .profile import router as profile_router
 from .quiz import router as quiz_router
 from .reviews import router as reviews_router
 from .sessions import router as sessions_router
@@ -80,6 +81,7 @@ app.include_router(chat_simple_router, prefix="/v1")
 app.include_router(reviews_router, prefix="/v1")
 app.include_router(concepts_router, prefix="/v1")
 app.include_router(quiz_router, prefix="/v1")
+app.include_router(profile_router, prefix="/v1")
 
 
 @app.on_event("startup")
