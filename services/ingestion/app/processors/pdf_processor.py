@@ -4,17 +4,9 @@ import tempfile
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from google.cloud import storage
-from pdfminer.high_level import extract_text as pdfminer_extract_text
-from unstructured.partition.pdf import partition_pdf
-from unstructured.documents.elements import (
-    Title,
-    Table,
-    FigureCaption,
-    Image,
-    Formula,
-)
-
+# google-cloud-storage, pdfminer, and unstructured are imported lazily inside
+# functions so that importing this module does not trigger those heavy imports.
+# This keeps test collection fast for modules that only need routing logic.
 from app.config import settings
 from app.models import IngestJobMessage, ProcessingStatus
 from app.services import clip_embedder, db, embeddings, qdrant
@@ -139,6 +131,8 @@ async def _download_from_gcs(gcs_path: str, job_id: UUID) -> Path:
 
 def _download_from_gcs_sync(gcs_path: str, job_id: UUID) -> Path:
     # gcs_path is like gs://bucket/path/to/file.pdf
+    from google.cloud import storage  # lazy import — avoids heavy dep at module load
+
     parts = gcs_path.replace("gs://", "").split("/", 1)
     bucket_name, blob_name = parts[0], parts[1]
 
@@ -156,6 +150,8 @@ def _download_from_gcs_sync(gcs_path: str, job_id: UUID) -> Path:
 
 def _is_digital_pdf(path: Path) -> bool:
     """Heuristic: if pdfminer can extract >50 chars of text, it's a digital PDF."""
+    from pdfminer.high_level import extract_text as pdfminer_extract_text  # lazy
+
     try:
         text = pdfminer_extract_text(str(path), maxpages=3)
         return len(text.strip()) > 50
@@ -165,6 +161,8 @@ def _is_digital_pdf(path: Path) -> bool:
 
 def _partition_pdf(path: Path, is_digital: bool) -> list:
     """Use unstructured.io to parse PDF with layout awareness."""
+    from unstructured.partition.pdf import partition_pdf  # lazy
+
     strategy = "hi_res" if not is_digital else "fast"
     return partition_pdf(
         filename=str(path),
@@ -185,6 +183,15 @@ def _build_hierarchical_chunks(
     into chunks of ~chunk_max_tokens, splitting at paragraph
     boundaries when possible.
     """
+    # Lazy imports — unstructured is only needed when actually processing a PDF
+    from unstructured.documents.elements import (  # noqa: PLC0415
+        FigureCaption,
+        Formula,
+        Image,
+        Table,
+        Title,
+    )
+
     max_chars = settings.chunk_max_tokens * 4  # rough token-to-char ratio
     overlap_chars = settings.chunk_overlap_tokens * 4
 
@@ -346,6 +353,13 @@ def _get_page_number(element) -> int | None:
 
 def _classify_element(element) -> str:
     """Map unstructured element type to our content_type enum."""
+    from unstructured.documents.elements import (  # noqa: PLC0415
+        FigureCaption,
+        Formula,
+        Image,
+        Table,
+    )
+
     if isinstance(element, Table):
         return "table"
     if isinstance(element, Formula):

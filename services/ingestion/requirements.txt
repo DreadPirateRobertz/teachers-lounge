@@ -10,6 +10,18 @@ asyncpg==0.30.0
 unstructured[pdf]==0.16.11
 pdfminer.six==20231228
 
+# Office document processing
+python-docx==1.1.2
+python-pptx==1.0.2
+openpyxl==3.1.5
+
+# Video / audio transcription
+httpx==0.28.1
+google-cloud-speech==2.27.0
+
+# Image OCR
+google-cloud-documentai==2.29.0
+
 # Embeddings
 openai==1.58.1
 
@@ -19,4 +31,3 @@ qdrant-client==1.12.1
 # Test dependencies
 pytest==8.3.3
 pytest-asyncio==0.24.0
-httpx==0.28.1
