@@ -55,3 +55,10 @@ module "monitoring" {
 
   depends_on = [module.gke]
 }
+
+module "github_wif" {
+  source = "./modules/github-wif"
+
+  project_id  = var.project_id
+  github_repo = var.github_repo
+}

@@ -21,3 +21,9 @@ variable "cluster_name" {
   type        = string
   default     = "tl-cluster"
 }
+
+variable "github_repo" {
+  description = "GitHub repository in 'owner/repo' format for Workload Identity Federation"
+  type        = string
+  default     = "DreadPirateRobertz/teachers-lounge"
+}
