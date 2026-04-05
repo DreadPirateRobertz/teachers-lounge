@@ -288,7 +288,7 @@ func TestGenerateFlashcards_HappyPath(t *testing.T) {
 	}
 	h := newFlashcardHandler(s)
 
-	body, _ := json.Marshal(model.GenerateFlashcardsRequest{UserID: "u1", SessionID: "sess-1"})
+	body, _ := json.Marshal(model.GenerateFlashcardsRequest{SessionID: "sess-1"})
 	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/generate", bytes.NewBuffer(body))
 	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
 	rr := httptest.NewRecorder()
@@ -312,7 +312,7 @@ func TestGenerateFlashcards_MissingAuth(t *testing.T) {
 	s := &flashcardStore{}
 	h := newFlashcardHandler(s)
 
-	body, _ := json.Marshal(model.GenerateFlashcardsRequest{UserID: "u1", SessionID: "sess-1"})
+	body, _ := json.Marshal(model.GenerateFlashcardsRequest{SessionID: "sess-1"})
 	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/generate", bytes.NewBuffer(body))
 	rr := httptest.NewRecorder()
 
@@ -332,7 +332,7 @@ func TestGenerateFlashcards_SessionNotCompleted(t *testing.T) {
 	}
 	h := newFlashcardHandler(s)
 
-	body, _ := json.Marshal(model.GenerateFlashcardsRequest{UserID: "u1", SessionID: "sess-1"})
+	body, _ := json.Marshal(model.GenerateFlashcardsRequest{SessionID: "sess-1"})
 	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/generate", bytes.NewBuffer(body))
 	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
 	rr := httptest.NewRecorder()
@@ -362,7 +362,7 @@ func TestGenerateFlashcards_IdempotentSkipsExisting(t *testing.T) {
 	}
 	h := newFlashcardHandler(s)
 
-	body, _ := json.Marshal(model.GenerateFlashcardsRequest{UserID: "u1", SessionID: "sess-1"})
+	body, _ := json.Marshal(model.GenerateFlashcardsRequest{SessionID: "sess-1"})
 	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/generate", bytes.NewBuffer(body))
 	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
 	rr := httptest.NewRecorder()
@@ -373,7 +373,7 @@ func TestGenerateFlashcards_IdempotentSkipsExisting(t *testing.T) {
 		t.Fatalf("expected 201 got %d", rr.Code)
 	}
 	var resp model.GenerateFlashcardsResponse
-	json.NewDecoder(rr.Body).Decode(&resp)
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
 	if resp.Created != 0 {
 		t.Errorf("expected 0 new cards (all skipped), got %d", resp.Created)
 	}
@@ -402,7 +402,7 @@ func TestListFlashcards_HappyPath(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", rr.Code, rr.Body)
 	}
 	var resp model.ListFlashcardsResponse
-	json.NewDecoder(rr.Body).Decode(&resp)
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
 	if resp.Total != 2 {
 		t.Errorf("expected 2 total, got %d", resp.Total)
 	}
@@ -445,7 +445,7 @@ func TestDueFlashcards_ReturnsDueOnly(t *testing.T) {
 		t.Fatalf("expected 200 got %d", rr.Code)
 	}
 	var resp model.ListFlashcardsResponse
-	json.NewDecoder(rr.Body).Decode(&resp)
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
 	if resp.DueCount != 1 {
 		t.Errorf("expected 1 due card, got %d", resp.DueCount)
 	}
@@ -461,7 +461,7 @@ func TestReviewFlashcard_HappyPath(t *testing.T) {
 	}
 	h := newFlashcardHandler(s)
 
-	body, _ := json.Marshal(model.ReviewFlashcardRequest{UserID: "u1", Quality: 4})
+	body, _ := json.Marshal(model.ReviewFlashcardRequest{Quality: 4})
 	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/c1/review", bytes.NewBuffer(body))
 	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
 	// Set chi URL parameter.
@@ -477,7 +477,7 @@ func TestReviewFlashcard_HappyPath(t *testing.T) {
 		t.Fatalf("expected 200 got %d: %s", rr.Code, rr.Body)
 	}
 	var resp model.ReviewFlashcardResponse
-	json.NewDecoder(rr.Body).Decode(&resp)
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
 	if resp.Card == nil {
 		t.Error("expected card in response, got nil")
 	}
@@ -487,7 +487,7 @@ func TestReviewFlashcard_HappyPath(t *testing.T) {
 func TestReviewFlashcard_InvalidQuality(t *testing.T) {
 	h := newFlashcardHandler(&flashcardStore{})
 
-	body, _ := json.Marshal(model.ReviewFlashcardRequest{UserID: "u1", Quality: 6})
+	body, _ := json.Marshal(model.ReviewFlashcardRequest{Quality: 6})
 	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/c1/review", bytes.NewBuffer(body))
 	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
 	rctx := chi.NewRouteContext()
@@ -512,7 +512,7 @@ func TestReviewFlashcard_ForbiddenCrossUser(t *testing.T) {
 	}
 	h := newFlashcardHandler(s)
 
-	body, _ := json.Marshal(model.ReviewFlashcardRequest{UserID: "u1", Quality: 3})
+	body, _ := json.Marshal(model.ReviewFlashcardRequest{Quality: 3})
 	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/c1/review", bytes.NewBuffer(body))
 	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
 	rctx := chi.NewRouteContext()

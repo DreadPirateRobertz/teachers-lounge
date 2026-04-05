@@ -7,19 +7,7 @@ import (
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/store"
 )
 
-// fakeRedis is an in-memory redis.Cmdable fake for unit tests.
-// It supports only the Incr, Decr, Expire, and Get commands.
-type fakeRedis struct {
-	counts map[string]int64
-}
-
-func newFakeRedis() *fakeRedis {
-	return &fakeRedis{counts: make(map[string]int64)}
-}
-
-// We need to implement redis.Cmdable which is a large interface.
-// Instead we pass *fakeRedis directly and test via the RateLimiter's
-// exported Allow method using a small adapter.
+// We test the RateLimiter's exported Allow method using a small in-memory adapter.
 
 // fakeRateLimiter wraps the in-memory map to match the RateLimiter logic exactly.
 type fakeRateLimiter struct {

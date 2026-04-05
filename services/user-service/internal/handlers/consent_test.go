@@ -50,7 +50,7 @@ func TestGetConsent_AdultUser(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 	var resp models.ConsentStatus
-	json.NewDecoder(rec.Body).Decode(&resp)
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
 	if resp.ConsentRequired {
 		t.Error("expected consent_required=false for adult")
 	}
@@ -81,7 +81,7 @@ func TestGetConsent_MinorWithoutConsent(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 	var resp models.ConsentStatus
-	json.NewDecoder(rec.Body).Decode(&resp)
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
 	if !resp.IsMinor {
 		t.Error("expected is_minor=true")
 	}
@@ -117,7 +117,7 @@ func TestGetConsent_MinorWithConsent(t *testing.T) {
 		t.Fatalf("expected 200, got %d", rec.Code)
 	}
 	var resp models.ConsentStatus
-	json.NewDecoder(rec.Body).Decode(&resp)
+	_ = json.NewDecoder(rec.Body).Decode(&resp)
 	if !resp.ConsentGiven {
 		t.Error("expected consent_given=true")
 	}

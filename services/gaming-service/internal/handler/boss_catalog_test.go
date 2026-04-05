@@ -53,7 +53,7 @@ func TestGetBossCatalog_IncludesVisualConfig(t *testing.T) {
 	setupBossCatalogRouter().ServeHTTP(w, r)
 
 	var entries []handler.BossCatalogEntry
-	json.NewDecoder(w.Body).Decode(&entries)
+	_ = json.NewDecoder(w.Body).Decode(&entries)
 
 	for _, e := range entries {
 		if e.Visual.PrimaryColor == "" {
@@ -112,7 +112,7 @@ func TestGetBossByID_FinalBoss(t *testing.T) {
 	}
 
 	var entry handler.BossCatalogEntry
-	json.NewDecoder(w.Body).Decode(&entry)
+	_ = json.NewDecoder(w.Body).Decode(&entry)
 	if entry.Tier != 6 {
 		t.Errorf("final boss should be tier 6, got %d", entry.Tier)
 	}

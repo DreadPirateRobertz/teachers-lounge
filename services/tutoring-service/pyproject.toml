@@ -3,6 +3,8 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
+# E501 excluded — codebase uses wide banner comments and long string literals
+# I001 deferred — complex import ordering issues require running ruff --fix locally
 ignore = ["E501", "I001"]
 
 [tool.ruff.lint.per-file-ignores]
@@ -12,9 +14,3 @@ ignore = ["E501", "I001"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-testpaths = ["tests"]
-
-[project]
-requires-python = ">=3.11,<3.14"
-# Note: Python 3.14 is not yet supported (asyncpg/pydantic-core wheels pending)
-# Local dev: use Python 3.11–3.13. Docker image uses python:3.13-slim.

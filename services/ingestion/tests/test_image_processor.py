@@ -175,8 +175,10 @@ class TestOcrWithDocumentAi:
         image_file = tmp_path / "image.jpg"
         image_file.write_bytes(b"\xff\xd8\xff")  # minimal JPEG header
 
+        mock_google_cloud = MagicMock()
+        mock_google_cloud.documentai = mock_dai
         with patch("app.processors.image_processor.settings") as mock_settings, \
-             patch.dict("sys.modules", {"google.cloud": MagicMock(), "google.cloud.documentai": mock_dai}):
+             patch.dict("sys.modules", {"google.cloud": mock_google_cloud, "google.cloud.documentai": mock_dai}):
             mock_settings.document_ai_processor_name = "projects/p/locations/l/processors/id"
             blocks = _ocr_with_document_ai(image_file, "image/jpeg")
 
@@ -203,8 +205,10 @@ class TestOcrWithDocumentAi:
         image_file = tmp_path / "blank.jpg"
         image_file.write_bytes(b"\xff\xd8\xff")
 
+        mock_google_cloud = MagicMock()
+        mock_google_cloud.documentai = mock_dai
         with patch("app.processors.image_processor.settings") as mock_settings, \
-             patch.dict("sys.modules", {"google.cloud": MagicMock(), "google.cloud.documentai": mock_dai}):
+             patch.dict("sys.modules", {"google.cloud": mock_google_cloud, "google.cloud.documentai": mock_dai}):
             mock_settings.document_ai_processor_name = "projects/p/locations/l/processors/id"
             blocks = _ocr_with_document_ai(image_file, "image/jpeg")
 
@@ -235,8 +239,10 @@ class TestOcrWithDocumentAi:
         image_file = tmp_path / "image.png"
         image_file.write_bytes(b"\x89PNG")
 
+        mock_google_cloud = MagicMock()
+        mock_google_cloud.documentai = mock_dai
         with patch("app.processors.image_processor.settings") as mock_settings, \
-             patch.dict("sys.modules", {"google.cloud": MagicMock(), "google.cloud.documentai": mock_dai}):
+             patch.dict("sys.modules", {"google.cloud": mock_google_cloud, "google.cloud.documentai": mock_dai}):
             mock_settings.document_ai_processor_name = "projects/p/locations/l/processors/id"
             blocks = _ocr_with_document_ai(image_file, "image/png")
 

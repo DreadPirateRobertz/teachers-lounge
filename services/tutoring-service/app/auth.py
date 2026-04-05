@@ -56,6 +56,13 @@ def require_auth(
             detail="Invalid token",
             headers={"WWW-Authenticate": "Bearer"},
         )
+    # python-jose does not raise when `aud` is absent; enforce it explicitly.
+    if not payload.get("aud"):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
 
     # User Service sets "uid" custom claim AND mirrors it in RegisteredClaims.sub.
     # We prefer "uid" and fall back to "sub" for forward compatibility while the

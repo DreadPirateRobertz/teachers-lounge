@@ -52,22 +52,6 @@ func (s *Store) SetCurrentUser(ctx context.Context, userID uuid.UUID) context.Co
 
 type ctxKeyUserID struct{}
 
-// execWithRLS runs fn with the RLS user ID set on the connection.
-// Services use direct pool queries (BYPASSRLS role) for internal operations;
-// this is for future use when exposing queries to user-scoped contexts.
-func (s *Store) execWithRLS(ctx context.Context, userID uuid.UUID, fn func(ctx context.Context) error) error {
-	conn, err := s.pool.Acquire(ctx)
-	if err != nil {
-		return err
-	}
-	defer conn.Release()
-
-	_, err = conn.Exec(ctx, "SET LOCAL app.current_user_id = $1", userID.String())
-	if err != nil {
-		return err
-	}
-	return fn(ctx)
-}
 
 // ============================================================
 // USER QUERIES

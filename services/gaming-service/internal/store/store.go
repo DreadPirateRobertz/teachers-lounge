@@ -133,8 +133,8 @@ func (s *Store) StreakCheckin(ctx context.Context, userID string) (current, long
 		// Parse existing streak
 		var count int64
 		var lastTS int64
-		fmt.Sscan(vals[0].(string), &count)
-		fmt.Sscan(vals[1].(string), &lastTS)
+		_, _ = fmt.Sscan(vals[0].(string), &count)
+		_, _ = fmt.Sscan(vals[1].(string), &lastTS)
 
 		lastTime := time.Unix(lastTS, 0)
 		if now.Sub(lastTime) > streakResetWindow {
@@ -476,7 +476,7 @@ func (s *Store) GetDailyQuests(ctx context.Context, userID string) ([]model.Ques
 		completed := false
 
 		if vals[i*2] != nil {
-			fmt.Sscan(vals[i*2].(string), &progress)
+			_, _ = fmt.Sscan(vals[i*2].(string), &progress)
 		}
 		if vals[i*2+1] != nil {
 			completed = vals[i*2+1].(string) == "1"
@@ -523,7 +523,7 @@ func (s *Store) UpdateQuestProgress(ctx context.Context, userID string, action s
 
 		var progress int
 		if vals[0] != nil {
-			fmt.Sscan(vals[0].(string), &progress)
+			_, _ = fmt.Sscan(vals[0].(string), &progress)
 		}
 		progress++
 

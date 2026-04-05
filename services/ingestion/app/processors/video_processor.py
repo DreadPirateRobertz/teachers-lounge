@@ -169,8 +169,6 @@ async def _transcribe_openai(audio_path: Path) -> list[dict]:
         List of segment dicts, each with keys:
         ``text`` (str), ``start`` (float seconds), ``end`` (float seconds).
     """
-    from openai import AsyncOpenAI
-
     max_bytes = 24 * 1024 * 1024  # 24 MB — leave headroom under the 25 MB limit
     file_size = audio_path.stat().st_size
 

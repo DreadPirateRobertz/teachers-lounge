@@ -300,7 +300,7 @@ func fieldChecksum(text string) int64 {
 		s = s[:8]
 	}
 	var result int64
-	fmt.Sscanf(s, "%d", &result)
+	_, _ = fmt.Sscanf(s, "%d", &result)
 	return result
 }
 

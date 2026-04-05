@@ -7,7 +7,7 @@ from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
 
 from app.main import app
-from app.models import DiagramResult, DiagramSearchResponse
+from app.models import DiagramResult
 
 
 COURSE_ID = uuid.uuid4()

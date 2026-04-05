@@ -70,13 +70,15 @@ class TestFlushSegments:
         """The tail of the previous chunk's buffer appears at the start of the next."""
         tail = "overlap text"
         filler = "X" * 80
+        # Put `tail` at the END of the first buffer so the overlap algorithm
+        # (which takes the last segments that fit within overlap_chars) picks it up.
         segs = [
-            {"text": tail, "chapter": None, "section": None, "page": None, "content_type": "text"},
             {"text": filler, "chapter": None, "section": None, "page": None, "content_type": "text"},
+            {"text": tail, "chapter": None, "section": None, "page": None, "content_type": "text"},
             {"text": "new content", "chapter": None, "section": None, "page": None, "content_type": "text"},
         ]
-        # max_chars large enough that tail+filler fit, but adding 'new content' overflows
-        max_chars = len(tail) + len(filler) + 1
+        # max_chars large enough that filler+tail fit, but adding 'new content' overflows
+        max_chars = len(filler) + len(tail) + 1
         chunks = flush_segments(segs, MATERIAL_ID, COURSE_ID, max_chars=max_chars, overlap_chars=len(tail) + 5)
         assert len(chunks) >= 2
         # The tail text should appear in the second chunk as overlap context

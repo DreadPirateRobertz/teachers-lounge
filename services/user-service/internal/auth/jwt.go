@@ -13,12 +13,6 @@ import (
 	"github.com/teacherslounge/user-service/internal/models"
 )
 
-const (
-	claimsUserID      = "uid"
-	claimsEmail       = "email"
-	claimsAccountType = "acct"
-	claimsSubStatus   = "sub_status"
-)
 
 type Claims struct {
 	jwt.RegisteredClaims

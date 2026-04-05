@@ -3,7 +3,7 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W"]
-ignore = ["E501", "I001"]
+ignore = ["E501"]
 
 [tool.ruff.lint.per-file-ignores]
 # Test files: F401 (conftest re-exports), F841 (assigned-but-unused mocks),
@@ -13,8 +13,3 @@ ignore = ["E501", "I001"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-
-[project]
-requires-python = ">=3.11,<3.14"
-# Note: Python 3.14 is not yet supported (asyncpg/pydantic-core wheels pending)
-# Local dev: use Python 3.11–3.13. Docker image uses python:3.13-slim.

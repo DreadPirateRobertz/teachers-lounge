@@ -99,8 +99,12 @@ func TestHintIndex_IsolatedPerQuestion(t *testing.T) {
 	ctx := context.Background()
 
 	// Consume 2 hints for q-1.
-	simulateIncrHintIndex(ctx, rdb, "sess-1", "q-1")
-	simulateIncrHintIndex(ctx, rdb, "sess-1", "q-1")
+	if _, err := simulateIncrHintIndex(ctx, rdb, "sess-1", "q-1"); err != nil {
+		t.Fatalf("simulateIncrHintIndex: %v", err)
+	}
+	if _, err := simulateIncrHintIndex(ctx, rdb, "sess-1", "q-1"); err != nil {
+		t.Fatalf("simulateIncrHintIndex: %v", err)
+	}
 
 	// q-2 in same session should start at 0.
 	idx, err := simulateGetHintIndex(ctx, rdb, "sess-1", "q-2")
@@ -123,7 +127,9 @@ func TestHintIndex_IsolatedPerSession(t *testing.T) {
 	ctx := context.Background()
 
 	// Use 1 hint in session A.
-	simulateIncrHintIndex(ctx, rdb, "sess-A", "q-1")
+	if _, err := simulateIncrHintIndex(ctx, rdb, "sess-A", "q-1"); err != nil {
+		t.Fatalf("simulateIncrHintIndex: %v", err)
+	}
 
 	// Session B for the same question should start at 0.
 	idx, err := simulateGetHintIndex(ctx, rdb, "sess-B", "q-1")

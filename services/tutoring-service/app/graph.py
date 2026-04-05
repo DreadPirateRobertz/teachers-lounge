@@ -5,7 +5,7 @@ from uuid import UUID
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .orm import Concept, ConceptPrerequisite, StudentConceptMastery
+from .orm import Concept, StudentConceptMastery
 
 MASTERY_THRESHOLD = 0.7   # below this a prerequisite is considered a "gap"
 ADEQUATE_THRESHOLD = 0.6  # lower bar used for prerequisite chain adequacy check

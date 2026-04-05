@@ -1,10 +1,26 @@
 """
 Shared test fixtures for the tutoring service.
 """
+from unittest.mock import MagicMock
+
 import pytest
 
 from app.config import Settings, settings
+from app.database import get_db
 from app.gateway import reset_gateway_client
+from app.main import app
+
+
+@pytest.fixture(autouse=True)
+def disable_lifespan_events(monkeypatch):
+    """Prevent app startup/shutdown from attempting real DB connections in CI.
+
+    The startup handler calls engine.begin() to run Alembic metadata.create_all,
+    which requires a live PostgreSQL connection.  Tests that use AsyncClient with
+    ASGITransport trigger lifespan events, so we clear them here.
+    """
+    monkeypatch.setattr(app.router, "on_startup", [])
+    monkeypatch.setattr(app.router, "on_shutdown", [])
 
 
 @pytest.fixture()
@@ -23,6 +39,22 @@ def patch_settings(monkeypatch):
         return settings
 
     return _patch
+
+
+@pytest.fixture(autouse=True)
+def override_get_db():
+    """Override get_db with a no-op mock so tests never open a real DB connection.
+
+    Tests that need specific DB behavior (e.g. test_reviews.py) can write to
+    app.dependency_overrides[get_db] directly — their override takes precedence.
+    This fixture handles teardown (clears the override) for all tests.
+    """
+    async def _null_db():
+        yield MagicMock()
+
+    app.dependency_overrides[get_db] = _null_db
+    yield
+    app.dependency_overrides.pop(get_db, None)
 
 
 @pytest.fixture(autouse=True)

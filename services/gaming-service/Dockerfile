@@ -1,12 +1,14 @@
 FROM golang:1.25-alpine AS builder
 
+ENV GOTOOLCHAIN=local
+
 WORKDIR /app
 
 COPY go.mod go.sum ./
 RUN go mod download
 
 COPY . .
-RUN CGO_ENABLED=0 GOOS=linux go build -trimpath -o gaming-service ./cmd/server
+RUN CGO_ENABLED=0 GOOS=linux go build -mod=mod -trimpath -o gaming-service ./cmd/server
 
 # ---- runtime ----
 FROM alpine:3.21

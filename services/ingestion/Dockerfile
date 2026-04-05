@@ -18,7 +18,7 @@ COPY requirements.txt .
 # Pre-install build tools + modern onnx wheel to prevent pip from backtracking
 # to old onnx source-only versions whose sdists lack requirements.txt.
 RUN pip install --no-cache-dir setuptools wheel grpcio-tools "onnx>=1.16.0" "onnxruntime>=1.18.0"
-RUN pip install --no-cache-dir --no-build-isolation -r requirements.txt
+RUN pip install --no-cache-dir --no-build-isolation --prefer-binary -r requirements.txt
 
 COPY app/ ./app/
 

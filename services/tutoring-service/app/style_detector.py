@@ -17,7 +17,6 @@ via exponential moving average (EMA) so a single message cannot dominate.
 """
 
 import re
-from dataclasses import dataclass
 from typing import NamedTuple
 
 # ── constants ────────────────────────────────────────────────────────────────

@@ -2,7 +2,17 @@
 from datetime import datetime, timezone
 from uuid import uuid4
 
-from sqlalchemy import Boolean, DateTime, Enum as SAEnum, Float, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import (
+    Boolean,
+    DateTime,
+    Enum as SAEnum,
+    Float,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -78,9 +88,13 @@ class StudentConceptMastery(Base):
 
     concept: Mapped["Concept"] = relationship(lazy="selectin")
     review_records: Mapped[list["ReviewRecord"]] = relationship(
+        primaryjoin="and_(StudentConceptMastery.user_id == ReviewRecord.user_id, "
+                    "StudentConceptMastery.concept_id == ReviewRecord.concept_id)",
+        foreign_keys="[ReviewRecord.user_id, ReviewRecord.concept_id]",
         back_populates="mastery",
         order_by="ReviewRecord.reviewed_at",
         lazy="select",
+        overlaps="mastery",
     )
 
 

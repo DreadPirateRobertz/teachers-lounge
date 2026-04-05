@@ -28,7 +28,7 @@ func TestFCMPusher_Send_Success(t *testing.T) {
 			t.Errorf("to: want device-tok, got %v", body["to"])
 		}
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"success": 1, "failure": 0,
 			"results": []map[string]string{{"message_id": "msg1"}},
 		})
@@ -44,9 +44,9 @@ func TestFCMPusher_Send_Success(t *testing.T) {
 func TestFCMPusher_Send_IncludesDataWhenNonEmpty(t *testing.T) {
 	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&got)
+		_ = json.NewDecoder(r.Body).Decode(&got)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"success": 1, "failure": 0,
 			"results": []map[string]string{{"message_id": "x"}},
 		})
@@ -66,9 +66,9 @@ func TestFCMPusher_Send_IncludesDataWhenNonEmpty(t *testing.T) {
 func TestFCMPusher_Send_OmitsDataWhenNil(t *testing.T) {
 	var got map[string]any
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		json.NewDecoder(r.Body).Decode(&got)
+		_ = json.NewDecoder(r.Body).Decode(&got)
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"success": 1, "failure": 0,
 			"results": []map[string]string{{"message_id": "x"}},
 		})
@@ -87,7 +87,7 @@ func TestFCMPusher_Send_OmitsDataWhenNil(t *testing.T) {
 func TestFCMPusher_Send_FCMDeliveryFailure(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		json.NewEncoder(w).Encode(map[string]any{
+		_ = json.NewEncoder(w).Encode(map[string]any{
 			"success": 0, "failure": 1,
 			"results": []map[string]string{{"error": "InvalidRegistration"}},
 		})

@@ -28,7 +28,7 @@ func TestLiteLLMGenerator_ReturnsGeneratedTaunt(t *testing.T) {
 	want := "Your algebra is as broken as your confidence!"
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, completionsResponse(want))
+		_, _ = io.WriteString(w, completionsResponse(want))
 	}))
 	defer srv.Close()
 
@@ -49,7 +49,7 @@ func TestLiteLLMGenerator_PromptContainsBossNameAndRound(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		capturedBody, _ = io.ReadAll(r.Body)
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, completionsResponse("taunt"))
+		_, _ = io.WriteString(w, completionsResponse("taunt"))
 	}))
 	defer srv.Close()
 
@@ -72,7 +72,7 @@ func TestLiteLLMGenerator_SetsAuthorizationHeader(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		gotAuth = r.Header.Get("Authorization")
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, completionsResponse("taunt"))
+		_, _ = io.WriteString(w, completionsResponse("taunt"))
 	}))
 	defer srv.Close()
 
@@ -104,7 +104,7 @@ func TestLiteLLMGenerator_GatewayError_ReturnsError(t *testing.T) {
 func TestLiteLLMGenerator_EmptyChoices_ReturnsError(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
-		io.WriteString(w, `{"choices":[]}`)
+		_, _ = io.WriteString(w, `{"choices":[]}`)
 	}))
 	defer srv.Close()
 

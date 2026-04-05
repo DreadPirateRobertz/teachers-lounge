@@ -6,6 +6,10 @@ BEGIN;
 
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
+-- 001_initial_schema included a JSONB-based learning_profiles stub; replace it
+-- with the authoritative SKM schema (individual float dials + proper constraints).
+DROP TABLE IF EXISTS learning_profiles CASCADE;
+
 -- Per-student Felder-Silverman learning-style dials (local, authoritative store)
 CREATE TABLE learning_profiles (
   user_id           UUID PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,

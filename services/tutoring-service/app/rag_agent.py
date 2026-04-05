@@ -32,8 +32,8 @@ from .graph import (
     get_course_concepts,
     get_student_mastery,
 )
-from .orm import Concept
 from .history import get_history
+from .orm import Concept
 from .search_client import SearchResult, fetch_curriculum_chunks
 
 logger = logging.getLogger(__name__)

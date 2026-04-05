@@ -365,7 +365,7 @@ func mustRegister(t *testing.T, h *handlers.AuthHandler, s *mockStore) (string, 
 		AccountType:  models.AccountTypeStandard,
 	})
 	trialEnd := time.Now().AddDate(0, 0, 14)
-	s.CreateSubscription(context.Background(), store.CreateSubscriptionParams{
+	_, _ = s.CreateSubscription(context.Background(), store.CreateSubscriptionParams{
 		UserID:           u.ID,
 		StripeCustomerID: "cus_test",
 		Plan:             models.PlanTrial,
@@ -381,7 +381,7 @@ func mustRegister(t *testing.T, h *handlers.AuthHandler, s *mockStore) (string, 
 		t.Fatalf("login failed: %d %s", w.Code, w.Body.String())
 	}
 	var resp models.AuthResponse
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 
 	var refreshCookie *http.Cookie
 	for _, c := range w.Result().Cookies() {
@@ -411,7 +411,7 @@ func TestRegister_Success(t *testing.T) {
 		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
 	}
 	var resp models.AuthResponse
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp.AccessToken == "" {
 		t.Error("expected access token in response")
 	}
@@ -503,7 +503,7 @@ func TestRegister_MinorSetsAccountType(t *testing.T) {
 		t.Fatalf("expected 201 for minor with guardian, got %d: %s", w.Code, w.Body.String())
 	}
 	var resp models.AuthResponse
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp.User.AccountType != models.AccountTypeMinor {
 		t.Errorf("expected account_type=minor, got %s", resp.User.AccountType)
 	}
@@ -525,7 +525,7 @@ func TestRegister_AdultHasStandardAccountType(t *testing.T) {
 		t.Fatalf("expected 201, got %d: %s", w.Code, w.Body.String())
 	}
 	var resp models.AuthResponse
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp.User.AccountType != models.AccountTypeStandard {
 		t.Errorf("expected account_type=standard, got %s", resp.User.AccountType)
 	}
@@ -550,7 +550,7 @@ func TestLogin_Success(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	var resp models.AuthResponse
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp.AccessToken == "" {
 		t.Error("expected access token")
 	}
@@ -606,7 +606,7 @@ func TestRefresh_Success(t *testing.T) {
 		t.Fatalf("expected 200, got %d: %s", w.Code, w.Body.String())
 	}
 	var resp models.AuthResponse
-	json.NewDecoder(w.Body).Decode(&resp)
+	_ = json.NewDecoder(w.Body).Decode(&resp)
 	if resp.AccessToken == "" {
 		t.Error("expected new access token after refresh")
 	}

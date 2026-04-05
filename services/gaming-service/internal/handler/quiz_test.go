@@ -77,7 +77,9 @@ func TestStripAnswer_HidesSecret(t *testing.T) {
 	// Verify json:"-" tags mean CorrectKey never appears in marshalled output.
 	raw, _ := json.Marshal(q)
 	var m map[string]any
-	json.Unmarshal(raw, &m)
+	if err := json.Unmarshal(raw, &m); err != nil {
+		t.Fatalf("json.Unmarshal: %v", err)
+	}
 	if _, ok := m["correct_key"]; ok {
 		t.Error("json.Marshal(Question) should not include correct_key field")
 	}
