@@ -426,6 +426,7 @@ class TestProcessFigures:
     def _make_image_element(self, image_path: str, text: str = ""):
         """Build a mock unstructured Image element with metadata.image_path set."""
         from unittest.mock import MagicMock
+
         from unstructured.documents.elements import Image
 
         meta = MagicMock()
