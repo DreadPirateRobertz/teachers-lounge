@@ -5,7 +5,7 @@ pydantic-settings==2.13.1
 qdrant-client==1.11.3
 openai==1.60.0
 opentelemetry-sdk==1.29.0
-opentelemetry-instrumentation-fastapi==0.50b0
+opentelemetry-instrumentation-fastapi==0.61b0
 opentelemetry-exporter-otlp-proto-grpc==1.29.0
 
 # Test dependencies
