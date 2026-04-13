@@ -9,10 +9,11 @@
 import React from 'react'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 
-// next/navigation is mocked by jest moduleNameMapper in jest.config.ts via
-// the __mocks__ directory convention.  We provide a minimal inline mock here.
+const mockPush = jest.fn()
+const mockRefresh = jest.fn()
+
 jest.mock('next/navigation', () => ({
-  useRouter: () => ({ push: jest.fn(), refresh: jest.fn() }),
+  useRouter: () => ({ push: mockPush, refresh: mockRefresh }),
 }))
 
 global.fetch = jest.fn()
@@ -33,9 +34,37 @@ function mockFetchOk() {
   })
 }
 
+function mockFetchFail(status = 500) {
+  ;(global.fetch as jest.Mock).mockResolvedValue({
+    ok: false,
+    status,
+    json: async () => ({ error: 'server error' }),
+  })
+}
+
+function mockFetchNetworkError() {
+  ;(global.fetch as jest.Mock).mockRejectedValue(new Error('ECONNREFUSED'))
+}
+
+/** Advance wizard to a given step index by clicking through. */
+async function advanceTo(stepIndex: number) {
+  if (stepIndex >= 1) {
+    fireEvent.click(screen.getByRole('button', { name: /let's go/i }))
+  }
+  if (stepIndex >= 2) {
+    fireEvent.click(screen.getByRole('button', { name: /looks good/i }))
+    await waitFor(() => screen.getByText(/upload your study materials/i))
+  }
+  if (stepIndex >= 3) {
+    fireEvent.click(screen.getByRole('button', { name: /got it/i }))
+  }
+}
+
 describe('OnboardingWizard', () => {
   beforeEach(() => {
     ;(global.fetch as jest.Mock).mockReset()
+    mockPush.mockReset()
+    mockRefresh.mockReset()
   })
 
   it('renders the welcome step first', () => {
@@ -54,7 +83,6 @@ describe('OnboardingWizard', () => {
     render(<OnboardingWizard {...defaultProps} />)
 
     fireEvent.click(screen.getByRole('button', { name: /let's go/i }))
-    // Submit character step with defaults
     fireEvent.click(screen.getByRole('button', { name: /looks good/i }))
 
     await waitFor(() => {
@@ -79,7 +107,6 @@ describe('OnboardingWizard', () => {
 
   it('renders progress dots equal to number of steps', () => {
     render(<OnboardingWizard {...defaultProps} />)
-    // 4 steps → 4 progress dots (divs inside progressbar)
     const bar = screen.getByRole('progressbar')
     const dots = bar.querySelectorAll('div')
     expect(dots).toHaveLength(4)
@@ -98,5 +125,111 @@ describe('OnboardingWizard', () => {
         expect.objectContaining({ method: 'PATCH' }),
       )
     })
+  })
+
+  // --- Error state tests ---
+
+  it('stays on character step when save API returns an error', async () => {
+    mockFetchFail()
+    render(<OnboardingWizard {...defaultProps} />)
+
+    fireEvent.click(screen.getByRole('button', { name: /let's go/i }))
+    fireEvent.click(screen.getByRole('button', { name: /looks good/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/failed to save/i)).toBeInTheDocument()
+    })
+    // Still on character step
+    expect(screen.getByText(/create your character/i)).toBeInTheDocument()
+  })
+
+  it('shows completion error when onboarding PATCH fails', async () => {
+    // First call (character save) succeeds, second call (onboarding complete) fails
+    ;(global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, status: 204, json: async () => ({}) })
+      .mockResolvedValueOnce({ ok: false, status: 500, json: async () => ({}) })
+
+    render(<OnboardingWizard {...defaultProps} />)
+    await advanceTo(3)
+
+    fireEvent.click(screen.getByRole('button', { name: /start learning/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/could not save progress/i)).toBeInTheDocument()
+    })
+    // Still navigates to home despite error
+    expect(mockPush).toHaveBeenCalledWith('/')
+  })
+
+  it('shows network error when onboarding PATCH throws', async () => {
+    ;(global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, status: 204, json: async () => ({}) })
+      .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+
+    render(<OnboardingWizard {...defaultProps} />)
+    await advanceTo(3)
+
+    fireEvent.click(screen.getByRole('button', { name: /start learning/i }))
+
+    await waitFor(() => {
+      expect(screen.getByText(/network error/i)).toBeInTheDocument()
+    })
+    expect(mockPush).toHaveBeenCalledWith('/')
+  })
+
+  it('navigates to home and refreshes on successful completion', async () => {
+    mockFetchOk()
+    render(<OnboardingWizard {...defaultProps} />)
+    await advanceTo(3)
+
+    fireEvent.click(screen.getByRole('button', { name: /start learning/i }))
+
+    await waitFor(() => {
+      expect(mockPush).toHaveBeenCalledWith('/')
+      expect(mockRefresh).toHaveBeenCalled()
+    })
+  })
+
+  // --- Progress dot state tests ---
+
+  it('marks completed steps with green styling in progress dots', async () => {
+    mockFetchOk()
+    render(<OnboardingWizard {...defaultProps} />)
+
+    const bar = screen.getByRole('progressbar')
+    const dots = bar.querySelectorAll('div')
+
+    // Initially first dot is current (blue), rest are pending
+    expect(dots[0].className).toContain('bg-neon-blue')
+    expect(dots[1].className).toContain('bg-border-mid')
+
+    // Advance to step 2
+    fireEvent.click(screen.getByRole('button', { name: /let's go/i }))
+    const updatedDots = bar.querySelectorAll('div')
+    expect(updatedDots[0].className).toContain('bg-neon-green')
+    expect(updatedDots[1].className).toContain('bg-neon-blue')
+  })
+
+  it('shows finishing state on ready step button during completion', async () => {
+    let resolveOnboarding!: (value: Response) => void
+    ;(global.fetch as jest.Mock)
+      .mockResolvedValueOnce({ ok: true, status: 204, json: async () => ({}) })
+      .mockImplementationOnce(
+        () =>
+          new Promise<Response>((r) => {
+            resolveOnboarding = r
+          }),
+      )
+
+    render(<OnboardingWizard {...defaultProps} />)
+    await advanceTo(3)
+
+    fireEvent.click(screen.getByRole('button', { name: /start learning/i }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /launching/i })).toBeDisabled()
+    })
+
+    resolveOnboarding({ ok: true, status: 204, json: async () => ({}) } as Response)
   })
 })
