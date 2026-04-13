@@ -61,6 +61,22 @@ snapshot:
     limits:
       cpu: 500m
       memory: 256Mi
+  ## Prometheus alerting on snapshot freshness + job failures.
+  ## Routing is owned by kube-prometheus-stack alertmanager
+  ## (infra/helm/monitoring/values.yaml):
+  ##   severity=critical → PagerDuty, severity=warning → Slack #alerts.
+  alerting:
+    enabled: true
+    ## Seconds since last successful snapshot before paging. Default 25h
+    ## gives a 1h buffer past the 24h SLO to absorb clock skew / retries.
+    stalenessSeconds: 90000
+    ## `for` window on the stale alert — short, since staleness itself is cumulative.
+    stalenessFor: "5m"
+    ## `for` window on the job-failed warning — absorb single-run transient failures.
+    jobFailedFor: "15m"
+    ## Prometheus release label that kube-prometheus-stack's ruleSelector matches.
+    ## Override when the monitoring chart is deployed under a non-default release name.
+    prometheusReleaseLabel: "monitoring"
 
 ## Service account for Workload Identity (GCS snapshot upload).
 ## In prod, annotate with the GCP service account email.

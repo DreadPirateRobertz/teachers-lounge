@@ -1,0 +1,84 @@
+{{- if and .Values.snapshot.enabled .Values.snapshot.alerting.enabled }}
+# PrometheusRule for the nightly Qdrant GCS snapshot CronJob.
+#
+# Two alerts are defined:
+#
+#   QdrantSnapshotStale      severity=critical  → PagerDuty (pages on-call)
+#     Fires when the CronJob's last_successful_time is older than
+#     .Values.snapshot.alerting.stalenessSeconds (default 25h = 90000s).
+#     This is the primary SLO — nightly snapshots must land within 25 h.
+#
+#   QdrantSnapshotJobFailed  severity=warning   → Slack #alerts
+#     Fires when kube-state-metrics reports any failed Job owned by the
+#     snapshot CronJob in the last hour. Early-warning — the CronJob may
+#     still eventually succeed before the 25 h stale-alert trips.
+#
+# Routing is owned by the kube-prometheus-stack alertmanager config in
+# infra/helm/monitoring/values.yaml, which matches on `severity`.
+#
+# Runbook: docs/runbooks/qdrant-restore.md
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ include "qdrant.fullname" . }}-snapshot-alerts
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "qdrant.labels" . | nindent 4 }}
+    # Selected by kube-prometheus-stack's default ruleSelector.
+    release: {{ .Values.snapshot.alerting.prometheusReleaseLabel | default "monitoring" }}
+spec:
+  groups:
+    - name: qdrant.snapshot
+      rules:
+        - alert: QdrantSnapshotStale
+          # kube_cronjob_status_last_successful_time is a UNIX timestamp in
+          # seconds, emitted by kube-state-metrics. Compare against `time()`
+          # to measure staleness.  `max by (cronjob)` guards against duplicate
+          # series during kube-state-metrics rollouts.
+          expr: |
+            (time() - max by (cronjob, namespace) (
+              kube_cronjob_status_last_successful_time{
+                cronjob="{{ include "qdrant.fullname" . }}-snapshot",
+                namespace="{{ .Release.Namespace }}"
+              }
+            )) > {{ .Values.snapshot.alerting.stalenessSeconds }}
+          for: {{ .Values.snapshot.alerting.stalenessFor | quote }}
+          labels:
+            severity: critical
+            service: qdrant
+            component: snapshot
+          annotations:
+            summary: "Qdrant nightly snapshot has not succeeded in > 25 h"
+            description: >-
+              The Qdrant snapshot CronJob
+              ({{ "{{" }} $labels.cronjob {{ "}}" }} in namespace
+              {{ "{{" }} $labels.namespace {{ "}}" }}) has not reported a
+              successful completion in over 25 hours. Nightly snapshots are
+              the primary disaster-recovery mechanism for the RAG vector
+              store — this must be investigated immediately.
+            runbook_url: "https://github.com/DreadPirateRobertz/teachers-lounge/blob/main/docs/runbooks/qdrant-restore.md"
+
+        - alert: QdrantSnapshotJobFailed
+          # Any Job owned by the snapshot CronJob that transitioned to failed
+          # in the last hour. Warns before the stale-alert trips at 25 h.
+          expr: |
+            sum by (namespace, job_name) (
+              kube_job_failed{
+                job_name=~"{{ include "qdrant.fullname" . }}-snapshot-.*",
+                namespace="{{ .Release.Namespace }}"
+              }
+            ) > 0
+          for: {{ .Values.snapshot.alerting.jobFailedFor | quote }}
+          labels:
+            severity: warning
+            service: qdrant
+            component: snapshot
+          annotations:
+            summary: "Qdrant snapshot Job failed"
+            description: >-
+              Job {{ "{{" }} $labels.job_name {{ "}}" }} (namespace
+              {{ "{{" }} $labels.namespace {{ "}}" }}) from the Qdrant
+              snapshot CronJob has failed. The 25 h stale-alert will page
+              on-call if the next run does not recover.
+            runbook_url: "https://github.com/DreadPirateRobertz/teachers-lounge/blob/main/docs/runbooks/qdrant-restore.md"
+{{- end }}
