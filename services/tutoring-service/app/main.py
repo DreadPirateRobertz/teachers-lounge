@@ -30,6 +30,7 @@ from .chat_simple import router as chat_simple_router
 from .concepts import router as concepts_router
 from .config import settings
 from .database import Base, engine
+from .health import router as health_router
 from .logging_config import configure_logging
 from .metrics import metrics_app
 from .metrics_middleware import PrometheusMiddleware
@@ -77,6 +78,7 @@ app.add_middleware(
 
 app.mount("/metrics", metrics_app)
 
+app.include_router(health_router)
 app.include_router(sessions_router, prefix="/v1")
 app.include_router(chat_router, prefix="/v1")
 app.include_router(chat_simple_router, prefix="/v1")
@@ -102,22 +104,3 @@ async def on_shutdown():
     await close_cache()
 
 
-@app.get("/health", tags=["ops"])
-async def health():
-    """Return service liveness status.
-
-    Returns:
-        Dict with ``status`` key set to ``"ok"``.
-    """
-    return {"status": "ok"}
-
-
-@app.get("/health/readiness", tags=["ops"])
-async def readiness():
-    """Return service readiness status.
-
-    Returns:
-        Dict with ``status`` key set to ``"ready"``.
-    """
-    # Phase 2+: check DB connection and AI gateway reachability
-    return {"status": "ready"}

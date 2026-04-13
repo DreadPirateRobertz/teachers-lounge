@@ -27,15 +27,21 @@ async def test_metrics_endpoint_reachable():
 
 @pytest.mark.asyncio
 async def test_health_endpoint_records_http_metrics():
-    """Calling /health causes http_requests_total to increment."""
+    """Calling /healthz causes http_requests_total to increment."""
+    from unittest.mock import AsyncMock, patch
+
     from app.main import app
     from app.metrics import http_requests_total
 
-    collector = http_requests_total.labels(method="GET", path="/health", status="200")
+    collector = http_requests_total.labels(method="GET", path="/healthz", status="200")
     before = collector._value.get()
 
-    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-        response = await client.get("/health")
+    with (
+        patch("app.health._ping_db", new=AsyncMock(return_value=True)),
+        patch("app.health._ping_redis", new=AsyncMock(return_value=True)),
+    ):
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+            response = await client.get("/healthz")
 
     assert response.status_code == 200
     after = collector._value.get()
