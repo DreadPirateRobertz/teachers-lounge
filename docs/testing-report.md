@@ -1,7 +1,7 @@
 # TeachersLounge — Testing Report
 
 > **Living document.** Updated by Petra (PM) after each PR batch or sprint.
-> Last updated: 2026-04-13
+> Last updated: 2026-04-13 (session 2)
 
 ---
 
@@ -9,15 +9,15 @@
 
 | Service | Tests | Coverage | CI Status | Last updated |
 |---------|-------|----------|-----------|--------------|
-| frontend (Next.js) | 735+ | ≥80% patch | ❌ #219 failing (shen fixing) | 2026-04-13 |
-| tutoring-service (Python) | passing | ≥80% patch | ✅ Green | 2026-04-13 |
-| ingestion-service (Python) | passing | ≥80% patch | 🔄 tl-3r5 polecat adding PDF pipeline tests | 2026-04-13 |
-| search-service (Python) | passing | 🔄 to 90% | 🔄 tl-he3 polecat running coverage audit | 2026-04-13 |
+| frontend (Next.js) | 748+ | ≥80% patch | 🔄 #224 open (tl-bfo, CI Prettier fix pending) | 2026-04-13 |
+| tutoring-service (Python) | passing | ≥80% patch | 🔄 tl-5wl JWT audience validation tests pending | 2026-04-13 |
+| ingestion-service (Python) | passing | ≥80% patch | 🔄 tl-k2q polecat adding PDF pipeline tests | 2026-04-13 |
+| search-service (Python) | passing | ✅ ~90% | ✅ Green (PR #220 merged — Prometheus histogram) | 2026-04-13 |
 | analytics-service (Python) | passing | 🔄 to 90% | 🔄 tl-nsg polecat running full pytest suite | 2026-04-13 |
-| eval-service (Python) | passing | ≥80% patch | ✅ Green | 2026-04-12 |
-| user-service (Go) | passing | ≥80% patch | ✅ Green | 2026-04-12 |
-| gaming-service (Go) | passing | ~85% | ✅ Green (store tests added PR #218) | 2026-04-13 |
-| notification-service (Go) | passing | ≥80% patch | ✅ Green (tl-6li shipped) | 2026-04-13 |
+| eval-service (Python) | passing | ≥80% patch | 🔄 tl-hj6 polecat expanding to 90% | 2026-04-13 |
+| user-service (Go) | passing | ≥80% patch | 🔄 tl-bj8 polecat expanding to 90% | 2026-04-13 |
+| gaming-service (Go) | passing | ~87% | ✅ Green (N+1 batch fix #221, leaderboard tests #222) | 2026-04-13 |
+| notification-service (Go) | passing | ≥80% patch | 🔄 tl-w8y carn fixing errcheck lint | 2026-04-13 |
 
 ---
 
@@ -83,9 +83,19 @@ Legacy code grandfathered at 80%.
 
 | PR | Branch | Tests | Blocker |
 |----|--------|-------|---------|
-| [#219](../../pull/219) | feat/tl-dye-boss-battle-frontend | ❌ `frontend` failing | Shen alerted — fix in progress |
+| [#224](../../pull/224) | feat/tl-bfo-battle-stream-hook | 🔄 CI Prettier pre-existing files | Shen fixing — 5-agent review posted ✅ |
 
-### Recently Merged This Session (2026-04-13)
+### Recently Merged (2026-04-13 session 2)
+
+| PR | Bead | Description | Result |
+|----|------|-------------|--------|
+| #223 | tl-udx | Learning style detection tests (tutoring-service) | ✅ Merged |
+| #222 | tl-kc7 | Leaderboard API tests (gaming-service, 24 tests) | ✅ Merged |
+| #221 | tl-7wv | N+1 batch mastery fix + notification errcheck | ✅ Merged |
+| #220 | tl-he3 | Search-service Prometheus histogram (search ~90%) | ✅ Merged |
+| #219 | tl-dye | Boss battle LootReveal (useRef guard fix) | ✅ Merged |
+
+### Recently Merged (2026-04-13 session 1)
 
 | PR | Bead | Description | Result |
 |----|------|-------------|--------|
@@ -162,10 +172,14 @@ These are manual smoke checks run against the docker stack. Automate with k6 (tl
 | Search service coverage | Below 90% target | tl-he3 | 🔄 Polecat running |
 | Analytics service test suite | No pytest for student.py routes | tl-nsg | 🔄 Polecat running |
 | PDF ingestion tests | New Celery task needs tests | tl-3r5 | 🔄 Polecat running |
-| JWT audience validation | tutoring-service missing test | hq-cv-gjapg | ⚠️ Alai ESCALATED — unresponsive |
-| N+1 batch mastery query | gaming-service per-boss DB calls | follow-on | 🔄 Carn working |
+| JWT audience validation | tutoring-service missing test | tl-5wl | 🔄 Alai assigned — no PR yet |
+| N+1 batch mastery query | gaming-service per-boss DB calls | tl-7wv | ✅ Fixed PR #221 |
 | Adaptive dashboard tests | New component | tl-l63 | 🔄 Polecat running |
-| Learning style detection tests | New tutoring feature | tl-udx | 🔄 Polecat running |
+| Learning style detection tests | New tutoring feature | tl-udx | ✅ Merged PR #223 |
+| user-service Go coverage | Expand to 90% — registration + auth | tl-bj8 | 🔄 Polecat (rust) running |
+| eval-service pytest coverage | Expand to 90% — scoring edge cases | tl-hj6 | 🔄 Polecat (shiny) running |
+| PDF ingestion Celery tests | New Celery task needs tests | tl-k2q | 🔄 Polecat (dink) running |
+| notification-service errcheck | hub_test.go + ws.go SetReadDeadline | tl-w8y | 🔄 Carn fixing |
 
 ---
 
