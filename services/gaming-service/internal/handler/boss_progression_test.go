@@ -10,6 +10,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/teacherslounge/gaming-service/internal/boss"
 	"github.com/teacherslounge/gaming-service/internal/handler"
 	"github.com/teacherslounge/gaming-service/internal/middleware"
 	"github.com/teacherslounge/gaming-service/internal/model"
@@ -18,15 +19,34 @@ import (
 
 // ── progressionStore stub ─────────────────────────────────────────────────────
 
-// progressionStore overrides GetDefeatedBossIDs on top of battleStore.
+// progressionStore overrides boss-progression reads on top of battleStore.
+//
+// masteryByPaths keys on the first ltree path of a boss's ChapterConceptPaths
+// — adequate for tests since each boss's paths are disjoint. Unset paths
+// return 0.0.
 type progressionStore struct {
 	battleStore
-	defeatedIDs []string
-	queryErr    error
+	defeatedIDs    []string
+	queryErr       error
+	masteryByPaths map[string]float64
+	masteryErr     error
 }
 
 func (p *progressionStore) GetDefeatedBossIDs(_ context.Context, _ string) ([]string, error) {
 	return p.defeatedIDs, p.queryErr
+}
+
+func (p *progressionStore) GetChapterMastery(_ context.Context, _ string, paths []string) (float64, error) {
+	if p.masteryErr != nil {
+		return 0.0, p.masteryErr
+	}
+	if len(paths) == 0 {
+		return 0.0, nil
+	}
+	if v, ok := p.masteryByPaths[paths[0]]; ok {
+		return v, nil
+	}
+	return 0.0, nil
 }
 
 var _ handler.Storer = (*progressionStore)(nil)
@@ -50,6 +70,34 @@ func progressionResponse(t *testing.T, body *httptest.ResponseRecorder) handler.
 	return resp
 }
 
+// firstPathFor returns the first ChapterConceptPath for a boss by ID,
+// used as a mastery-map key in tests.
+func firstPathFor(t *testing.T, bossID string) string {
+	t.Helper()
+	for _, def := range boss.Catalog {
+		if def.ID == bossID {
+			if len(def.ChapterConceptPaths) == 0 {
+				t.Fatalf("boss %s has no ChapterConceptPaths", bossID)
+			}
+			return def.ChapterConceptPaths[0]
+		}
+	}
+	t.Fatalf("boss %s not found in catalog", bossID)
+	return ""
+}
+
+// firstBossID returns the catalog boss flagged IsFirstBoss.
+func firstBossID(t *testing.T) string {
+	t.Helper()
+	for _, def := range boss.Catalog {
+		if def.IsFirstBoss {
+			return def.ID
+		}
+	}
+	t.Fatal("no IsFirstBoss in catalog")
+	return ""
+}
+
 // ── Auth ──────────────────────────────────────────────────────────────────────
 
 func TestGetBossProgression_NoAuth_Forbidden(t *testing.T) {
@@ -64,67 +112,92 @@ func TestGetBossProgression_NoAuth_Forbidden(t *testing.T) {
 	}
 }
 
-// ── Happy paths ───────────────────────────────────────────────────────────────
+// ── Mastery-gate behavior ─────────────────────────────────────────────────────
 
-func TestGetBossProgression_FreshUser_AllLockedExceptFirst(t *testing.T) {
-	st := &progressionStore{defeatedIDs: nil}
+func TestGetBossProgression_FreshUser_OnlyFirstBossCurrent(t *testing.T) {
+	st := &progressionStore{}
 	h := newProgressionHandler(st)
 
-	req := httptest.NewRequest(http.MethodGet, "/gaming/boss/progression", nil)
-	req = withCallerID(req, "user1")
+	req := withCallerID(httptest.NewRequest(http.MethodGet, "/gaming/boss/progression", nil), "u1")
 	rec := httptest.NewRecorder()
-
 	h.GetBossProgression(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
 	}
 	resp := progressionResponse(t, rec)
-	if len(resp.Nodes) == 0 {
-		t.Fatal("expected nodes, got none")
-	}
 	if resp.TotalDefeated != 0 {
 		t.Errorf("expected 0 defeated, got %d", resp.TotalDefeated)
 	}
-	// Tier-1 boss must be "current"; all others "locked".
+	firstID := firstBossID(t)
 	for _, node := range resp.Nodes {
-		if node.Tier == 1 {
-			if node.State != "current" {
-				t.Errorf("tier-1 boss: expected current, got %s", node.State)
-			}
-		} else {
-			if node.State != "locked" {
-				t.Errorf("tier-%d boss: expected locked for fresh user, got %s", node.Tier, node.State)
-			}
+		want := "locked"
+		if node.BossID == firstID {
+			want = "current"
+		}
+		if node.State != want {
+			t.Errorf("boss %s: expected %s, got %s", node.BossID, want, node.State)
 		}
 	}
 }
 
-func TestGetBossProgression_Tier1Defeated_Tier2Current(t *testing.T) {
-	st := &progressionStore{defeatedIDs: []string{"the_atom"}}
+func TestGetBossProgression_MasteryThresholdReached_BossBecomesCurrent(t *testing.T) {
+	// 60% mastery on the_bonder's chapter should unlock the_bonder even with
+	// no prior defeats.
+	path := firstPathFor(t, "the_bonder")
+	st := &progressionStore{
+		masteryByPaths: map[string]float64{path: 0.60},
+	}
 	h := newProgressionHandler(st)
 
-	req := httptest.NewRequest(http.MethodGet, "/gaming/boss/progression", nil)
-	req = withCallerID(req, "user1")
+	req := withCallerID(httptest.NewRequest(http.MethodGet, "/gaming/boss/progression", nil), "u1")
 	rec := httptest.NewRecorder()
-
 	h.GetBossProgression(rec, req)
 
 	resp := progressionResponse(t, rec)
 	for _, node := range resp.Nodes {
-		switch node.Tier {
-		case 1:
-			if node.State != "defeated" {
-				t.Errorf("tier-1: expected defeated, got %s", node.State)
-			}
-		case 2:
-			if node.State != "current" {
-				t.Errorf("tier-2: expected current, got %s", node.State)
-			}
-		default:
-			if node.State != "locked" {
-				t.Errorf("tier-%d: expected locked, got %s", node.Tier, node.State)
-			}
+		if node.BossID == "the_bonder" && node.State != "current" {
+			t.Errorf("the_bonder at 60%% mastery: expected current, got %s", node.State)
+		}
+	}
+}
+
+func TestGetBossProgression_BelowThreshold_BossStaysLocked(t *testing.T) {
+	path := firstPathFor(t, "the_bonder")
+	st := &progressionStore{
+		masteryByPaths: map[string]float64{path: 0.59},
+	}
+	h := newProgressionHandler(st)
+
+	req := withCallerID(httptest.NewRequest(http.MethodGet, "/gaming/boss/progression", nil), "u1")
+	rec := httptest.NewRecorder()
+	h.GetBossProgression(rec, req)
+
+	resp := progressionResponse(t, rec)
+	for _, node := range resp.Nodes {
+		if node.BossID == "the_bonder" && node.State != "locked" {
+			t.Errorf("the_bonder at 59%% mastery: expected locked, got %s", node.State)
+		}
+	}
+}
+
+func TestGetBossProgression_Defeated_StateWinsOverMastery(t *testing.T) {
+	// Defeated boss keeps "defeated" state regardless of current mastery level.
+	path := firstPathFor(t, "the_atom")
+	st := &progressionStore{
+		defeatedIDs:    []string{"the_atom"},
+		masteryByPaths: map[string]float64{path: 0.10},
+	}
+	h := newProgressionHandler(st)
+
+	req := withCallerID(httptest.NewRequest(http.MethodGet, "/gaming/boss/progression", nil), "u1")
+	rec := httptest.NewRecorder()
+	h.GetBossProgression(rec, req)
+
+	resp := progressionResponse(t, rec)
+	for _, node := range resp.Nodes {
+		if node.BossID == "the_atom" && node.State != "defeated" {
+			t.Errorf("the_atom defeated: expected defeated, got %s", node.State)
 		}
 	}
 }
@@ -136,10 +209,8 @@ func TestGetBossProgression_AllDefeated_AllDefeatedState(t *testing.T) {
 	}}
 	h := newProgressionHandler(st)
 
-	req := httptest.NewRequest(http.MethodGet, "/gaming/boss/progression", nil)
-	req = withCallerID(req, "user1")
+	req := withCallerID(httptest.NewRequest(http.MethodGet, "/gaming/boss/progression", nil), "u1")
 	rec := httptest.NewRecorder()
-
 	h.GetBossProgression(rec, req)
 
 	resp := progressionResponse(t, rec)
@@ -154,13 +225,11 @@ func TestGetBossProgression_AllDefeated_AllDefeatedState(t *testing.T) {
 }
 
 func TestGetBossProgression_NodesOrderedByAscendingTier(t *testing.T) {
-	st := &progressionStore{defeatedIDs: nil}
+	st := &progressionStore{}
 	h := newProgressionHandler(st)
 
-	req := httptest.NewRequest(http.MethodGet, "/gaming/boss/progression", nil)
-	req = withCallerID(req, "user1")
+	req := withCallerID(httptest.NewRequest(http.MethodGet, "/gaming/boss/progression", nil), "u1")
 	rec := httptest.NewRecorder()
-
 	h.GetBossProgression(rec, req)
 
 	resp := progressionResponse(t, rec)
@@ -172,13 +241,11 @@ func TestGetBossProgression_NodesOrderedByAscendingTier(t *testing.T) {
 }
 
 func TestGetBossProgression_NodeHasRequiredFields(t *testing.T) {
-	st := &progressionStore{defeatedIDs: nil}
+	st := &progressionStore{}
 	h := newProgressionHandler(st)
 
-	req := httptest.NewRequest(http.MethodGet, "/gaming/boss/progression", nil)
-	req = withCallerID(req, "user1")
+	req := withCallerID(httptest.NewRequest(http.MethodGet, "/gaming/boss/progression", nil), "u1")
 	rec := httptest.NewRecorder()
-
 	h.GetBossProgression(rec, req)
 
 	resp := progressionResponse(t, rec)
@@ -195,19 +262,47 @@ func TestGetBossProgression_NodeHasRequiredFields(t *testing.T) {
 		if node.State == "" {
 			t.Error("node missing state")
 		}
+		if node.MasteryThreshold != boss.MasteryUnlockThreshold {
+			t.Errorf("node %s: expected mastery_threshold=%v, got %v",
+				node.BossID, boss.MasteryUnlockThreshold, node.MasteryThreshold)
+		}
 	}
 }
 
-// ── Error path ────────────────────────────────────────────────────────────────
+func TestGetBossProgression_ChapterMasterySurfacedOnNode(t *testing.T) {
+	path := firstPathFor(t, "name_lord")
+	st := &progressionStore{
+		masteryByPaths: map[string]float64{path: 0.42},
+	}
+	h := newProgressionHandler(st)
 
-func TestGetBossProgression_StoreError_Returns500(t *testing.T) {
+	req := withCallerID(httptest.NewRequest(http.MethodGet, "/gaming/boss/progression", nil), "u1")
+	rec := httptest.NewRecorder()
+	h.GetBossProgression(rec, req)
+
+	resp := progressionResponse(t, rec)
+	var found bool
+	for _, node := range resp.Nodes {
+		if node.BossID == "name_lord" {
+			found = true
+			if node.ChapterMastery != 0.42 {
+				t.Errorf("name_lord: expected chapter_mastery=0.42, got %v", node.ChapterMastery)
+			}
+		}
+	}
+	if !found {
+		t.Fatal("name_lord node not in response")
+	}
+}
+
+// ── Error paths ───────────────────────────────────────────────────────────────
+
+func TestGetBossProgression_DefeatedQueryError_Returns500(t *testing.T) {
 	st := &progressionStore{queryErr: errors.New("db down")}
 	h := newProgressionHandler(st)
 
-	req := httptest.NewRequest(http.MethodGet, "/gaming/boss/progression", nil)
-	req = withCallerID(req, "user1")
+	req := withCallerID(httptest.NewRequest(http.MethodGet, "/gaming/boss/progression", nil), "u1")
 	rec := httptest.NewRecorder()
-
 	h.GetBossProgression(rec, req)
 
 	if rec.Code != http.StatusInternalServerError {
@@ -215,26 +310,16 @@ func TestGetBossProgression_StoreError_Returns500(t *testing.T) {
 	}
 }
 
-// ── bossNodeState unit tests ──────────────────────────────────────────────────
-
-// These test the lock logic directly without going through the HTTP layer.
-
-func TestBossNodeState_Defeated(t *testing.T) {
-	// A boss in the defeated map is always "defeated".
-	// We verify this via the HTTP response rather than calling unexported functions.
-	st := &progressionStore{defeatedIDs: []string{"the_atom"}}
+func TestGetBossProgression_MasteryQueryError_Returns500(t *testing.T) {
+	st := &progressionStore{masteryErr: errors.New("ltree query failed")}
 	h := newProgressionHandler(st)
 
-	req := httptest.NewRequest(http.MethodGet, "/gaming/boss/progression", nil)
-	req = withCallerID(req, "user1")
+	req := withCallerID(httptest.NewRequest(http.MethodGet, "/gaming/boss/progression", nil), "u1")
 	rec := httptest.NewRecorder()
 	h.GetBossProgression(rec, req)
 
-	resp := progressionResponse(t, rec)
-	for _, node := range resp.Nodes {
-		if node.BossID == "the_atom" && node.State != "defeated" {
-			t.Errorf("the_atom should be defeated, got %s", node.State)
-		}
+	if rec.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rec.Code)
 	}
 }
 
