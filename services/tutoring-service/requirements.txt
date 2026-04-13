@@ -10,7 +10,7 @@ python-dotenv==1.2.2
 python-jose[cryptography]==3.3.0
 prometheus_client==0.24.1
 opentelemetry-sdk==1.29.0
-opentelemetry-instrumentation-fastapi==0.50b0
+opentelemetry-instrumentation-fastapi==0.62b0
 opentelemetry-exporter-otlp-proto-grpc==1.29.0
 redis[hiredis]==5.2.1
 python-json-logger==3.2.1
