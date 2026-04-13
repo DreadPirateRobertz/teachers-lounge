@@ -23,17 +23,20 @@ type CreateUserParams struct {
 	GuardianEmail *string
 }
 
+// UpdateUserParams carries optional display fields for a user profile update.
 type UpdateUserParams struct {
 	DisplayName *string
 	AvatarEmoji *string
 }
 
+// UpdateProfileParams carries optional learning-profile fields to patch.
 type UpdateProfileParams struct {
 	FelderSilvermanDials     *map[string]float64
 	LearningStylePreferences *map[string]float64
 	ExplanationPreferences   *map[string]string
 }
 
+// CreateTokenParams holds the data required to persist a new refresh token.
 type CreateTokenParams struct {
 	UserID     uuid.UUID
 	TokenHash  string
@@ -41,6 +44,7 @@ type CreateTokenParams struct {
 	ExpiresAt  time.Time
 }
 
+// CreateSubscriptionParams holds the data required to create a new subscription record.
 type CreateSubscriptionParams struct {
 	UserID           uuid.UUID
 	StripeCustomerID string
@@ -49,6 +53,7 @@ type CreateSubscriptionParams struct {
 	TrialEnd         *time.Time
 }
 
+// UpdateSubscriptionParams carries the mutable fields for a Stripe subscription update.
 type UpdateSubscriptionParams struct {
 	StripeSubscriptionID    string
 	NewStripeSubscriptionID *string
@@ -60,6 +65,7 @@ type UpdateSubscriptionParams struct {
 	CancelledAt             *time.Time
 }
 
+// AuditLogParams carries the data required to write a FERPA audit log entry.
 type AuditLogParams struct {
 	AccessorID   *uuid.UUID
 	StudentID    *uuid.UUID
@@ -170,6 +176,7 @@ type CreateTeacherProfileParams struct {
 	Bio        string
 }
 
+// CreateClassParams holds the data required to create a new class record.
 type CreateClassParams struct {
 	TeacherID   uuid.UUID
 	Name        string
@@ -177,12 +184,14 @@ type CreateClassParams struct {
 	Description string
 }
 
+// UpdateClassParams carries the optional mutable fields for a class update.
 type UpdateClassParams struct {
 	Name        *string
 	Subject     *string
 	Description *string
 }
 
+// AssignMaterialParams holds the data required to assign a material to a class.
 type AssignMaterialParams struct {
 	ClassID    uuid.UUID
 	MaterialID uuid.UUID

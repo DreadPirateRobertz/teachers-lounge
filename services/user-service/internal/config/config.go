@@ -7,6 +7,7 @@ import (
 	"time"
 )
 
+// Config holds all runtime configuration for user-service, populated from environment variables.
 type Config struct {
 	// Server
 	Port string
@@ -45,6 +46,8 @@ type Config struct {
 	Env string // development | staging | production
 }
 
+// Load reads configuration from environment variables and returns a validated Config.
+// It panics if any required variable is absent and returns an error for invalid values.
 func Load() (*Config, error) {
 	cfg := &Config{
 		Port:                  getEnv("PORT", "8080"),

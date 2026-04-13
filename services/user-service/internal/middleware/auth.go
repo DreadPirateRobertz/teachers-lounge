@@ -138,6 +138,7 @@ func UserIDFromCtx(ctx context.Context) (uuid.UUID, bool) {
 	return id, err == nil
 }
 
+// ClaimsFromCtx returns the JWT Claims stored in ctx, or nil if not present.
 func ClaimsFromCtx(ctx context.Context) *auth.Claims {
 	c, _ := ctx.Value(ctxKeyClaims{}).(*auth.Claims)
 	return c

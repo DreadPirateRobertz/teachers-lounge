@@ -20,6 +20,7 @@ type Store struct {
 	pool *pgxpool.Pool
 }
 
+// New opens a pgx connection pool to the given database URL and returns a ready Store.
 func New(ctx context.Context, databaseURL string) (*Store, error) {
 	cfg, err := pgxpool.ParseConfig(databaseURL)
 	if err != nil {

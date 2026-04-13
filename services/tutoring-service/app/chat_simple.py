@@ -79,6 +79,7 @@ async def simple_chat(
         messages = [{"role": "system", "content": PROFESSOR_NOVA_SYSTEM_PROMPT}] + messages
 
     async def stream_generator():
+        """Yield SSE text chunks from the AI gateway, falling back on error."""
         try:
             stream = await client.chat.completions.create(
                 model=settings.tutor_primary_model,

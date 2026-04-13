@@ -10,11 +10,13 @@ import (
 	"github.com/teacherslounge/user-service/internal/store"
 )
 
+// SubscriptionsHandler handles subscription endpoints (GET/POST /users/.../subscription).
 type SubscriptionsHandler struct {
 	store   store.Storer
 	billing billing.SubscriptionManager
 }
 
+// NewSubscriptionsHandler creates a SubscriptionsHandler backed by the given store and billing client.
 func NewSubscriptionsHandler(s store.Storer, b billing.SubscriptionManager) *SubscriptionsHandler {
 	return &SubscriptionsHandler{store: s, billing: b}
 }

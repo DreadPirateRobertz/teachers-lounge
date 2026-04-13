@@ -18,6 +18,7 @@ import (
 	"github.com/teacherslounge/user-service/internal/rediskeys"
 )
 
+// AuthHandler handles auth endpoints: register, login, token refresh, logout.
 type AuthHandler struct {
 	store      store.Storer
 	cache      cache.Cacher
@@ -26,6 +27,7 @@ type AuthHandler struct {
 	cfg        *config.Config
 }
 
+// NewAuthHandler creates an AuthHandler wired to the given dependencies.
 func NewAuthHandler(s store.Storer, c cache.Cacher, j *auth.JWTManager, b *billing.Client, cfg *config.Config) *AuthHandler {
 	return &AuthHandler{store: s, cache: c, jwt: j, billing: b, cfg: cfg}
 }
