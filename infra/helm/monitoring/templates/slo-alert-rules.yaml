@@ -116,3 +116,58 @@ spec:
             service: tutoring-service
           annotations:
             summary: "RAG pipeline p95 latency at SLO boundary (> 500 ms)"
+
+    # ── Qdrant snapshot backups (tl-94n) ──────────────────────────────────────
+    #
+    # The Qdrant snapshot CronJob runs nightly at 02:00 UTC (see
+    # infra/helm/qdrant/templates/cronjob-snapshot.yaml). If it stops producing
+    # successful runs we lose disaster-recovery coverage silently — so we page.
+    #
+    # Metrics come from kube-state-metrics:
+    #   kube_cronjob_status_last_successful_time — unix timestamp, updates on success
+    #   kube_job_status_failed                  — per-Job failure counter
+    - name: tl.qdrant.snapshot
+      rules:
+        - alert: QdrantSnapshotCronJobStale
+          # No successful snapshot for > 36 h. Schedule is nightly (24 h) so
+          # 36 h allows one missed run plus slack before paging.
+          expr: |
+            time() - max(kube_cronjob_status_last_successful_time{
+              cronjob=~".*qdrant.*snapshot.*"
+            }) > 36 * 3600
+          for: 15m
+          labels:
+            severity: critical
+            service: qdrant
+            component: snapshot
+          annotations:
+            summary: "Qdrant snapshot CronJob has not succeeded in >36 h"
+            description: >-
+              The nightly Qdrant GCS snapshot CronJob has not recorded a
+              successful run in more than 36 hours.  Disaster-recovery coverage
+              is degraded — the curriculum and diagrams collections may not be
+              restorable to a recent point in time.  Investigate CronJob pod
+              logs and GCS bucket contents.
+            runbook_url: "https://github.com/DreadPirateRobertz/teachers-lounge/blob/main/docs/runbooks/qdrant-snapshot.md"
+
+        - alert: QdrantSnapshotJobFailed
+          # A Job spawned by the CronJob has failed at least once in the last
+          # hour. Fires faster than the staleness alert so on-call can act
+          # before the 36 h threshold trips.
+          expr: |
+            max(kube_job_status_failed{
+              job_name=~".*qdrant.*snapshot.*"
+            }) > 0
+          for: 5m
+          labels:
+            severity: warning
+            service: qdrant
+            component: snapshot
+          annotations:
+            summary: "Qdrant snapshot Job reported failure"
+            description: >-
+              A Job spawned by the Qdrant snapshot CronJob has recorded at
+              least one failure in the last hour.  Check kubectl logs for the
+              failed pod and the GCS upload step.  Escalates to critical via
+              QdrantSnapshotCronJobStale if successful runs do not resume.
+            runbook_url: "https://github.com/DreadPirateRobertz/teachers-lounge/blob/main/docs/runbooks/qdrant-snapshot.md"
