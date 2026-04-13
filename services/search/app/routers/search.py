@@ -1,10 +1,12 @@
 import asyncio
+import time
 import uuid
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Query
 
 from app.config import settings
+from app.metrics import search_query_duration_seconds
 from app.models import SearchResponse
 from app.services.embedder import embed_query
 from app.services.hybrid import combine_dense_sparse
@@ -49,9 +51,20 @@ async def search(
     """
     fetch_limit = max(limit, settings.sparse_rerank_limit)
 
-    query_vector, dense_results, sparse_results = await _run_search(
-        q, course_id, fetch_limit, chapter, section, content_type
-    )
+    _t0 = time.perf_counter()
+    try:
+        query_vector, dense_results, sparse_results = await _run_search(
+            q, course_id, fetch_limit, chapter, section, content_type
+        )
+        _query_type = "hybrid" if sparse_results else "semantic"
+        search_query_duration_seconds.labels(
+            query_type=_query_type, status="success"
+        ).observe(time.perf_counter() - _t0)
+    except Exception:
+        search_query_duration_seconds.labels(
+            query_type="semantic", status="error"
+        ).observe(time.perf_counter() - _t0)
+        raise
 
     fused = combine_dense_sparse(dense_results, sparse_results)
     ranked = await rerank(q, fused)

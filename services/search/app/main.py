@@ -12,6 +12,7 @@ from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
 
 from app.logging_config import configure_logging
+from app.metrics import metrics_app
 from app.routers import diagrams, search
 from app.services.qdrant import close_client, init_client
 
@@ -48,6 +49,8 @@ app = FastAPI(
 )
 
 FastAPIInstrumentor.instrument_app(app)
+
+app.mount("/metrics", metrics_app)
 
 app.include_router(search.router)
 app.include_router(diagrams.router)
