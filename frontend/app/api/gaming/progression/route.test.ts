@@ -2,15 +2,27 @@
  * @jest-environment node
  * @fileoverview Tests for the /api/gaming/progression Next.js route handler.
  *
- * Verifies mock-mode behavior (no GAMING_SERVICE_URL). Upstream proxying
- * is covered by integration tests.
+ * Covers mock-mode fallback (no GAMING_SERVICE_URL) and upstream proxy
+ * behavior including success, error, and auth header forwarding.
  */
 
 import { NextRequest } from 'next/server'
 import { GET } from './route'
 
+const originalEnv = process.env.GAMING_SERVICE_URL
+const originalFetch = global.fetch
+
 beforeEach(() => {
   delete process.env.GAMING_SERVICE_URL
+})
+
+afterEach(() => {
+  global.fetch = originalFetch
+  if (originalEnv !== undefined) {
+    process.env.GAMING_SERVICE_URL = originalEnv
+  } else {
+    delete process.env.GAMING_SERVICE_URL
+  }
 })
 
 describe('GET /api/gaming/progression', () => {
@@ -63,5 +75,100 @@ describe('GET /api/gaming/progression', () => {
     const data = await resp.json()
     const currentNodes = data.nodes.filter((n: { state: string }) => n.state === 'current')
     expect(currentNodes).toHaveLength(1)
+  })
+})
+
+describe('GET /api/gaming/progression — gaming-service proxy', () => {
+  beforeEach(() => {
+    process.env.GAMING_SERVICE_URL = 'http://gaming-service:8083'
+    jest.resetModules()
+  })
+
+  it('proxies GET to gaming-service /gaming/boss/progression', async () => {
+    let capturedUrl = ''
+    global.fetch = jest.fn().mockImplementation((url: string) => {
+      capturedUrl = url
+      return Promise.resolve(
+        new Response(JSON.stringify({ total_defeated: 2, nodes: [] }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    })
+
+    const { GET: getProxy } = await import('./route')
+    const req = new NextRequest('http://localhost/api/gaming/progression')
+    const resp = await getProxy(req)
+    const data = await resp.json()
+
+    expect(resp.status).toBe(200)
+    expect(capturedUrl).toContain('/gaming/boss/progression')
+    expect(data.total_defeated).toBe(2)
+  })
+
+  it('returns upstream error status when gaming-service fails', async () => {
+    global.fetch = jest.fn().mockResolvedValue(
+      new Response('service unavailable', { status: 503 }),
+    )
+
+    const { GET: getProxy } = await import('./route')
+    const req = new NextRequest('http://localhost/api/gaming/progression')
+    const resp = await getProxy(req)
+
+    expect(resp.status).toBe(503)
+    const data = await resp.json()
+    expect(data.error).toBeDefined()
+  })
+
+  it('forwards Authorization header from request header', async () => {
+    let capturedHeaders: Record<string, string> = {}
+    global.fetch = jest.fn().mockImplementation((_url: string, opts: RequestInit) => {
+      capturedHeaders = opts.headers as Record<string, string>
+      return Promise.resolve(
+        new Response(JSON.stringify({ total_defeated: 0, nodes: [] }), { status: 200 }),
+      )
+    })
+
+    const { GET: getProxy } = await import('./route')
+    const req = new NextRequest('http://localhost/api/gaming/progression', {
+      headers: { Authorization: 'Bearer my-token' },
+    })
+    await getProxy(req)
+
+    expect(capturedHeaders['Authorization']).toBe('Bearer my-token')
+  })
+
+  it('forwards auth token from tl_token cookie', async () => {
+    let capturedHeaders: Record<string, string> = {}
+    global.fetch = jest.fn().mockImplementation((_url: string, opts: RequestInit) => {
+      capturedHeaders = opts.headers as Record<string, string>
+      return Promise.resolve(
+        new Response(JSON.stringify({ total_defeated: 0, nodes: [] }), { status: 200 }),
+      )
+    })
+
+    const { GET: getProxy } = await import('./route')
+    const req = new NextRequest('http://localhost/api/gaming/progression', {
+      headers: { Cookie: 'tl_token=cookie-jwt' },
+    })
+    await getProxy(req)
+
+    expect(capturedHeaders['Authorization']).toBe('Bearer cookie-jwt')
+  })
+
+  it('sends no Authorization header when unauthenticated', async () => {
+    let capturedHeaders: Record<string, string> = {}
+    global.fetch = jest.fn().mockImplementation((_url: string, opts: RequestInit) => {
+      capturedHeaders = opts.headers as Record<string, string>
+      return Promise.resolve(
+        new Response(JSON.stringify({ total_defeated: 0, nodes: [] }), { status: 200 }),
+      )
+    })
+
+    const { GET: getProxy } = await import('./route')
+    const req = new NextRequest('http://localhost/api/gaming/progression')
+    await getProxy(req)
+
+    expect(capturedHeaders['Authorization']).toBeUndefined()
   })
 })

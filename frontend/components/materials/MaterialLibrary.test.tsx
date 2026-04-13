@@ -94,4 +94,22 @@ describe('MaterialLibrary — with materials', () => {
     render(<MaterialLibrary materials={[makeMaterial({ uploadedAt: new Date().toISOString() })]} />)
     expect(screen.getByText(/just now/)).toBeInTheDocument()
   })
+
+  it('shows "Xm ago" for a material uploaded 5 minutes ago', () => {
+    const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString()
+    render(<MaterialLibrary materials={[makeMaterial({ uploadedAt: fiveMinutesAgo })]} />)
+    expect(screen.getByText(/5m ago/)).toBeInTheDocument()
+  })
+
+  it('shows "Xh ago" for a material uploaded 3 hours ago', () => {
+    const threeHoursAgo = new Date(Date.now() - 3 * 60 * 60 * 1000).toISOString()
+    render(<MaterialLibrary materials={[makeMaterial({ uploadedAt: threeHoursAgo })]} />)
+    expect(screen.getByText(/3h ago/)).toBeInTheDocument()
+  })
+
+  it('shows "Xd ago" for a material uploaded 2 days ago', () => {
+    const twoDaysAgo = new Date(Date.now() - 2 * 24 * 60 * 60 * 1000).toISOString()
+    render(<MaterialLibrary materials={[makeMaterial({ uploadedAt: twoDaysAgo })]} />)
+    expect(screen.getByText(/2d ago/)).toBeInTheDocument()
+  })
 })
