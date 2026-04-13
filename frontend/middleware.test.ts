@@ -71,7 +71,7 @@ describe('middleware CSP nonce injection', () => {
     const req = makeRequest('/', fakeJwt({ sub_status: 'active' }))
     const res = middleware(req)
     const csp = res.headers.get('Content-Security-Policy') ?? ''
-    expect(csp).toMatch(/script-src 'self' 'nonce-[A-Za-z0-9+/=]+'/)
+    expect(csp).toMatch(/script-src 'self' 'nonce-[A-Za-z0-9+/=]+' 'strict-dynamic'/)
   })
 
   it('script-src in CSP does not contain unsafe-inline', () => {
