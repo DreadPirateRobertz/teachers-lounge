@@ -16,8 +16,11 @@ import (
 	"github.com/redis/go-redis/v9"
 	"go.uber.org/zap"
 
+	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/auth"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/email"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/handler"
+	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/handlers"
+	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/hub"
 	tlmetrics "github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/metrics"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/middleware"
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/push"
@@ -82,6 +85,17 @@ func main() {
 
 	h := handler.New(notifStore, pusher, emailer, rateLimiter, logger)
 
+	// ── WebSocket hub ─────────────────────────────────────────────────────────
+	wsHub := hub.New()
+
+	// JWT authenticator for WebSocket connections.
+	jwtAuth, err := auth.NewJWTAuthenticator([]byte(cfg.jwtSecret))
+	if err != nil {
+		logger.Fatal("jwt authenticator", zap.Error(err))
+	}
+	wsHandler := handlers.NewWSHandler(wsHub, jwtAuth, logger)
+	notifyHandler := handlers.NewNotifyHandler(wsHub, logger)
+
 	// ── Router ────────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
 	r.Use(chimw.RequestID)
@@ -93,6 +107,15 @@ func main() {
 
 	r.Get("/health", h.Health)
 	r.Handle("/metrics", promhttp.Handler())
+
+	// WebSocket endpoint — no timeout middleware (long-lived connection).
+	r.Get("/ws", wsHandler.ServeHTTP)
+
+	// Internal endpoints — called by peer services (gaming-service, tutoring-service).
+	// Not exposed via the public ingress; secured at the network layer.
+	r.Route("/internal", func(r chi.Router) {
+		r.Post("/notify/boss-unlock", notifyHandler.BossUnlock)
+	})
 
 	r.Route("/notify", func(r chi.Router) {
 		// Stub auth middleware: reads X-User-ID header and injects into context.
@@ -166,6 +189,7 @@ type config struct {
 	fcmServerKey   string
 	sendgridAPIKey string
 	fromEmail      string
+	jwtSecret      string
 }
 
 func configFromEnv() config {
@@ -177,6 +201,9 @@ func configFromEnv() config {
 		fcmServerKey:   os.Getenv("FCM_SERVER_KEY"),   // optional; empty = LogPusher
 		sendgridAPIKey: os.Getenv("SENDGRID_API_KEY"), // optional; empty = LogSender
 		fromEmail:      os.Getenv("FROM_EMAIL"),       // optional; defaults to noreply@teacherslounge.app
+		// JWT_SECRET signs WebSocket auth tokens. Falls back to a dev-only default;
+		// must be set in production via environment or secret manager.
+		jwtSecret: envOr("JWT_SECRET", "dev-secret-change-me-in-production"),
 	}
 }
 
