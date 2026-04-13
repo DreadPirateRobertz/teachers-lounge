@@ -17,10 +17,13 @@ comment:
   require_changes: true
 
 notify:
-  # Disable all email notifications from Codecov
-  # Account-level notifications must also be disabled on codecov.io
+  # Silence all Codecov notifications — no pings to repo watchers or Stilgar
+  # Account-level email notifications must also be disabled on codecov.io UI
   after_n_builds: 1
   wait_for_ci: true
+  email:
+    default:
+      enabled: false
 
 github_checks:
   annotations: false
