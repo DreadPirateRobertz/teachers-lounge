@@ -307,6 +307,16 @@ jobs:
             fi
           done
           exit $failed
+      - name: Run chart render tests
+        run: |
+          # Each chart may ship a tests/render_test.sh — run them if present.
+          failed=0
+          for script in infra/helm/*/tests/render_test.sh; do
+            [ -f "$script" ] || continue
+            echo "Running ${script}"
+            bash "$script" || { echo "::error::${script} failed"; failed=1; }
+          done
+          exit $failed
 
   # ── Security scan ────────────────────────────────────────────────────────────
   # Always runs on every PR — secrets can appear anywhere.
