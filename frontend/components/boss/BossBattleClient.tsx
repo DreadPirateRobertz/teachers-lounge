@@ -369,16 +369,12 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
   // ── Determine whether active battle is displayed ──────────────────────────
 
   const showBattle =
-    phase === 'question' ||
-    phase === 'attack' ||
-    phase === 'resolve' ||
-    animState === 'death'
+    phase === 'question' || phase === 'attack' || phase === 'resolve' || animState === 'death'
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col items-center gap-6 min-h-screen bg-bg-deep py-8 px-4">
-
       {/* ── Intro screen ── */}
       {phase === 'intro' && (
         <StartScreen boss={boss} onStart={startBattle} loading={actionPending} />

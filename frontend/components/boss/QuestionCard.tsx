@@ -61,9 +61,7 @@ export default function QuestionCard({
         className="rounded-xl border border-neon-blue/30 bg-bg-card px-5 py-4
                    text-sm font-mono text-text-bright leading-relaxed"
       >
-        <span className="text-xs text-neon-blue uppercase tracking-widest mr-2 opacity-60">
-          Q
-        </span>
+        <span className="text-xs text-neon-blue uppercase tracking-widest mr-2 opacity-60">Q</span>
         {question.question}
       </div>
 

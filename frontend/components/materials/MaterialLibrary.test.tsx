@@ -6,9 +6,16 @@ import { render, screen } from '@testing-library/react'
 import MaterialLibrary from './MaterialLibrary'
 import type { UploadedMaterial } from './MaterialUpload'
 
+/**
+ * Build a complete UploadedMaterial fixture with optional overrides.
+ *
+ * @param overrides - Fields to merge over the defaults.
+ * @returns A fully-typed UploadedMaterial suitable for use in tests.
+ */
 function makeMaterial(overrides: Partial<UploadedMaterial> = {}): UploadedMaterial {
   return {
     jobId: 'job-1',
+    materialId: 'mat-00000000-0000-0000-0000-000000000001',
     filename: 'lecture-notes.pdf',
     fileType: 'PDF',
     status: 'complete',
