@@ -12,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
+from prometheus_client import REGISTRY
 
 from app.main import app
 from app.metrics import (
@@ -23,20 +24,27 @@ from app.metrics import (
 COURSE_ID = uuid.uuid4()
 
 
-def _sum(query_type: str, status: str) -> float:
-    """Read the current ``_sum`` counter for a label pair from the registry."""
-    return (
-        SEARCH_QUERY_DURATION.labels(query_type=query_type, status=status)
-        ._sum.get()
-    )
-
-
 def _count(query_type: str, status: str) -> float:
-    """Read the current ``_count`` counter for a label pair."""
-    return (
-        SEARCH_QUERY_DURATION.labels(query_type=query_type, status=status)
-        ._count.get()
+    """Read the current ``_count`` sample via the global registry.
+
+    Uses ``REGISTRY.get_sample_value`` rather than touching private
+    ``_count`` attributes — labeled histogram children don't expose those
+    directly, which is why the first attempt at this helper failed in CI.
+    """
+    v = REGISTRY.get_sample_value(
+        "search_query_duration_seconds_count",
+        {"query_type": query_type, "status": status},
     )
+    return 0.0 if v is None else v
+
+
+def _sum(query_type: str, status: str) -> float:
+    """Read the current ``_sum`` sample via the global registry."""
+    v = REGISTRY.get_sample_value(
+        "search_query_duration_seconds_sum",
+        {"query_type": query_type, "status": status},
+    )
+    return 0.0 if v is None else v
 
 
 class TestHistogramDefinition:
