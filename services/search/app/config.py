@@ -1,3 +1,4 @@
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,14 +38,17 @@ class Settings(BaseSettings):
     # Query expansion via AI Gateway (tl-afb) — used for short (<5-token)
     # follow-up queries when the caller supplies conversation context turns.
     tutor_fast_model: str = "tutor-fast"
-    query_expansion_short_threshold: int = 5
-    query_expansion_max_context_turns: int = 6
-    query_expansion_max_tokens: int = 128
+    # Field validators catch misconfigured env overrides at startup instead of
+    # silently producing a feature that never fires (e.g. threshold=0 → always
+    # passthrough_long; timeout=0 → instant failure on every call).
+    query_expansion_short_threshold: int = Field(default=5, ge=1)
+    query_expansion_max_context_turns: int = Field(default=6, ge=1)
+    query_expansion_max_tokens: int = Field(default=128, ge=1, le=1024)
     # Hard wall-clock ceiling on the gateway call. Without this, a hung
     # upstream can stall every short-query search for the OpenAI-client
     # default (~600s). 3s is well above tutor_fast_model p99 yet leaves
     # budget for the remainder of the RAG pipeline under its SLO.
-    query_expansion_timeout_seconds: float = 3.0
+    query_expansion_timeout_seconds: float = Field(default=3.0, gt=0.0)
 
     # Diagram (CLIP) collection — Phase 6 multi-modal RAG
     diagrams_collection: str = "diagrams"

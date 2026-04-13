@@ -74,6 +74,18 @@ class TestExpandQuery:
         fake.chat.completions.create.assert_awaited_once()
 
     @pytest.mark.asyncio
+    async def test_blank_query_passthrough_no_gateway_call(self) -> None:
+        """Empty / whitespace-only queries must short-circuit before the gateway."""
+        before = _outcome("passthrough_nocontext")
+        fake = MagicMock()
+        fake.chat.completions.create = AsyncMock()
+        with patch.object(expander, "_get_client", return_value=fake):
+            out = await expand_query("   ", context_turns=["tutor: gas laws"])
+        assert out == "   "
+        assert _outcome("passthrough_nocontext") == before + 1
+        fake.chat.completions.create.assert_not_awaited()
+
+    @pytest.mark.asyncio
     async def test_long_query_passthrough_no_gateway_call(self) -> None:
         """Queries at/above the token threshold must skip expansion entirely."""
         before = _outcome("passthrough_long")

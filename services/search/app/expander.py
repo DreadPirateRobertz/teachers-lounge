@@ -70,6 +70,13 @@ async def expand_query(query: str, context_turns: list[str] | None) -> str:
         whenever expansion is skipped or fails. This function is total: it
         never raises; callers can treat its output as a drop-in replacement.
     """
+    # Empty / whitespace-only input has zero tokens so _is_short is True —
+    # guard here so we don't spend a gateway call on a query with no signal
+    # (and never include a blank line in the prompt).
+    if not query.strip():
+        QUERY_EXPANSION_OUTCOMES.labels(outcome="passthrough_nocontext").inc()
+        return query
+
     if not _is_short(query):
         QUERY_EXPANSION_OUTCOMES.labels(outcome="passthrough_long").inc()
         return query
