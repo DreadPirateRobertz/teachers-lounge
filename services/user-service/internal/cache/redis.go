@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/tls"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -121,11 +122,14 @@ func (c *Client) RefreshSessionTTL(ctx context.Context, key string, ttl time.Dur
 // AcquireRefreshLock attempts to acquire a distributed lock for token rotation.
 // Returns true if the lock was acquired.
 func (c *Client) AcquireRefreshLock(ctx context.Context, key, value string, ttl time.Duration) (bool, error) {
-	cmd := c.rdb.SetArgs(ctx, key, value, redis.SetArgs{Mode: "NX", TTL: ttl})
-	if err := cmd.Err(); err != nil {
+	result, err := c.rdb.SetArgs(ctx, key, value, redis.SetArgs{Mode: "NX", TTL: ttl}).Result()
+	if errors.Is(err, redis.Nil) {
+		return false, nil
+	}
+	if err != nil {
 		return false, err
 	}
-	return cmd.Val() == "OK", nil
+	return result == "OK", nil
 }
 
 func (c *Client) ReleaseRefreshLock(ctx context.Context, key string) error {

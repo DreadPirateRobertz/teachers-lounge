@@ -53,7 +53,6 @@ func (s *Store) SetCurrentUser(ctx context.Context, userID uuid.UUID) context.Co
 
 type ctxKeyUserID struct{}
 
-
 // ============================================================
 // USER QUERIES
 // ============================================================
