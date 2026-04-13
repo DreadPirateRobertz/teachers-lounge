@@ -206,6 +206,63 @@ func (h *UsersHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// GetFullExport handles GET /users/{id}/export — returns the user's full
+// GDPR data package synchronously as JSON, bypassing the async job flow.
+//
+// Owner-only access is already enforced by middleware.RequireSelf on the
+// /users/{id} route group, so here we only need to verify the user still
+// exists in the store (returning 404 for stale tokens / post-deletion),
+// build the export via the same store.BuildUserExport path as the async
+// endpoint, write an audit entry for GDPR portability, and return the
+// UserExport payload.
+//
+// The async POST /users/{id}/export + GET /users/{id}/export/{jobID}
+// flow remains the primary path for large exports; this endpoint exists
+// for CLI/API clients that prefer a single round trip.
+func (h *UsersHandler) GetFullExport(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUserIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	// Returning 404 for stale tokens whose user has been deleted prevents
+	// the handler from emitting a half-populated export with a nil User field.
+	if _, err := h.store.GetUserByID(r.Context(), userID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	// Create a job row so BuildUserExport has an export_jobs id to write
+	// back into — keeps the audit trail uniform with the async path.
+	jobID, err := h.store.CreateExportJob(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create export job")
+		return
+	}
+
+	export, err := h.store.BuildUserExport(r.Context(), jobID, userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to build export")
+		return
+	}
+
+	_ = h.store.WriteAuditLog(r.Context(), store.AuditLogParams{
+		AccessorID:   &userID,
+		StudentID:    &userID,
+		Action:       models.AuditActionExportView,
+		DataAccessed: "all_user_data",
+		Purpose:      "gdpr_right_to_portability",
+		IPAddress:    realIP(r),
+	})
+
+	writeJSON(w, http.StatusOK, export)
+}
+
 // GET /users/{id}/export/{jobID} — retrieve a completed data export.
 // On first call for a pending job, triggers synchronous data collection.
 func (h *UsersHandler) GetExport(w http.ResponseWriter, r *http.Request) {
