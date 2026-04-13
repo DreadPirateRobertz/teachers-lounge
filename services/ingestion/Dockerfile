@@ -25,6 +25,10 @@ RUN pip install --no-cache-dir setuptools wheel grpcio-tools \
 
 RUN printf "onnx>=1.16.0\nonnxruntime>=1.18.0\n" > /tmp/constraints.txt
 
+# Install shared logging package first (path reference in requirements.txt
+# uses ../tl-logging for local dev; Docker uses ./tl-logging via COPY above).
+RUN pip install --no-cache-dir ./tl-logging
+
 # Install all Python deps into the system site-packages so they can be
 # cleanly COPY'd into the slim runtime stage.
 RUN pip install --no-cache-dir --no-build-isolation --prefer-binary \
