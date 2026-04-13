@@ -212,3 +212,51 @@ func TestBroadcastToUnknownMember(t *testing.T) {
 	payload := hub.BossUnlockPayload{Event: "boss_unlocked"}
 	h.Broadcast("nobody", payload) // must not panic
 }
+
+// TestBroadcast_DeregistersDeadConnection verifies that when a WriteJSON fails
+// (dead connection), the hub automatically removes that connection so it does
+// not block future broadcasts.
+func TestBroadcast_DeregistersDeadConnection(t *testing.T) {
+	h := hub.New()
+
+	// serverConn receives the server-side WebSocket connection after upgrade.
+	serverConn := make(chan *websocket.Conn, 1)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		conn, err := testUpgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Errorf("upgrade: %v", err)
+			return
+		}
+		h.Register("member-dead", conn)
+		serverConn <- conn
+		// Block — do NOT read so that client-close triggers no deregister here.
+		select {}
+	}))
+	defer srv.Close()
+
+	wsURL := "ws" + strings.TrimPrefix(srv.URL, "http")
+	client, _, err := websocket.DefaultDialer.Dial(wsURL, nil)
+	if err != nil {
+		t.Fatalf("dial: %v", err)
+	}
+	defer func() { _ = client.Close() }() //nolint:errcheck
+
+	sc := <-serverConn
+
+	if h.SessionCount("member-dead") != 1 {
+		t.Fatal("expected 1 registered session before broadcast")
+	}
+
+	// Force the server-side write to fail by setting a write deadline in the past.
+	if err := sc.SetWriteDeadline(time.Now().Add(-time.Second)); err != nil {
+		t.Fatalf("SetWriteDeadline: %v", err)
+	}
+
+	// Broadcast — WriteJSON fails → hub should remove the dead connection.
+	h.Broadcast("member-dead", hub.BossUnlockPayload{Event: "boss_unlocked"})
+
+	if got := h.SessionCount("member-dead"); got != 0 {
+		t.Fatalf("expected 0 sessions after broadcast to dead conn, got %d", got)
+	}
+}
