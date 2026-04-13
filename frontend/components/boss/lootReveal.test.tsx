@@ -66,6 +66,28 @@ describe('LootReveal', () => {
     expect(badgeRow.textContent).not.toMatch(/\+\d/)
   })
 
+  it('fires onContinue exactly once even when parent re-renders with a new callback identity', () => {
+    const onContinue = jest.fn()
+    const { rerender } = render(<LootReveal items={items} onContinue={onContinue} staggerMs={50} />)
+    for (let i = 0; i < items.length; i++) {
+      act(() => {
+        jest.advanceTimersByTime(50)
+      })
+    }
+    expect(onContinue).toHaveBeenCalledTimes(1)
+
+    // Simulate a parent re-render that passes a NEW inline function ref.
+    // The effect re-runs (onContinue is in its dep array) but the useRef
+    // guard in LootReveal must suppress a second invocation.
+    const onContinue2 = jest.fn()
+    rerender(<LootReveal items={items} onContinue={onContinue2} staggerMs={50} />)
+    act(() => {
+      jest.advanceTimersByTime(0)
+    })
+    expect(onContinue).toHaveBeenCalledTimes(1)
+    expect(onContinue2).not.toHaveBeenCalled()
+  })
+
   it('handles empty loot list gracefully', () => {
     const onContinue = jest.fn()
     render(<LootReveal items={[]} onContinue={onContinue} staggerMs={50} />)

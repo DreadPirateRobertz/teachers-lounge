@@ -9,7 +9,7 @@
  * invoked after all rows have animated in.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 
 /** A single loot line item. */
 export interface LootItem {
@@ -43,10 +43,17 @@ export default function LootReveal({
   staggerMs = DEFAULT_STAGGER_MS,
 }: LootRevealProps) {
   const [revealed, setRevealed] = useState(0)
+  // Guards against onContinue firing more than once per mount even if the
+  // parent passes a non-memoized callback (effect re-runs when `onContinue`
+  // identity changes).
+  const continueFiredRef = useRef(false)
 
   useEffect(() => {
     if (revealed >= items.length) {
-      onContinue?.()
+      if (!continueFiredRef.current) {
+        continueFiredRef.current = true
+        onContinue?.()
+      }
       return
     }
     const timer = setTimeout(() => setRevealed((n) => n + 1), staggerMs)
