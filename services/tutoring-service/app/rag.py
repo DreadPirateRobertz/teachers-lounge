@@ -10,8 +10,12 @@ embedding layer.
 The rewrite is performed by the cheap ``tutor_fast_model`` through the
 shared AI-gateway client.  Failure modes are all non-fatal: an empty
 history short-circuits to the original message, a gateway exception
-falls back to the original message, and an empty/blank rewrite also
-falls back.  Callers never need to handle exceptions from this module.
+falls back to the original message, and an empty/blank or malformed
+response also falls back.  Malformed responses include missing
+attributes, empty ``choices`` lists, and ``choices=None``; each is
+caught and the original message is returned so callers do not need
+defensive try/except around this function for the documented
+response shapes.
 """
 
 from __future__ import annotations
@@ -113,7 +117,10 @@ async def reformulate_query(
 
     try:
         rewritten = (response.choices[0].message.content or "").strip()
-    except (AttributeError, IndexError):
+    except (AttributeError, IndexError, TypeError):
+        # AttributeError: missing .choices / .message / .content
+        # IndexError:    empty choices list
+        # TypeError:     choices=None or message=None (NoneType not subscriptable)
         logger.warning("reformulate_query: malformed gateway response, falling back")
         return message
 

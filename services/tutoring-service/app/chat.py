@@ -248,9 +248,12 @@ async def send_message(
         raise HTTPException(status_code=403, detail="Forbidden")
 
     student_message = body.content
-    await append_message(db, session_id, user.user_id, role="student", content=student_message)
 
     client = get_gateway_client()
+    # Build history BEFORE persisting the current student turn so the pruned
+    # window reflects only *prior* interactions. If we appended first, the
+    # freshly-written student row would come back as the final history entry
+    # and end up duplicated alongside the explicit user message below.
     history, context_summary = await build_pruned_history(
         db=db,
         client=client,
@@ -259,6 +262,7 @@ async def send_message(
         summarise_threshold=settings.context_summarise_threshold,
         fast_model=settings.tutor_fast_model,
     )
+    await append_message(db, session_id, user.user_id, role="student", content=student_message)
 
     # Step 1: Fetch student's learning-style dials (non-fatal)
     try:

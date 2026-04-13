@@ -171,6 +171,21 @@ class TestReformulateQuery:
         assert result == "original"
 
     @pytest.mark.asyncio
+    async def test_none_choices_falls_back_to_original(self):
+        """``choices=None`` raises TypeError on subscript — must fall back, not 500."""
+        history = [{"role": "student", "content": "hi"}]
+        client = MagicMock()
+        client.chat = MagicMock()
+        client.chat.completions = MagicMock()
+        client.chat.completions.create = AsyncMock(
+            return_value=SimpleNamespace(choices=None)
+        )
+
+        result = await reformulate_query("original", history, client=client)
+
+        assert result == "original"
+
+    @pytest.mark.asyncio
     async def test_orm_row_history_is_accepted(self):
         """ORM-like objects with ``role``/``content`` attributes are accepted."""
         row = SimpleNamespace(role="student", content="What is entropy?")
