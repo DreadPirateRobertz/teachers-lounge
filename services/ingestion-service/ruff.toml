@@ -1,0 +1,28 @@
+# ruff.toml — ingestion-service
+line-length = 100
+
+[lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # Pyflakes
+    "I",   # isort import ordering
+    "D",   # pydocstyle — Google convention
+    "C90", # McCabe complexity
+]
+ignore = [
+    "D100",
+    "D104",
+    "D105",
+    "D107",
+    "E501",
+]
+
+[lint.pydocstyle]
+convention = "google"
+
+[lint.mccabe]
+max-complexity = 12
+
+[lint.per-file-ignores]
+"tests/**" = ["D", "F401", "F841"]
