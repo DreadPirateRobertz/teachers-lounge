@@ -91,6 +91,12 @@ func main() {
 	r.Get("/health", h.Health)
 	r.Handle("/metrics", promhttp.Handler())
 
+	// Boss-battle WebSocket. Auth is enforced inside the handler via the
+	// ``token`` query parameter because browsers cannot set the Authorization
+	// header on a WebSocket handshake, so this route sits outside the
+	// Authenticate middleware group below.
+	r.Get("/gaming/battle/{battleId}/ws", h.BattleWS(cfg.jwtSecret))
+
 	// Authenticated routes
 	r.Group(func(r chi.Router) {
 		r.Use(middleware.Authenticate(cfg.jwtSecret))

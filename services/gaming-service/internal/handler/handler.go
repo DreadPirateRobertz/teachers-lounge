@@ -11,6 +11,7 @@ import (
 	"github.com/teacherslounge/gaming-service/internal/middleware"
 	"github.com/teacherslounge/gaming-service/internal/model"
 	"github.com/teacherslounge/gaming-service/internal/taunt"
+	"github.com/teacherslounge/gaming-service/internal/wsbattle"
 	"github.com/teacherslounge/gaming-service/internal/xp"
 )
 
@@ -80,19 +81,32 @@ type Storer interface {
 	AllFlashcardsForExport(ctx context.Context, userID string) ([]*model.Flashcard, error)
 }
 
-// Handler holds the store, taunt generator, and logger.
+// Handler holds the store, taunt generator, logger, and the battle-event
+// broadcast hub used by the WebSocket endpoint.
 type Handler struct {
 	store   Storer
 	taunter taunt.Generator
 	logger  *zap.Logger
+	hub     *wsbattle.Hub
 }
 
-// New creates a Handler.
+// New creates a Handler with a fresh in-memory battle-event Hub.
+//
 // taunter is used by Attack to produce contextual boss taunts on wrong answers;
 // pass a taunt.StaticGenerator when the AI gateway is not configured.
 func New(store Storer, taunter taunt.Generator, logger *zap.Logger) *Handler {
-	return &Handler{store: store, taunter: taunter, logger: logger}
+	return &Handler{
+		store:   store,
+		taunter: taunter,
+		logger:  logger,
+		hub:     wsbattle.New(),
+	}
 }
+
+// Hub returns the handler's battle-event hub so the server wiring can reuse
+// the same instance when registering the WebSocket route. Exposed for
+// integration tests as well.
+func (h *Handler) Hub() *wsbattle.Hub { return h.hub }
 
 // GainXP handles POST /gaming/xp
 func (h *Handler) GainXP(w http.ResponseWriter, r *http.Request) {

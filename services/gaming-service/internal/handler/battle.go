@@ -15,8 +15,29 @@ import (
 	"github.com/teacherslounge/gaming-service/internal/metrics"
 	"github.com/teacherslounge/gaming-service/internal/middleware"
 	"github.com/teacherslounge/gaming-service/internal/model"
+	"github.com/teacherslounge/gaming-service/internal/wsbattle"
 	"github.com/teacherslounge/gaming-service/internal/xp"
 )
+
+// DamagePayload is the structured payload attached to an EventDamage broadcast
+// so front-end clients can render HP bar changes without a second REST round trip.
+type DamagePayload struct {
+	PlayerDamageDealt int    `json:"player_damage_dealt"`
+	BossDamageDealt   int    `json:"boss_damage_dealt"`
+	PlayerHP          int    `json:"player_hp"`
+	BossHP            int    `json:"boss_hp"`
+	Turn              int    `json:"turn"`
+	Phase             string `json:"phase"`
+	AnswerCorrect     bool   `json:"answer_correct"`
+}
+
+// PhasePayload is attached to EventPhaseTransition when the battle moves
+// from Active → Victory or Defeat.
+type PhasePayload struct {
+	Phase    string `json:"phase"`
+	PlayerHP int    `json:"player_hp"`
+	BossHP   int    `json:"boss_hp"`
+}
 
 // StartBattle handles POST /gaming/boss/start
 func (h *Handler) StartBattle(w http.ResponseWriter, r *http.Request) {
@@ -182,6 +203,28 @@ func (h *Handler) Attack(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Broadcast the turn delta to any connected WebSocket clients so the
+	// front-end HP bars animate in real time. This runs after persistence
+	// so subscribers never observe state that could still be rolled back.
+	if h.hub != nil {
+		h.hub.Broadcast(session.SessionID, wsbattle.EventDamage, DamagePayload{
+			PlayerDamageDealt: playerDmg,
+			BossDamageDealt:   bossDmg,
+			PlayerHP:          session.PlayerHP,
+			BossHP:            session.BossHP,
+			Turn:              session.Turn,
+			Phase:             string(session.Phase),
+			AnswerCorrect:     req.AnswerCorrect,
+		})
+		if session.Phase != model.PhaseActive {
+			h.hub.Broadcast(session.SessionID, wsbattle.EventPhaseTransition, PhasePayload{
+				Phase:    string(session.Phase),
+				PlayerHP: session.PlayerHP,
+				BossHP:   session.BossHP,
+			})
+		}
+	}
+
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -284,6 +327,14 @@ func (h *Handler) ForfeitBattle(w http.ResponseWriter, r *http.Request) {
 
 	session.Phase = model.PhaseDefeat
 	result := h.finishBattle(r, session, false)
+
+	if h.hub != nil {
+		h.hub.Broadcast(session.SessionID, wsbattle.EventPhaseTransition, PhasePayload{
+			Phase:    string(session.Phase),
+			PlayerHP: session.PlayerHP,
+			BossHP:   session.BossHP,
+		})
+	}
 
 	writeJSON(w, http.StatusOK, result)
 }
@@ -413,6 +464,14 @@ func (h *Handler) finishBattle(r *http.Request, session *model.BattleSession, wo
 		}
 
 		result.LootDrop = lootDrop
+	}
+
+	// Broadcast the loot roll to any connected WebSocket clients before the
+	// session is deleted from Redis. Only emitted on victory — a defeat
+	// produces no loot, just the phase_transition already published by
+	// Attack or ForfeitBattle.
+	if h.hub != nil && won && result.LootDrop != nil {
+		h.hub.Broadcast(session.SessionID, wsbattle.EventLootRoll, result.LootDrop)
 	}
 
 	// Clean up Redis session.
