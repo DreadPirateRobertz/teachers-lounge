@@ -42,7 +42,9 @@ export default function UploadGuideStep({ onNext }: UploadGuideStepProps) {
   return (
     <div className="flex flex-col gap-6">
       <div className="text-center">
-        <h2 className="font-mono text-xl font-bold text-neon-pink mb-1">Upload your study materials</h2>
+        <h2 className="font-mono text-xl font-bold text-neon-pink mb-1">
+          Upload your study materials
+        </h2>
         <p className="text-sm text-text-dim">Your tutor learns from what you upload.</p>
       </div>
 

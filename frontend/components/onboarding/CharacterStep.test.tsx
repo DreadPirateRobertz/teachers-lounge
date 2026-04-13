@@ -75,7 +75,10 @@ describe('CharacterStep', () => {
   it('disables the submit button while saving', async () => {
     let resolve!: () => void
     const onNext = jest.fn(
-      () => new Promise<void>((r) => { resolve = r }),
+      () =>
+        new Promise<void>((r) => {
+          resolve = r
+        }),
     )
     render(<CharacterStep {...defaultProps} onNext={onNext} />)
     fireEvent.click(screen.getByRole('button', { name: /looks good/i }))

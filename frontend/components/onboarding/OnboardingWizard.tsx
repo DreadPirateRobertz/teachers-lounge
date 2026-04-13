@@ -104,7 +104,12 @@ export default function OnboardingWizard({
   return (
     <div className="w-full max-w-sm mx-auto">
       {/* Step progress dots */}
-      <div className="flex justify-center gap-2 mb-8" role="progressbar" aria-valuenow={stepIndex + 1} aria-valuemax={totalSteps}>
+      <div
+        className="flex justify-center gap-2 mb-8"
+        role="progressbar"
+        aria-valuenow={stepIndex + 1}
+        aria-valuemax={totalSteps}
+      >
         {STEPS.map((s, i) => (
           <div
             key={s}
@@ -122,9 +127,7 @@ export default function OnboardingWizard({
 
       {/* Step content */}
       <div className="bg-bg-card border border-border-mid rounded-xl p-6 shadow-neon-blue">
-        {step === 'welcome' && (
-          <WelcomeStep displayName={currentName} onNext={goNext} />
-        )}
+        {step === 'welcome' && <WelcomeStep displayName={currentName} onNext={goNext} />}
         {step === 'character' && (
           <CharacterStep
             displayName={currentName}
