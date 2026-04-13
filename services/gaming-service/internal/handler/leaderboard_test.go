@@ -1,13 +1,25 @@
 package handler_test
 
+// Handler-layer tests for the leaderboard endpoints. Store-side coverage
+// lives in internal/store/leaderboard_test.go; this file exercises the
+// HTTP branches — period routing, course_id optional path, friend-list
+// parsing, caller filtering, auth gates, and store-error → 500 mapping.
+//
+// Uses leaderboardStore, a minimal Storer fake that embeds noopStore
+// (defined in flashcard_test.go) and overrides only the leaderboard
+// methods. All other Storer methods remain no-ops.
+
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
 
 	"github.com/teacherslounge/gaming-service/internal/handler"
@@ -16,429 +28,535 @@ import (
 	"github.com/teacherslounge/gaming-service/internal/taunt"
 )
 
-// leaderboardStore is a minimal Storer stub for leaderboard handler tests.
-// Only the leaderboard-related methods are functional; the rest are no-ops.
+// ── leaderboardStore fake ─────────────────────────────────────────────────────
+
+// leaderboardStore overrides the 6 Storer methods that back the four
+// leaderboard HTTP handlers. Every override records its invocation so tests
+// can assert the handler called the right one with the right args.
 type leaderboardStore struct {
-	top10      []model.LeaderboardEntry
-	userRank   *model.LeaderboardEntry
-	periodData map[string][]model.LeaderboardEntry
-	courseData map[string][]model.LeaderboardEntry
-	friendData []model.LeaderboardEntry
-	err        error
+	noopStore
+
+	// Configurable returns.
+	updateErr       error
+	updateCourseErr error
+
+	top10Entries   []model.LeaderboardEntry
+	top10UserRank  *model.LeaderboardEntry
+	top10Err       error
+
+	periodEntries  []model.LeaderboardEntry
+	periodUserRank *model.LeaderboardEntry
+	periodErr      error
+
+	courseEntries  []model.LeaderboardEntry
+	courseUserRank *model.LeaderboardEntry
+	courseErr      error
+
+	friendEntries  []model.LeaderboardEntry
+	friendUserRank *model.LeaderboardEntry
+	friendErr      error
+
+	// Captured invocations.
+	updateCalls       int
+	updateLastUser    string
+	updateLastXP     int64
+	updateCourseCalls int
+	updateCourseLast  struct {
+		userID, courseID string
+		xp               int64
+	}
+	top10Calls    int
+	periodCalls   int
+	periodLast    string
+	courseCalls   int
+	courseLast    string
+	friendCalls   int
+	friendLastIDs []string
+}
+
+func (s *leaderboardStore) LeaderboardUpdate(_ context.Context, userID string, xp int64) error {
+	s.updateCalls++
+	s.updateLastUser = userID
+	s.updateLastXP = xp
+	return s.updateErr
+}
+
+func (s *leaderboardStore) LeaderboardUpdateCourse(_ context.Context, userID, courseID string, xp int64) error {
+	s.updateCourseCalls++
+	s.updateCourseLast.userID = userID
+	s.updateCourseLast.courseID = courseID
+	s.updateCourseLast.xp = xp
+	return s.updateCourseErr
 }
 
 func (s *leaderboardStore) LeaderboardTop10(_ context.Context, _ string) ([]model.LeaderboardEntry, *model.LeaderboardEntry, error) {
-	return s.top10, s.userRank, s.err
+	s.top10Calls++
+	return s.top10Entries, s.top10UserRank, s.top10Err
 }
+
 func (s *leaderboardStore) LeaderboardGetPeriod(_ context.Context, _, period string) ([]model.LeaderboardEntry, *model.LeaderboardEntry, error) {
-	if s.err != nil {
-		return nil, nil, s.err
-	}
-	entries := s.periodData[period]
-	return entries, s.userRank, nil
+	s.periodCalls++
+	s.periodLast = period
+	return s.periodEntries, s.periodUserRank, s.periodErr
 }
+
 func (s *leaderboardStore) LeaderboardGetCourse(_ context.Context, _, courseID string) ([]model.LeaderboardEntry, *model.LeaderboardEntry, error) {
-	if s.err != nil {
-		return nil, nil, s.err
-	}
-	entries := s.courseData[courseID]
-	return entries, s.userRank, nil
-}
-func (s *leaderboardStore) LeaderboardGetFriends(_ context.Context, _ string, _ []string) ([]model.LeaderboardEntry, *model.LeaderboardEntry, error) {
-	return s.friendData, s.userRank, s.err
-}
-func (s *leaderboardStore) LeaderboardUpdate(_ context.Context, _ string, _ int64) error {
-	return s.err
-}
-func (s *leaderboardStore) LeaderboardUpdateCourse(_ context.Context, _, _ string, _ int64) error {
-	return s.err
+	s.courseCalls++
+	s.courseLast = courseID
+	return s.courseEntries, s.courseUserRank, s.courseErr
 }
 
-// ── Satisfy the full Storer interface with no-ops ────────────────────────────
-
-func (s *leaderboardStore) GetXPAndLevel(_ context.Context, _ string) (int64, int, error) {
-	return 0, 1, nil
-}
-func (s *leaderboardStore) UpsertXP(_ context.Context, _ string, _ int64, _ int) error { return nil }
-func (s *leaderboardStore) GetProfile(_ context.Context, _ string) (*model.Profile, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) StreakCheckin(_ context.Context, _ string) (int, int, bool, error) {
-	return 0, 0, false, nil
-}
-func (s *leaderboardStore) RandomQuote(_ context.Context) (*model.Quote, error) { return nil, nil }
-func (s *leaderboardStore) RandomQuoteForUser(_ context.Context, _, _ string) (*model.Quote, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) GetRandomQuestions(_ context.Context, _ string, _ int) ([]*model.Question, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) GetQuestion(_ context.Context, _ string) (*model.Question, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) CreateQuizSession(_ context.Context, _ string, _, _ *string, _ []string) (*model.QuizSession, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) GetQuizSession(_ context.Context, _ string) (*model.QuizSession, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) RecordAnswer(_ context.Context, _, _, _, _ string, _ bool, _, _ int, _ *int) (*model.QuizSession, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) GetHintIndex(_ context.Context, _, _ string) (int, error) { return 0, nil }
-func (s *leaderboardStore) IncrHintIndex(_ context.Context, _, _, _ string) (int, int, error) {
-	return 0, 0, nil
-}
-func (s *leaderboardStore) GetDailyQuests(_ context.Context, _ string) ([]model.QuestState, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) UpdateQuestProgress(_ context.Context, _ string, _ string) ([]model.QuestState, int, int, error) {
-	return nil, 0, 0, nil
-}
-func (s *leaderboardStore) AwardQuestRewards(_ context.Context, _ string, _, _ int) (int64, int, bool, int, error) {
-	return 0, 0, false, 0, nil
-}
-func (s *leaderboardStore) SaveBattleSession(_ context.Context, _ *model.BattleSession) error {
-	return nil
-}
-func (s *leaderboardStore) GetBattleSession(_ context.Context, _ string) (*model.BattleSession, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) DeleteBattleSession(_ context.Context, _ string) error { return nil }
-func (s *leaderboardStore) RecordBattleResult(_ context.Context, _ *model.BattleResult) error {
-	return nil
-}
-func (s *leaderboardStore) DeductGems(_ context.Context, _ string, _ int) (int, error) { return 0, nil }
-func (s *leaderboardStore) SaveTaunt(_ context.Context, _ string, _ int, _ string) error { return nil }
-func (s *leaderboardStore) GetRandomTaunt(_ context.Context, _ string, _ int) (string, bool, error) {
-	return "", false, nil
-}
-func (s *leaderboardStore) GrantAchievement(_ context.Context, _, _, _ string) (*model.Achievement, bool, error) {
-	return nil, false, nil
-}
-func (s *leaderboardStore) GetAchievements(_ context.Context, _ string) ([]model.Achievement, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) AddCosmeticItem(_ context.Context, _, _, _ string) error { return nil }
-func (s *leaderboardStore) CreateAssessmentSession(_ context.Context, _ string) (*model.AssessmentSession, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) GetAssessmentSession(_ context.Context, _ string) (*model.AssessmentSession, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) RecordAssessmentAnswer(_ context.Context, _, _, _, _ string) (*model.AssessmentSession, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) BuyPowerUp(_ context.Context, _ string, _ model.PowerUpType, _ int) (int, int, error) {
-	return 0, 0, nil
-}
-func (s *leaderboardStore) GetDefeatedBossIDs(_ context.Context, _ string) ([]string, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) GetChapterMastery(_ context.Context, _ string, _ []string) (float64, error) {
-	return 0.0, nil
-}
-func (s *leaderboardStore) GetChapterMasteryBatch(_ context.Context, _ string, _ map[string][]string) (map[string]float64, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) CreateFlashcard(_ context.Context, c *model.Flashcard) (*model.Flashcard, error) {
-	return c, nil
-}
-func (s *leaderboardStore) GetFlashcard(_ context.Context, _ string) (*model.Flashcard, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) ListFlashcards(_ context.Context, _ string) ([]*model.Flashcard, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) DueFlashcards(_ context.Context, _ string) ([]*model.Flashcard, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) ReviewFlashcard(_ context.Context, _, _ string, _ int) (*model.Flashcard, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) FlashcardsForSession(_ context.Context, _ string) ([]*model.Flashcard, error) {
-	return nil, nil
-}
-func (s *leaderboardStore) AllFlashcardsForExport(_ context.Context, _ string) ([]*model.Flashcard, error) {
-	return nil, nil
+func (s *leaderboardStore) LeaderboardGetFriends(_ context.Context, _ string, friendIDs []string) ([]model.LeaderboardEntry, *model.LeaderboardEntry, error) {
+	s.friendCalls++
+	s.friendLastIDs = friendIDs
+	return s.friendEntries, s.friendUserRank, s.friendErr
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
-func newLeaderboardHandler(st *leaderboardStore) *handler.Handler {
-	return handler.New(st, taunt.StaticGenerator{Taunt: "test"}, zap.NewNop())
+func newLeaderboardHandler(s *leaderboardStore) *handler.Handler {
+	return handler.New(s, taunt.StaticGenerator{}, zap.NewNop())
 }
 
-func leaderboardRequest(method, path, userID string) *http.Request {
-	req := httptest.NewRequest(method, path, nil)
-	if userID != "" {
-		req = req.WithContext(middleware.WithUserID(req.Context(), userID))
-	}
-	return req
+func withUser(r *http.Request, userID string) *http.Request {
+	return r.WithContext(middleware.WithUserID(r.Context(), userID))
 }
 
-// ── GET /gaming/leaderboard tests ────────────────────────────────────────────
+// withCourseParam injects a chi URL param (courseId) into the request so
+// the handler can chi.URLParam it out.
+func withCourseParam(r *http.Request, courseID string) *http.Request {
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("courseId", courseID)
+	return r.WithContext(context.WithValue(r.Context(), chi.RouteCtxKey, rctx))
+}
 
-func TestGetLeaderboard_AllTime_ReturnsMostRecent(t *testing.T) {
-	entries := []model.LeaderboardEntry{
-		{UserID: "bob", XP: 800, Rank: 1},
-		{UserID: "alice", XP: 500, Rank: 2},
-	}
-	st := &leaderboardStore{top10: entries}
-	h := newLeaderboardHandler(st)
-
-	rec := httptest.NewRecorder()
-	h.GetLeaderboard(rec, leaderboardRequest(http.MethodGet, "/gaming/leaderboard", "alice"))
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
+func decodeLeaderboard(t *testing.T, rr *httptest.ResponseRecorder) model.LeaderboardResponse {
+	t.Helper()
 	var resp model.LeaderboardResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode response: %v", err)
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode leaderboard response: %v", err)
 	}
-	if len(resp.Top10) != 2 {
-		t.Fatalf("want 2 entries, got %d", len(resp.Top10))
-	}
-	if resp.Top10[0].UserID != "bob" {
-		t.Errorf("rank 1: want bob, got %s", resp.Top10[0].UserID)
-	}
-	if resp.Top10[0].Rank != 1 {
-		t.Errorf("rank field: want 1, got %d", resp.Top10[0].Rank)
+	return resp
+}
+
+// ── LeaderboardUpdate (POST /gaming/leaderboard/update) ───────────────────────
+
+func TestLeaderboardUpdate_BadJSON_Returns400(t *testing.T) {
+	h := newLeaderboardHandler(&leaderboardStore{})
+
+	req := httptest.NewRequest(http.MethodPost, "/gaming/leaderboard/update", strings.NewReader("{not json"))
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.LeaderboardUpdate(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
 	}
 }
 
-func TestGetLeaderboard_EmptyPeriodCallsAllTime(t *testing.T) {
-	called := false
-	st := &leaderboardStore{}
-	st.top10 = []model.LeaderboardEntry{{UserID: "u1", XP: 100, Rank: 1}}
-	_ = called
+func TestLeaderboardUpdate_MissingUserID_Returns400(t *testing.T) {
+	h := newLeaderboardHandler(&leaderboardStore{})
 
-	h := newLeaderboardHandler(st)
-	rec := httptest.NewRecorder()
-	// No period param — should hit LeaderboardTop10
-	h.GetLeaderboard(rec, leaderboardRequest(http.MethodGet, "/gaming/leaderboard", "u1"))
+	body, _ := json.Marshal(model.LeaderboardUpdateRequest{XP: 100})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/leaderboard/update", bytes.NewBuffer(body))
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.LeaderboardUpdate(rr, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
 	}
 }
 
-func TestGetLeaderboard_WeeklyPeriodUsesWeeklyData(t *testing.T) {
-	weeklyEntries := []model.LeaderboardEntry{
-		{UserID: "carol", XP: 300, Rank: 1},
-	}
-	st := &leaderboardStore{
-		periodData: map[string][]model.LeaderboardEntry{
-			model.PeriodWeekly: weeklyEntries,
-		},
-	}
-	h := newLeaderboardHandler(st)
+func TestLeaderboardUpdate_CallerMismatch_Returns403(t *testing.T) {
+	// Request says user=u2 but caller is u1 — forbidden.
+	h := newLeaderboardHandler(&leaderboardStore{})
 
-	rec := httptest.NewRecorder()
-	h.GetLeaderboard(rec, leaderboardRequest(http.MethodGet, "/gaming/leaderboard?period=weekly", "carol"))
+	body, _ := json.Marshal(model.LeaderboardUpdateRequest{UserID: "u2", XP: 100})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/leaderboard/update", bytes.NewBuffer(body))
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.LeaderboardUpdate(rr, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	var resp model.LeaderboardResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(resp.Top10) != 1 || resp.Top10[0].UserID != "carol" {
-		t.Errorf("weekly: want [carol], got %+v", resp.Top10)
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", rr.Code)
 	}
 }
 
-func TestGetLeaderboard_MonthlyPeriodUsesMonthlyData(t *testing.T) {
-	monthlyEntries := []model.LeaderboardEntry{
-		{UserID: "dave", XP: 1200, Rank: 1},
-		{UserID: "eve", XP: 900, Rank: 2},
-	}
-	st := &leaderboardStore{
-		periodData: map[string][]model.LeaderboardEntry{
-			model.PeriodMonthly: monthlyEntries,
-		},
-	}
-	h := newLeaderboardHandler(st)
+func TestLeaderboardUpdate_NoCaller_Returns403(t *testing.T) {
+	h := newLeaderboardHandler(&leaderboardStore{})
 
-	rec := httptest.NewRecorder()
-	h.GetLeaderboard(rec, leaderboardRequest(http.MethodGet, "/gaming/leaderboard?period=monthly", "dave"))
+	body, _ := json.Marshal(model.LeaderboardUpdateRequest{UserID: "u1", XP: 100})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/leaderboard/update", bytes.NewBuffer(body))
+	// No WithUserID — caller is unauthenticated.
+	rr := httptest.NewRecorder()
+	h.LeaderboardUpdate(rr, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
-	}
-	var resp model.LeaderboardResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if len(resp.Top10) != 2 {
-		t.Fatalf("monthly: want 2 entries, got %d", len(resp.Top10))
-	}
-	if resp.Top10[0].UserID != "dave" {
-		t.Errorf("monthly rank 1: want dave, got %s", resp.Top10[0].UserID)
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", rr.Code)
 	}
 }
 
-func TestGetLeaderboard_AllTimePeriodCallsAllTime(t *testing.T) {
-	st := &leaderboardStore{
-		top10: []model.LeaderboardEntry{{UserID: "frank", XP: 700, Rank: 1}},
-	}
-	h := newLeaderboardHandler(st)
+func TestLeaderboardUpdate_NoCourse_OnlyGlobalBoardUpdated(t *testing.T) {
+	s := &leaderboardStore{}
+	h := newLeaderboardHandler(s)
 
-	rec := httptest.NewRecorder()
-	h.GetLeaderboard(rec, leaderboardRequest(http.MethodGet, "/gaming/leaderboard?period=all_time", "frank"))
+	body, _ := json.Marshal(model.LeaderboardUpdateRequest{UserID: "u1", XP: 250})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/leaderboard/update", bytes.NewBuffer(body))
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.LeaderboardUpdate(rr, req)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d: %s", rr.Code, rr.Body.String())
 	}
-	var resp model.LeaderboardResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
+	if s.updateCalls != 1 {
+		t.Errorf("expected 1 LeaderboardUpdate call, got %d", s.updateCalls)
 	}
-	if len(resp.Top10) != 1 || resp.Top10[0].UserID != "frank" {
-		t.Errorf("all_time: want [frank], got %+v", resp.Top10)
+	if s.updateLastUser != "u1" || s.updateLastXP != 250 {
+		t.Errorf("update args: got (%q, %d), want (u1, 250)", s.updateLastUser, s.updateLastXP)
 	}
-}
-
-func TestGetLeaderboard_UserRankIncludedInResponse(t *testing.T) {
-	st := &leaderboardStore{
-		top10:    []model.LeaderboardEntry{{UserID: "top", XP: 1000, Rank: 1}},
-		userRank: &model.LeaderboardEntry{UserID: "alice", XP: 500, Rank: 5},
-	}
-	h := newLeaderboardHandler(st)
-
-	rec := httptest.NewRecorder()
-	h.GetLeaderboard(rec, leaderboardRequest(http.MethodGet, "/gaming/leaderboard", "alice"))
-
-	var resp model.LeaderboardResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
-	}
-	if resp.UserRank == nil {
-		t.Fatal("user_rank should be present when user has a rank")
-	}
-	if resp.UserRank.UserID != "alice" {
-		t.Errorf("user_rank user_id: want alice, got %s", resp.UserRank.UserID)
-	}
-	if resp.UserRank.Rank != 5 {
-		t.Errorf("user_rank rank: want 5, got %d", resp.UserRank.Rank)
+	if s.updateCourseCalls != 0 {
+		t.Errorf("expected 0 course updates when course_id empty, got %d", s.updateCourseCalls)
 	}
 }
 
-func TestGetLeaderboard_StoreErrorReturns500(t *testing.T) {
-	st := &leaderboardStore{err: errors.New("redis unavailable")}
-	h := newLeaderboardHandler(st)
+func TestLeaderboardUpdate_WithCourse_BothBoardsUpdated(t *testing.T) {
+	s := &leaderboardStore{}
+	h := newLeaderboardHandler(s)
 
-	rec := httptest.NewRecorder()
-	h.GetLeaderboard(rec, leaderboardRequest(http.MethodGet, "/gaming/leaderboard", "u1"))
+	body, _ := json.Marshal(model.LeaderboardUpdateRequest{UserID: "u1", XP: 250, CourseID: "chem101"})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/leaderboard/update", bytes.NewBuffer(body))
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.LeaderboardUpdate(rr, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
+	if rr.Code != http.StatusNoContent {
+		t.Fatalf("expected 204, got %d", rr.Code)
+	}
+	if s.updateCalls != 1 {
+		t.Errorf("expected 1 global update, got %d", s.updateCalls)
+	}
+	if s.updateCourseCalls != 1 {
+		t.Errorf("expected 1 course update, got %d", s.updateCourseCalls)
+	}
+	if s.updateCourseLast.courseID != "chem101" || s.updateCourseLast.xp != 250 {
+		t.Errorf("course args: got (%q, %d), want (chem101, 250)", s.updateCourseLast.courseID, s.updateCourseLast.xp)
 	}
 }
 
-func TestGetLeaderboard_ResponseIsValidJSON(t *testing.T) {
-	st := &leaderboardStore{
-		top10: []model.LeaderboardEntry{
-			{UserID: "u1", XP: 100, Rank: 1},
-		},
-	}
-	h := newLeaderboardHandler(st)
+func TestLeaderboardUpdate_StoreError_Returns500(t *testing.T) {
+	s := &leaderboardStore{updateErr: errors.New("redis down")}
+	h := newLeaderboardHandler(s)
 
-	rec := httptest.NewRecorder()
-	h.GetLeaderboard(rec, leaderboardRequest(http.MethodGet, "/gaming/leaderboard", "u1"))
+	body, _ := json.Marshal(model.LeaderboardUpdateRequest{UserID: "u1", XP: 100})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/leaderboard/update", bytes.NewBuffer(body))
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.LeaderboardUpdate(rr, req)
 
-	var resp model.LeaderboardResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("response is not valid JSON: %v", err)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rr.Code)
 	}
 }
 
-func TestGetLeaderboard_CorrectOrderingDescendingXP(t *testing.T) {
-	// Store returns pre-sorted descending; handler must not re-sort
-	entries := []model.LeaderboardEntry{
-		{UserID: "u3", XP: 900, Rank: 1},
-		{UserID: "u1", XP: 700, Rank: 2},
-		{UserID: "u2", XP: 500, Rank: 3},
-	}
-	st := &leaderboardStore{top10: entries}
-	h := newLeaderboardHandler(st)
+func TestLeaderboardUpdate_CourseStoreError_Returns500(t *testing.T) {
+	s := &leaderboardStore{updateCourseErr: errors.New("course board down")}
+	h := newLeaderboardHandler(s)
 
-	rec := httptest.NewRecorder()
-	h.GetLeaderboard(rec, leaderboardRequest(http.MethodGet, "/gaming/leaderboard", "u1"))
+	body, _ := json.Marshal(model.LeaderboardUpdateRequest{UserID: "u1", XP: 100, CourseID: "c1"})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/leaderboard/update", bytes.NewBuffer(body))
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.LeaderboardUpdate(rr, req)
 
-	var resp model.LeaderboardResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rr.Code)
 	}
-	for i, e := range resp.Top10 {
-		if e.Rank != int64(i+1) {
-			t.Errorf("entry %d: rank field want %d, got %d", i, i+1, e.Rank)
+}
+
+// ── GetLeaderboard (GET /gaming/leaderboard?period=...) ───────────────────────
+
+func TestGetLeaderboard_NoPeriod_UsesTop10(t *testing.T) {
+	s := &leaderboardStore{top10Entries: []model.LeaderboardEntry{{UserID: "a", XP: 1000, Rank: 1}}}
+	h := newLeaderboardHandler(s)
+
+	req := httptest.NewRequest(http.MethodGet, "/gaming/leaderboard", nil)
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.GetLeaderboard(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if s.top10Calls != 1 || s.periodCalls != 0 {
+		t.Errorf("empty period must use Top10: top10Calls=%d periodCalls=%d", s.top10Calls, s.periodCalls)
+	}
+	resp := decodeLeaderboard(t, rr)
+	if len(resp.Top10) != 1 || resp.Top10[0].UserID != "a" {
+		t.Errorf("unexpected response: %+v", resp)
+	}
+}
+
+func TestGetLeaderboard_AllTime_UsesTop10(t *testing.T) {
+	s := &leaderboardStore{}
+	h := newLeaderboardHandler(s)
+
+	req := httptest.NewRequest(http.MethodGet, "/gaming/leaderboard?period="+model.PeriodAllTime, nil)
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.GetLeaderboard(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if s.top10Calls != 1 || s.periodCalls != 0 {
+		t.Errorf("all_time must use Top10: top10Calls=%d periodCalls=%d", s.top10Calls, s.periodCalls)
+	}
+}
+
+func TestGetLeaderboard_Weekly_UsesGetPeriod(t *testing.T) {
+	s := &leaderboardStore{}
+	h := newLeaderboardHandler(s)
+
+	req := httptest.NewRequest(http.MethodGet, "/gaming/leaderboard?period="+model.PeriodWeekly, nil)
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.GetLeaderboard(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if s.periodCalls != 1 || s.top10Calls != 0 {
+		t.Errorf("weekly must use GetPeriod: periodCalls=%d top10Calls=%d", s.periodCalls, s.top10Calls)
+	}
+	if s.periodLast != model.PeriodWeekly {
+		t.Errorf("period arg: got %q, want %q", s.periodLast, model.PeriodWeekly)
+	}
+}
+
+func TestGetLeaderboard_Monthly_UsesGetPeriod(t *testing.T) {
+	s := &leaderboardStore{}
+	h := newLeaderboardHandler(s)
+
+	req := httptest.NewRequest(http.MethodGet, "/gaming/leaderboard?period="+model.PeriodMonthly, nil)
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.GetLeaderboard(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if s.periodLast != model.PeriodMonthly {
+		t.Errorf("period arg: got %q, want %q", s.periodLast, model.PeriodMonthly)
+	}
+}
+
+func TestGetLeaderboard_StoreError_Returns500(t *testing.T) {
+	s := &leaderboardStore{top10Err: errors.New("redis down")}
+	h := newLeaderboardHandler(s)
+
+	req := httptest.NewRequest(http.MethodGet, "/gaming/leaderboard", nil)
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.GetLeaderboard(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rr.Code)
+	}
+}
+
+// ── GetCourseLeaderboard (GET /gaming/leaderboard/course/{courseId}) ──────────
+
+func TestGetCourseLeaderboard_MissingCourseID_Returns400(t *testing.T) {
+	h := newLeaderboardHandler(&leaderboardStore{})
+
+	req := httptest.NewRequest(http.MethodGet, "/gaming/leaderboard/course/", nil)
+	req = withUser(req, "u1")
+	// No courseId URL param set.
+	rr := httptest.NewRecorder()
+	h.GetCourseLeaderboard(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestGetCourseLeaderboard_HappyPath_ForwardsCourseID(t *testing.T) {
+	s := &leaderboardStore{courseEntries: []model.LeaderboardEntry{{UserID: "a", XP: 500, Rank: 1}}}
+	h := newLeaderboardHandler(s)
+
+	req := httptest.NewRequest(http.MethodGet, "/gaming/leaderboard/course/chem101", nil)
+	req = withUser(req, "u1")
+	req = withCourseParam(req, "chem101")
+	rr := httptest.NewRecorder()
+	h.GetCourseLeaderboard(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
+	}
+	if s.courseCalls != 1 || s.courseLast != "chem101" {
+		t.Errorf("course args: calls=%d last=%q", s.courseCalls, s.courseLast)
+	}
+	resp := decodeLeaderboard(t, rr)
+	if len(resp.Top10) != 1 || resp.Top10[0].UserID != "a" {
+		t.Errorf("unexpected response: %+v", resp)
+	}
+}
+
+func TestGetCourseLeaderboard_StoreError_Returns500(t *testing.T) {
+	s := &leaderboardStore{courseErr: errors.New("db down")}
+	h := newLeaderboardHandler(s)
+
+	req := httptest.NewRequest(http.MethodGet, "/gaming/leaderboard/course/chem101", nil)
+	req = withUser(req, "u1")
+	req = withCourseParam(req, "chem101")
+	rr := httptest.NewRecorder()
+	h.GetCourseLeaderboard(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rr.Code)
+	}
+}
+
+// ── GetFriendLeaderboard (GET /gaming/leaderboard/friends?friends=...) ────────
+
+func TestGetFriendLeaderboard_NoCaller_Returns403(t *testing.T) {
+	h := newLeaderboardHandler(&leaderboardStore{})
+
+	req := httptest.NewRequest(http.MethodGet, "/gaming/leaderboard/friends?friends=a,b", nil)
+	// No WithUserID.
+	rr := httptest.NewRecorder()
+	h.GetFriendLeaderboard(rr, req)
+
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", rr.Code)
+	}
+}
+
+func TestGetFriendLeaderboard_ParsesCommaSeparatedList(t *testing.T) {
+	s := &leaderboardStore{}
+	h := newLeaderboardHandler(s)
+
+	req := httptest.NewRequest(http.MethodGet, "/gaming/leaderboard/friends?friends=alice,bob,carol", nil)
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.GetFriendLeaderboard(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	want := []string{"alice", "bob", "carol"}
+	if len(s.friendLastIDs) != len(want) {
+		t.Fatalf("friendLastIDs: got %v, want %v", s.friendLastIDs, want)
+	}
+	for i, id := range want {
+		if s.friendLastIDs[i] != id {
+			t.Errorf("friendLastIDs[%d]: got %q, want %q", i, s.friendLastIDs[i], id)
 		}
 	}
-	if resp.Top10[0].XP < resp.Top10[1].XP {
-		t.Errorf("entries not in descending XP order: %v > %v violated",
-			resp.Top10[0].XP, resp.Top10[1].XP)
+}
+
+func TestGetFriendLeaderboard_TrimsWhitespace(t *testing.T) {
+	s := &leaderboardStore{}
+	h := newLeaderboardHandler(s)
+
+	req := httptest.NewRequest(http.MethodGet, "/gaming/leaderboard/friends?friends="+
+		"%20alice%20,bob%20,%20carol", nil)
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.GetFriendLeaderboard(rr, req)
+
+	want := []string{"alice", "bob", "carol"}
+	for i, id := range want {
+		if i >= len(s.friendLastIDs) || s.friendLastIDs[i] != id {
+			t.Errorf("friendLastIDs[%d]: got %v, want %q (full: %v)", i, s.friendLastIDs, id, s.friendLastIDs)
+		}
 	}
 }
 
-// ── GET /gaming/leaderboard/friends tests ────────────────────────────────────
+func TestGetFriendLeaderboard_FiltersOutCaller(t *testing.T) {
+	// Caller should be stripped from the friend list so the store query
+	// does not duplicate their row — the handler surfaces the caller via
+	// UserRank separately.
+	s := &leaderboardStore{}
+	h := newLeaderboardHandler(s)
 
-func TestGetFriendLeaderboard_ReturnsFriendsRanked(t *testing.T) {
-	st := &leaderboardStore{
-		friendData: []model.LeaderboardEntry{
-			{UserID: "caller", XP: 800, Rank: 1},
-			{UserID: "friend1", XP: 600, Rank: 2},
-			{UserID: "friend2", XP: 400, Rank: 3},
-		},
-		userRank: &model.LeaderboardEntry{UserID: "caller", XP: 800, Rank: 1},
+	req := httptest.NewRequest(http.MethodGet, "/gaming/leaderboard/friends?friends=alice,u1,bob", nil)
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.GetFriendLeaderboard(rr, req)
+
+	for _, id := range s.friendLastIDs {
+		if id == "u1" {
+			t.Errorf("caller u1 should be filtered out of friendIDs, got %v", s.friendLastIDs)
+		}
 	}
-	h := newLeaderboardHandler(st)
+	if len(s.friendLastIDs) != 2 {
+		t.Errorf("expected 2 friends (alice, bob), got %v", s.friendLastIDs)
+	}
+}
 
-	req := httptest.NewRequest(http.MethodGet, "/gaming/leaderboard/friends?friends=friend1,friend2", nil)
-	req = req.WithContext(middleware.WithUserID(req.Context(), "caller"))
-	rec := httptest.NewRecorder()
-	h.GetFriendLeaderboard(rec, req)
+func TestGetFriendLeaderboard_EmptyFriendParam_CallsStoreWithNil(t *testing.T) {
+	s := &leaderboardStore{}
+	h := newLeaderboardHandler(s)
 
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d", rec.Code)
+	req := httptest.NewRequest(http.MethodGet, "/gaming/leaderboard/friends", nil)
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.GetFriendLeaderboard(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if s.friendCalls != 1 {
+		t.Errorf("expected 1 store call, got %d", s.friendCalls)
+	}
+	if len(s.friendLastIDs) != 0 {
+		t.Errorf("expected nil/empty friendIDs, got %v", s.friendLastIDs)
+	}
+}
+
+func TestGetFriendLeaderboard_HappyPath_ReturnsFriendResponseShape(t *testing.T) {
+	// Response must use FriendLeaderboardResponse ({friends, user_rank}) —
+	// not LeaderboardResponse ({top_10, user_rank}). Pin the shape so a
+	// future rename doesn't silently break the frontend.
+	s := &leaderboardStore{
+		friendEntries: []model.LeaderboardEntry{{UserID: "alice", XP: 300, Rank: 2}},
+		friendUserRank: &model.LeaderboardEntry{UserID: "u1", XP: 500, Rank: 1},
+	}
+	h := newLeaderboardHandler(s)
+
+	req := httptest.NewRequest(http.MethodGet, "/gaming/leaderboard/friends?friends=alice", nil)
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.GetFriendLeaderboard(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
 	}
 	var resp model.FriendLeaderboardResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
 		t.Fatalf("decode: %v", err)
 	}
-	if len(resp.Friends) != 3 {
-		t.Fatalf("want 3 friend entries, got %d", len(resp.Friends))
+	if len(resp.Friends) != 1 || resp.Friends[0].UserID != "alice" {
+		t.Errorf("Friends: got %+v", resp.Friends)
 	}
-	if resp.Friends[0].UserID != "caller" {
-		t.Errorf("rank 1: want caller, got %s", resp.Friends[0].UserID)
-	}
-}
-
-func TestGetFriendLeaderboard_UnauthenticatedReturns403(t *testing.T) {
-	st := &leaderboardStore{}
-	h := newLeaderboardHandler(st)
-
-	rec := httptest.NewRecorder()
-	// No user ID in context
-	h.GetFriendLeaderboard(rec, httptest.NewRequest(http.MethodGet, "/gaming/leaderboard/friends", nil))
-
-	if rec.Code != http.StatusForbidden {
-		t.Fatalf("expected 403, got %d", rec.Code)
+	if resp.UserRank == nil || resp.UserRank.UserID != "u1" {
+		t.Errorf("UserRank: got %+v", resp.UserRank)
 	}
 }
 
-func TestGetFriendLeaderboard_StoreErrorReturns500(t *testing.T) {
-	st := &leaderboardStore{err: errors.New("redis down")}
-	h := newLeaderboardHandler(st)
+func TestGetFriendLeaderboard_StoreError_Returns500(t *testing.T) {
+	s := &leaderboardStore{friendErr: errors.New("db down")}
+	h := newLeaderboardHandler(s)
 
-	req := httptest.NewRequest(http.MethodGet, "/gaming/leaderboard/friends?friends=u2", nil)
-	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
-	rec := httptest.NewRecorder()
-	h.GetFriendLeaderboard(rec, req)
+	req := httptest.NewRequest(http.MethodGet, "/gaming/leaderboard/friends?friends=alice", nil)
+	req = withUser(req, "u1")
+	rr := httptest.NewRecorder()
+	h.GetFriendLeaderboard(rr, req)
 
-	if rec.Code != http.StatusInternalServerError {
-		t.Fatalf("expected 500, got %d", rec.Code)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rr.Code)
 	}
 }
