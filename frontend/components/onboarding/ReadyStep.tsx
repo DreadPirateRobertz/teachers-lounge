@@ -12,6 +12,8 @@ interface ReadyStepProps {
   avatarEmoji: string
   /** The user's chosen display name, shown in the celebration heading. */
   displayName: string
+  /** Whether the completion API call is in progress. */
+  finishing?: boolean
   /** Called when the user clicks "Start learning". */
   onDone: () => void
 }
@@ -21,9 +23,10 @@ interface ReadyStepProps {
  *
  * @param props.avatarEmoji - User's chosen avatar.
  * @param props.displayName - User's display name.
+ * @param props.finishing - Whether the completion call is in flight.
  * @param props.onDone - Navigate to the main tutoring interface.
  */
-export default function ReadyStep({ avatarEmoji, displayName, onDone }: ReadyStepProps) {
+export default function ReadyStep({ avatarEmoji, displayName, finishing, onDone }: ReadyStepProps) {
   return (
     <div className="flex flex-col items-center text-center gap-6">
       <div className="relative">
@@ -49,8 +52,12 @@ export default function ReadyStep({ avatarEmoji, displayName, onDone }: ReadySte
         <p>✓ 14-day free trial active</p>
       </div>
 
-      <button onClick={onDone} className="neon-btn-primary w-full max-w-xs text-base">
-        Start learning ⚡
+      <button
+        onClick={onDone}
+        disabled={finishing}
+        className="neon-btn-primary w-full max-w-xs text-base"
+      >
+        {finishing ? 'Launching...' : 'Start learning ⚡'}
       </button>
     </div>
   )
