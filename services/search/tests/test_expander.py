@@ -188,7 +188,7 @@ class TestSearchEndpointWiring:
             return results
 
         with (
-            patch("app.expander.expand_query", new_callable=AsyncMock, return_value="What is PV=nRT?"),
+            patch("app.routers.search.expand_query", new_callable=AsyncMock, return_value="What is PV=nRT?"),
             patch("app.routers.search.embed_query", new=_capture_embed),
             patch("app.routers.search.dense_search", new_callable=AsyncMock, return_value=[]),
             patch("app.routers.search.sparse_search", new_callable=AsyncMock, return_value=[]),
