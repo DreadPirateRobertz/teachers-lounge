@@ -118,4 +118,25 @@
 
 ---
 
-*Last updated: 2026-04-05 by carn (tl-fos)*
+## 2026-04-12 — CI + Security Header Fixes
+
+### CI / DevOps
+| PR | What |
+|----|------|
+| [#163](../../pull/163) | docs(tl-s7z): CI bypass audit — PRs #149–#160 review, risk documented |
+| [#166](../../pull/166) | fix(ci): lowercase GHCR repository name — Docker tags require lowercase |
+
+### Frontend Security
+| PR | What |
+|----|------|
+| [#164](../../pull/164) | fix(frontend): remove HSTS from next.config — standalone bakes at build time; reverse proxy handles it |
+| [#165](../../pull/165) | fix(frontend): remove upgrade-insecure-requests from CSP — same reason |
+
+### Boss Battles
+| PR | What |
+|----|------|
+| [#167](../../pull/167) | feat(tl-7wv): boss progression map — trail UI + backend API |
+
+---
+
+*Last updated: 2026-04-12 by petra (tl-fos)*
