@@ -38,12 +38,10 @@ jobs:
         run: go test ./... -race -count=1 -timeout=60s
 
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v6
-        continue-on-error: true
+        uses: golangci/golangci-lint-action@v8
         with:
           working-directory: services/user-service
-          version: latest
-          args: --go=1.25
+          version: v2.5.0
 
   migrate:
     name: Validate Migrations

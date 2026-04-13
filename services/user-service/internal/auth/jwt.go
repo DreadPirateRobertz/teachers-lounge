@@ -13,8 +13,6 @@ import (
 	"github.com/teacherslounge/user-service/internal/models"
 )
 
-
-// Claims holds the JWT payload carried in every access token.
 type Claims struct {
 	jwt.RegisteredClaims
 	UserID      string `json:"uid"`

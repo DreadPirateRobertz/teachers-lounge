@@ -47,7 +47,11 @@ func main() {
 		slog.Error("creating migrate instance", "err", err)
 		os.Exit(1)
 	}
-	defer m.Close()
+	defer func() {
+		if srcErr, dbErr := m.Close(); srcErr != nil || dbErr != nil {
+			slog.Error("closing migrate instance", "source_err", srcErr, "db_err", dbErr)
+		}
+	}()
 
 	cmd := os.Args[1]
 	switch cmd {
