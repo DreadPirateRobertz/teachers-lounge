@@ -237,6 +237,9 @@ func (noopStore) BuyPowerUp(_ context.Context, _ string, _ model.PowerUpType, _ 
 func (noopStore) GetDefeatedBossIDs(_ context.Context, _ string) ([]string, error) {
 	return nil, nil
 }
+func (noopStore) GetChapterMastery(_ context.Context, _ string, _ []string) (float64, error) {
+	return 0.0, nil
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
