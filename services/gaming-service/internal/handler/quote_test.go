@@ -138,6 +138,9 @@ func (s *quoteStorer) BuyPowerUp(_ context.Context, _ string, _ model.PowerUpTyp
 func (s *quoteStorer) GetDefeatedBossIDs(_ context.Context, _ string) ([]string, error) {
 	return nil, nil
 }
+func (s *quoteStorer) GetChapterMastery(_ context.Context, _ string, _ []string) (float64, error) {
+	return 0.0, nil
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
