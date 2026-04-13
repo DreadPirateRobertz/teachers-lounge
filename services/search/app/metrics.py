@@ -15,7 +15,7 @@ import time
 from contextlib import asynccontextmanager
 from typing import AsyncIterator, Literal
 
-from prometheus_client import Histogram
+from prometheus_client import Counter, Histogram
 
 # Buckets chosen per tl-he3 spec: cover expected sub-10ms p50 up through
 # a 2.5s outlier ceiling — anything slower than that is a timeout bug.
@@ -69,3 +69,17 @@ async def observe_query(query_type: QueryType) -> AsyncIterator[None]:
         SEARCH_QUERY_DURATION.labels(
             query_type=query_type, status=status
         ).observe(time.perf_counter() - start)
+
+
+# ── Query expansion (tl-afb) ─────────────────────────────────────────────────
+# Counter of short-query expansion outcomes. ``outcome`` values:
+#   - "expanded"   — AI gateway returned a non-empty rewrite that was used
+#   - "passthrough_long"    — query was not short, no expansion attempted
+#   - "passthrough_nocontext" — no context turns supplied, no expansion attempted
+#   - "fallback_blank"      — gateway returned blank output, raw query used
+#   - "fallback_error"      — gateway call raised, raw query used
+QUERY_EXPANSION_OUTCOMES = Counter(
+    "search_query_expansion_total",
+    "Short-query expansion attempts by outcome (tl-afb).",
+    labelnames=("outcome",),
+)
