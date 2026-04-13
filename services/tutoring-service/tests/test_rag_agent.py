@@ -8,6 +8,7 @@ Covers:
   - build_rag_context orchestration: happy path, no-chunks fallback,
     gap detection + prompt injection, step-2 errors silently skipped
 """
+
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -62,6 +63,7 @@ def _make_gap(name: str, mastery: float = 0.0) -> dict:
 # _format_chunks
 # ---------------------------------------------------------------------------
 
+
 class TestFormatChunks:
     def test_empty_input_returns_empty_string(self):
         assert _format_chunks([]) == ""
@@ -96,6 +98,7 @@ class TestFormatChunks:
 # ---------------------------------------------------------------------------
 # _find_concept_for_question
 # ---------------------------------------------------------------------------
+
 
 class TestFindConceptForQuestion:
     def test_exact_name_match(self):
@@ -133,6 +136,7 @@ class TestFindConceptForQuestion:
 # ---------------------------------------------------------------------------
 # _build_system_prompt
 # ---------------------------------------------------------------------------
+
 
 class TestBuildSystemPrompt:
     def test_no_chunks_returns_no_material_notice(self):
@@ -188,6 +192,7 @@ class TestBuildSystemPrompt:
 # ---------------------------------------------------------------------------
 # build_rag_context
 # ---------------------------------------------------------------------------
+
 
 class TestBuildRagContext:
     @pytest.mark.asyncio
@@ -257,8 +262,9 @@ class TestBuildRagContext:
         """Early-stage student (<5 turns) gets foundational framing."""
         mock_db = AsyncMock()
 
-        fake_interactions = [MagicMock(role="student") for _ in range(3)] + \
-                            [MagicMock(role="tutor") for _ in range(3)]
+        fake_interactions = [MagicMock(role="student") for _ in range(3)] + [
+            MagicMock(role="tutor") for _ in range(3)
+        ]
 
         with (
             patch("app.rag_agent.get_history", AsyncMock(return_value=fake_interactions)),
@@ -337,7 +343,9 @@ class TestBuildRagContext:
 
         with (
             patch("app.rag_agent.get_history", AsyncMock(return_value=[])),
-            patch("app.rag_agent.get_course_concepts", AsyncMock(side_effect=RuntimeError("db down"))),
+            patch(
+                "app.rag_agent.get_course_concepts", AsyncMock(side_effect=RuntimeError("db down"))
+            ),
             patch("app.rag_agent.fetch_curriculum_chunks", AsyncMock(return_value=chunks)),
         ):
             prompt, returned = await build_rag_context(
@@ -381,6 +389,7 @@ class TestBuildRagContext:
 # Phase 7 OTel span — build_rag_context
 # ---------------------------------------------------------------------------
 
+
 class TestBuildRagContextOtelSpan:
     """Verify that build_rag_context emits a correctly-attributed OTel span."""
 
@@ -402,6 +411,7 @@ class TestBuildRagContextOtelSpan:
         import importlib
 
         import app.rag_agent as ra_mod
+
         importlib.reload(ra_mod)
         from app.rag_agent import build_rag_context as _build
 

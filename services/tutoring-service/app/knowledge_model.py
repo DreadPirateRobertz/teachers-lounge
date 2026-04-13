@@ -25,6 +25,7 @@ batched atomically.
   SKM interaction log (Phase 2 — tl-dkm):
     log_concept_interaction         — record tutoring engagement with a concept (no commit)
 """
+
 from __future__ import annotations
 
 import math
@@ -54,6 +55,7 @@ _VALID_DIAL_KEYS: frozenset[str] = frozenset(
 
 # ── Learning profile ──────────────────────────────────────────────────────────
 
+
 async def get_or_create_learning_profile(
     db: AsyncSession,
     user_id: UUID,
@@ -70,9 +72,7 @@ async def get_or_create_learning_profile(
     Returns:
         The existing or newly-created LearningProfile row.
     """
-    result = await db.execute(
-        select(LearningProfile).where(LearningProfile.user_id == user_id)
-    )
+    result = await db.execute(select(LearningProfile).where(LearningProfile.user_id == user_id))
     profile = result.scalar_one_or_none()
     if profile is None:
         profile = LearningProfile(
@@ -130,9 +130,7 @@ async def get_dials(
     Returns:
         Dict mapping each of the four dimension names to a float in [-1, 1].
     """
-    result = await db.execute(
-        select(LearningProfile).where(LearningProfile.user_id == user_id)
-    )
+    result = await db.execute(select(LearningProfile).where(LearningProfile.user_id == user_id))
     profile = result.scalar_one_or_none()
     if profile is None:
         return dict(DEFAULT_DIALS)
@@ -145,6 +143,7 @@ async def get_dials(
 
 
 # ── Explanation preferences ───────────────────────────────────────────────────
+
 
 async def log_explanation_preference(
     db: AsyncSession,
@@ -213,6 +212,7 @@ async def get_explanation_preferences(
 
 
 # ── Misconceptions ────────────────────────────────────────────────────────────
+
 
 async def log_misconception(
     db: AsyncSession,
@@ -306,14 +306,16 @@ async def get_active_misconceptions(
             continue
         elapsed = (now - m.last_seen_at).total_seconds() / 86400
         weight = math.exp(-elapsed / max(decay_days, 0.001))
-        entries.append({
-            "id": m.id,
-            "concept_id": m.concept_id,
-            "description": m.description,
-            "confidence": m.confidence,
-            "recorded_at": m.recorded_at,
-            "recency_weight": round(weight, 4),
-        })
+        entries.append(
+            {
+                "id": m.id,
+                "concept_id": m.concept_id,
+                "description": m.description,
+                "confidence": m.confidence,
+                "recorded_at": m.recorded_at,
+                "recency_weight": round(weight, 4),
+            }
+        )
 
     entries.sort(key=lambda e: e["recency_weight"], reverse=True)
     return entries
@@ -351,6 +353,7 @@ async def resolve_misconception(
 
 # ── Proactive SRS prompts ─────────────────────────────────────────────────────
 
+
 async def get_due_review_prompt(
     db: AsyncSession,
     user_id: UUID,
@@ -387,10 +390,7 @@ async def get_due_review_prompt(
     if not due_rows:
         return None
 
-    names = [
-        row.concept.name if row.concept else str(row.concept_id)
-        for row in due_rows
-    ]
+    names = [row.concept.name if row.concept else str(row.concept_id) for row in due_rows]
     if len(names) == 1:
         concepts_str = names[0]
     else:

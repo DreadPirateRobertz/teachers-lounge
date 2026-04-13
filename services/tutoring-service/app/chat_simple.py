@@ -31,6 +31,7 @@ Response:
     Transfer-Encoding: chunked
     (streamed token-by-token)
 """
+
 import logging
 from typing import Literal
 
@@ -48,10 +49,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat-simple"])
 
-FALLBACK_TEXT = (
-    "I'm having a moment of technical difficulty. "
-    "Please try again in a moment. 🔧"
-)
+FALLBACK_TEXT = "I'm having a moment of technical difficulty. Please try again in a moment. 🔧"
 
 
 class ChatMessage(BaseModel):

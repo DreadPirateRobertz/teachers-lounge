@@ -8,6 +8,7 @@ connection pool across requests.
 The singleton is lazily initialised on first call so that tests can patch
 settings before the client is created.
 """
+
 from openai import AsyncOpenAI
 
 from .config import settings
@@ -24,7 +25,7 @@ def get_gateway_client() -> AsyncOpenAI:
             api_key=settings.ai_gateway_key,
             timeout=60.0,
             # httpx connection pool: up to 100 keep-alive connections
-            max_retries=0,   # retries handled at the LiteLLM layer
+            max_retries=0,  # retries handled at the LiteLLM layer
         )
     return _client
 

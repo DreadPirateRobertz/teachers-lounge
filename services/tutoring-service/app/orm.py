@@ -1,4 +1,5 @@
 """SQLAlchemy ORM models."""
+
 from datetime import datetime, timezone
 from uuid import uuid4
 
@@ -27,6 +28,7 @@ def _now() -> datetime:
 
 
 # ── Concept graph + mastery (shared with concept-dependency and SRS) ──────────
+
 
 class Concept(Base):
     """A knowledge concept in a course, with ltree path for hierarchy."""
@@ -65,8 +67,12 @@ class ConceptPrerequisite(Base):
     )
     weight: Mapped[float] = mapped_column(Float, default=1.0)
 
-    concept: Mapped["Concept"] = relationship(foreign_keys=[concept_id], back_populates="prerequisites")
-    prerequisite: Mapped["Concept"] = relationship(foreign_keys=[prerequisite_id], back_populates="dependents")
+    concept: Mapped["Concept"] = relationship(
+        foreign_keys=[concept_id], back_populates="prerequisites"
+    )
+    prerequisite: Mapped["Concept"] = relationship(
+        foreign_keys=[prerequisite_id], back_populates="dependents"
+    )
 
 
 class StudentConceptMastery(Base):
@@ -84,7 +90,9 @@ class StudentConceptMastery(Base):
         UUID(as_uuid=True), ForeignKey("concepts.id", ondelete="CASCADE"), primary_key=True
     )
     mastery_score: Mapped[float] = mapped_column(Float, default=0.0)
-    last_reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     next_review_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     decay_rate: Mapped[float] = mapped_column(Float, default=0.1)
     review_count: Mapped[int] = mapped_column(Integer, default=0)  # total reviews ever
@@ -97,7 +105,7 @@ class StudentConceptMastery(Base):
     concept: Mapped["Concept"] = relationship(lazy="selectin")
     review_records: Mapped[list["ReviewRecord"]] = relationship(
         primaryjoin="and_(StudentConceptMastery.user_id == ReviewRecord.user_id, "
-                    "StudentConceptMastery.concept_id == ReviewRecord.concept_id)",
+        "StudentConceptMastery.concept_id == ReviewRecord.concept_id)",
         foreign_keys="[ReviewRecord.user_id, ReviewRecord.concept_id]",
         back_populates="mastery",
         order_by="ReviewRecord.reviewed_at",
@@ -114,25 +122,29 @@ class ReviewRecord(Base):
     id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
     user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     concept_id: Mapped[UUID] = mapped_column(
-        UUID(as_uuid=True), ForeignKey("concepts.id", ondelete="CASCADE"), nullable=False, index=True
+        UUID(as_uuid=True),
+        ForeignKey("concepts.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
     )
-    quality: Mapped[int] = mapped_column(Integer, nullable=False)          # 0-5
+    quality: Mapped[int] = mapped_column(Integer, nullable=False)  # 0-5
     mastery_before: Mapped[float] = mapped_column(Float, nullable=False)
     mastery_after: Mapped[float] = mapped_column(Float, nullable=False)
-    interval_after: Mapped[int] = mapped_column(Integer, nullable=False)   # days
+    interval_after: Mapped[int] = mapped_column(Integer, nullable=False)  # days
     ease_after: Mapped[float] = mapped_column(Float, nullable=False)
     reviewed_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
 
     mastery: Mapped["StudentConceptMastery"] = relationship(
         foreign_keys=[user_id, concept_id],
         primaryjoin="and_(ReviewRecord.user_id == StudentConceptMastery.user_id, "
-                    "ReviewRecord.concept_id == StudentConceptMastery.concept_id)",
+        "ReviewRecord.concept_id == StudentConceptMastery.concept_id)",
         back_populates="review_records",
         overlaps="review_records",
     )
 
 
 # ── Chat sessions + interactions ──────────────────────────────────────────────
+
 
 class Session(Base):
     """ORM model for the chat_sessions table."""
@@ -143,7 +155,9 @@ class Session(Base):
     user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), nullable=False, index=True)
     course_id: Mapped[UUID | None] = mapped_column(UUID(as_uuid=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
 
     interactions: Mapped[list["Interaction"]] = relationship(
         back_populates="session",
@@ -162,7 +176,9 @@ class Interaction(Base):
         UUID(as_uuid=True), ForeignKey("chat_sessions.id", ondelete="CASCADE"), index=True
     )
     user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
-    role: Mapped[str] = mapped_column(SAEnum("student", "tutor", name="interaction_role"), nullable=False)
+    role: Mapped[str] = mapped_column(
+        SAEnum("student", "tutor", name="interaction_role"), nullable=False
+    )
     content: Mapped[str] = mapped_column(Text, nullable=False)
     response_time_ms: Mapped[int | None] = mapped_column(Integer, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
@@ -194,16 +210,19 @@ class InteractionQuality(Base):
         nullable=False,
         index=True,
     )
-    judge_score: Mapped[int] = mapped_column(Integer, nullable=False)      # 1–5 composite
+    judge_score: Mapped[int] = mapped_column(Integer, nullable=False)  # 1–5 composite
     judge_reasoning: Mapped[str] = mapped_column(Text, nullable=False)
     score_directness: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1–5
-    score_pace: Mapped[int | None] = mapped_column(Integer, nullable=True)        # 1–5
-    score_grounding: Mapped[int | None] = mapped_column(Integer, nullable=True)   # 1–5
+    score_pace: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1–5
+    score_grounding: Mapped[int | None] = mapped_column(Integer, nullable=True)  # 1–5
     judged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
-    judge_model: Mapped[str] = mapped_column(String(64), nullable=False, default="claude-haiku-4-5-20251001")
+    judge_model: Mapped[str] = mapped_column(
+        String(64), nullable=False, default="claude-haiku-4-5-20251001"
+    )
 
 
 # ── Student Knowledge Model — learning profiles + misconceptions ───────────────
+
 
 class LearningProfile(Base):
     """Per-student Felder-Silverman learning-style dials stored in Postgres.
@@ -224,7 +243,9 @@ class LearningProfile(Base):
     sensing_intuitive: Mapped[float] = mapped_column(Float, default=0.0)
     visual_verbal: Mapped[float] = mapped_column(Float, default=0.0)
     sequential_global: Mapped[float] = mapped_column(Float, default=0.0)
-    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, onupdate=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=_now, onupdate=_now
+    )
 
 
 class ExplanationPreference(Base):

@@ -1,4 +1,5 @@
 """Unit tests for the SM-2 spaced repetition engine (pure functions)."""
+
 import math
 from datetime import datetime, timezone
 
@@ -15,6 +16,7 @@ from app.srs import (
 )
 
 # ── sm2_update ────────────────────────────────────────────────────────────────
+
 
 class TestSm2Update:
     def test_first_successful_review_interval_1(self):
@@ -53,7 +55,9 @@ class TestSm2Update:
         ef = DEFAULT_EASE_FACTOR
         interval, reps = 1, 0
         for _ in range(20):
-            interval, ef, reps = sm2_update(quality=3, ease_factor=ef, interval_days=interval, repetitions=reps)
+            interval, ef, reps = sm2_update(
+                quality=3, ease_factor=ef, interval_days=interval, repetitions=reps
+            )
         assert ef >= MIN_EASE_FACTOR
 
     def test_invalid_quality_raises(self):
@@ -73,6 +77,7 @@ class TestSm2Update:
 
 # ── next_review_time ──────────────────────────────────────────────────────────
 
+
 class TestNextReviewTime:
     def test_returns_future_datetime(self):
         now = datetime(2026, 1, 1, 0, 0, 0, tzinfo=timezone.utc)
@@ -87,6 +92,7 @@ class TestNextReviewTime:
 
 
 # ── retention ────────────────────────────────────────────────────────────────
+
 
 class TestRetention:
     def test_zero_elapsed_is_full_retention(self):
@@ -112,6 +118,7 @@ class TestRetention:
 
 # ── mastery_from_retention ───────────────────────────────────────────────────
 
+
 class TestMasteryFromRetention:
     def test_no_elapsed_returns_base(self):
         result = mastery_from_retention(base_mastery=0.8, elapsed_days=0)
@@ -128,6 +135,7 @@ class TestMasteryFromRetention:
 
 
 # ── mastery_after_review ─────────────────────────────────────────────────────
+
 
 class TestMasteryAfterReview:
     def test_perfect_score_increases_mastery(self):

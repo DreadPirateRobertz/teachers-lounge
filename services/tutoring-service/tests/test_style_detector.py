@@ -6,6 +6,7 @@ Covers:
   - update_dials: EMA math, bounds clamping, multiple signals, no-op on empty
   - build_style_prompt_section: threshold gating, correct labels, empty return
 """
+
 import pytest
 
 from app.style_detector import (
@@ -19,6 +20,7 @@ from app.style_detector import (
 )
 
 # ── detect_signals ────────────────────────────────────────────────────────────
+
 
 class TestDetectSignals:
     def test_returns_empty_for_neutral_message(self):
@@ -106,12 +108,13 @@ class TestDetectSignals:
 
 # ── update_dials ──────────────────────────────────────────────────────────────
 
+
 class TestUpdateDials:
     def test_no_signals_returns_unchanged_copy(self):
         dials = {"active_reflective": 0.3}
         result = update_dials(dials, [])
         assert result == dials
-        assert result is not dials   # must be a new dict
+        assert result is not dials  # must be a new dict
 
     def test_ema_math_positive_direction(self):
         dials = {"active_reflective": 0.0}
@@ -172,6 +175,7 @@ class TestUpdateDials:
 
 
 # ── build_style_prompt_section ────────────────────────────────────────────────
+
 
 class TestBuildStylePromptSection:
     def test_all_zero_dials_returns_empty_string(self):

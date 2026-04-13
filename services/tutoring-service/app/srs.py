@@ -5,6 +5,7 @@ logic lives in reviews.py.
 
 SM-2 Reference: Wozniak (1990), SuperMemo 2 algorithm.
 """
+
 from __future__ import annotations
 
 import math
@@ -14,11 +15,12 @@ from datetime import datetime, timedelta, timezone
 
 MIN_EASE_FACTOR = 1.3
 DEFAULT_EASE_FACTOR = 2.5
-PASS_THRESHOLD = 3          # quality >= 3 counts as "recalled"
+PASS_THRESHOLD = 3  # quality >= 3 counts as "recalled"
 INITIAL_INTERVALS = [1, 6]  # days for first two successful reviews
 
 
 # ── Core SM-2 scheduler ───────────────────────────────────────────────────────
+
 
 def sm2_update(
     quality: int,
@@ -66,6 +68,7 @@ def next_review_time(interval_days: int, now: datetime | None = None) -> datetim
 
 
 # ── Forgetting curve ──────────────────────────────────────────────────────────
+
 
 def retention(
     elapsed_days: float,

@@ -2,6 +2,7 @@
 
 Validates model fields, constraints, and default values without a live database.
 """
+
 import uuid
 from datetime import datetime, timezone
 
@@ -28,9 +29,15 @@ class TestInteractionQualityModel:
         """All columns specified in the Phase 7 spec are present."""
         columns = {c.name for c in InteractionQuality.__table__.columns}
         required = {
-            "id", "interaction_id", "judge_score", "judge_reasoning",
-            "score_directness", "score_pace", "score_grounding",
-            "judged_at", "judge_model",
+            "id",
+            "interaction_id",
+            "judge_score",
+            "judge_reasoning",
+            "score_directness",
+            "score_pace",
+            "score_grounding",
+            "judged_at",
+            "judge_model",
         }
         assert required.issubset(columns)
 

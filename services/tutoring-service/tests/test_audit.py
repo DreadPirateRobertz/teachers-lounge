@@ -2,6 +2,7 @@
 
 Uses an in-memory mock SQLAlchemy session so no real Postgres is needed.
 """
+
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -15,6 +16,7 @@ from app.audit import (
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
+
 def _make_db(execute_raises=None):
     """Return a mock AsyncSession that records calls."""
     db = AsyncMock()
@@ -26,6 +28,7 @@ def _make_db(execute_raises=None):
 
 
 # ── happy-path tests ──────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_write_audit_log_executes_insert():
@@ -96,6 +99,7 @@ async def test_write_audit_log_passes_correct_params():
 
 
 # ── error-resilience tests ────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_write_audit_log_swallows_db_error():

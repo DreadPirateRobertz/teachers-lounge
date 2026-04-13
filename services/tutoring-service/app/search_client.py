@@ -5,6 +5,7 @@ grounding chunks for the agentic RAG pipeline. All network errors are caught
 and logged — callers receive an empty list, triggering graceful fallback to
 non-grounded mode.
 """
+
 import logging
 from uuid import UUID
 

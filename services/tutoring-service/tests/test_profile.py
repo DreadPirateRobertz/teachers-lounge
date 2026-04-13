@@ -9,6 +9,7 @@ Covers:
 
 All tests use FastAPI dependency overrides for auth + DB — no real Postgres needed.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -31,6 +32,7 @@ NOW = datetime(2026, 4, 5, 12, 0, 0, tzinfo=timezone.utc)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _fake_claims(user_id: UUID = STUDENT_ID) -> JWTClaims:
     """Return minimal JWTClaims for tests."""
@@ -90,6 +92,7 @@ def _override_auth(user_id: UUID = STUDENT_ID):
 def _override_db(mock_session):
     async def _db_override():
         yield mock_session
+
     app.dependency_overrides[get_db] = _db_override
     return mock_session
 
@@ -100,6 +103,7 @@ def _clear_overrides():
 
 
 # ── GET /v1/students/me/learning-profile ─────────────────────────────────────
+
 
 class TestGetLearningProfile:
     """Tests for GET /v1/students/me/learning-profile."""
@@ -177,6 +181,7 @@ class TestGetLearningProfile:
 
 
 # ── PATCH /v1/students/me/learning-profile ───────────────────────────────────
+
 
 class TestPatchLearningProfile:
     """Tests for PATCH /v1/students/me/learning-profile."""
@@ -266,6 +271,7 @@ class TestPatchLearningProfile:
 
 # ── GET /v1/students/me/misconceptions ───────────────────────────────────────
 
+
 class TestGetMisconceptions:
     """Tests for GET /v1/students/me/misconceptions."""
 
@@ -322,6 +328,7 @@ class TestGetMisconceptions:
 
 
 # ── POST /v1/students/me/misconceptions/{concept_id} ─────────────────────────
+
 
 class TestLogMisconception:
     """Tests for POST /v1/students/me/misconceptions/{concept_id}."""
@@ -413,6 +420,7 @@ class TestLogMisconception:
 
 # ── PATCH /v1/students/me/misconceptions/{misconception_id}/resolve ───────────
 
+
 class TestResolveMisconception:
     """Tests for PATCH /v1/students/me/misconceptions/{misconception_id}/resolve."""
 
@@ -437,9 +445,7 @@ class TestResolveMisconception:
         _override_db(db)
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.patch(
-                f"/v1/students/me/misconceptions/{misc_id}/resolve"
-            )
+            resp = await client.patch(f"/v1/students/me/misconceptions/{misc_id}/resolve")
 
         assert resp.status_code == 200
         db.commit.assert_awaited_once()
@@ -454,9 +460,7 @@ class TestResolveMisconception:
         _override_db(db)
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.patch(
-                f"/v1/students/me/misconceptions/{uuid4()}/resolve"
-            )
+            resp = await client.patch(f"/v1/students/me/misconceptions/{uuid4()}/resolve")
 
         assert resp.status_code == 404
 
@@ -466,8 +470,6 @@ class TestResolveMisconception:
         _clear_overrides()
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
-            resp = await client.patch(
-                f"/v1/students/me/misconceptions/{uuid4()}/resolve"
-            )
+            resp = await client.patch(f"/v1/students/me/misconceptions/{uuid4()}/resolve")
 
         assert resp.status_code in (401, 403)

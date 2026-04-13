@@ -25,6 +25,7 @@ Exit criteria (tl-dkm):
   Step 6: after concept detection, the student's SKM is updated (last_reviewed_at)
   so the concept is marked as recently engaged even before quiz confirmation.
 """
+
 import logging
 from uuid import UUID
 
@@ -56,6 +57,7 @@ def _log_safe(val: object) -> str:
         String with newline characters escaped.
     """
     return str(val).replace("\n", "\\n").replace("\r", "\\r")
+
 
 PROFESSOR_NOVA_SYSTEM_PROMPT = """\
 You are Professor Nova, the AI tutor for TeachersLounge — a gamified learning \
@@ -123,7 +125,9 @@ async def build_rag_context(
                     if gaps:
                         logger.info(
                             "prereq_gaps student_id=%s target_concept=%s gaps=%d",
-                            _log_safe(student_id), _log_safe(target.name), len(gaps),
+                            _log_safe(student_id),
+                            _log_safe(target.name),
+                            len(gaps),
                         )
         except Exception:
             # Non-fatal: concept graph is best-effort; skip rather than break chat.
@@ -264,8 +268,7 @@ Student context: {experience_note}"""
         return base
 
     gap_lines = "\n".join(
-        f"  - {g['concept_name']} (mastery: {g['mastery_score']:.0%})"
-        for g in gaps
+        f"  - {g['concept_name']} (mastery: {g['mastery_score']:.0%})" for g in gaps
     )
     gap_block = f"""
 

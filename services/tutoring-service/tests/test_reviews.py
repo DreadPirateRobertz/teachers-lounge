@@ -14,6 +14,7 @@ returns a fixed JWTClaims for user STUDENT_ID.
 DB is mocked via app.dependency_overrides[get_db] → an async generator
 yielding an AsyncMock session configured per test.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -37,6 +38,7 @@ NOW = datetime.now(timezone.utc)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _fake_claims(user_id: UUID = STUDENT_ID) -> JWTClaims:
     """Return a minimal JWTClaims for the given user."""
@@ -89,8 +91,10 @@ def _override_auth(user_id: UUID = STUDENT_ID):
 
 def _override_db(mock_session):
     """Install DB override and return the session mock."""
+
     async def _fake_db():
         yield mock_session
+
     app.dependency_overrides[get_db] = _fake_db
     return mock_session
 
@@ -102,6 +106,7 @@ def _clear_overrides():
 
 
 # ── GET /v1/reviews/queue ─────────────────────────────────────────────────────
+
 
 class TestReviewQueue:
     """Tests for GET /v1/reviews/queue."""
@@ -271,6 +276,7 @@ class TestReviewQueue:
 
 # ── POST /v1/reviews/{concept_id}/answer ──────────────────────────────────────
 
+
 class TestRecordAnswer:
     """Tests for POST /v1/reviews/{concept_id}/answer."""
 
@@ -341,6 +347,7 @@ class TestRecordAnswer:
         db.add.assert_called_once()
         added = db.add.call_args[0][0]
         from app.orm import ReviewRecord
+
         assert isinstance(added, ReviewRecord)
         db.commit.assert_awaited_once()
 
@@ -465,6 +472,7 @@ class TestRecordAnswer:
 
 # ── GET /v1/reviews/stats ─────────────────────────────────────────────────────
 
+
 class TestReviewStats:
     """Tests for GET /v1/reviews/stats."""
 
@@ -491,8 +499,12 @@ class TestReviewStats:
         avg_mastery = sum(r.mastery_score for r in rows) / total if rows else 0.0
         avg_ef = sum(r.ease_factor for r in rows) / total if rows else 2.5
         due_now = sum(1 for r in rows if r.next_review_at is None or r.next_review_at <= now)
-        due_today = sum(1 for r in rows if r.next_review_at is not None and r.next_review_at <= today_end)
-        due_week = sum(1 for r in rows if r.next_review_at is not None and r.next_review_at <= week_end)
+        due_today = sum(
+            1 for r in rows if r.next_review_at is not None and r.next_review_at <= today_end
+        )
+        due_week = sum(
+            1 for r in rows if r.next_review_at is not None and r.next_review_at <= week_end
+        )
 
         # First execute → aggregate row (mimics the SQL aggregate query)
         agg_row = MagicMock()
@@ -551,9 +563,13 @@ class TestReviewStats:
     async def test_stats_counts_due_now(self):
         """due_now counts concepts with next_review_at <= now or null."""
         rows = [
-            _make_mastery_row(concept_id=uuid4(), next_review_at=None),                             # due (null)
-            _make_mastery_row(concept_id=uuid4(), next_review_at=NOW - timedelta(hours=1)),         # due (past)
-            _make_mastery_row(concept_id=uuid4(), next_review_at=NOW + timedelta(days=3)),          # not due
+            _make_mastery_row(concept_id=uuid4(), next_review_at=None),  # due (null)
+            _make_mastery_row(
+                concept_id=uuid4(), next_review_at=NOW - timedelta(hours=1)
+            ),  # due (past)
+            _make_mastery_row(
+                concept_id=uuid4(), next_review_at=NOW + timedelta(days=3)
+            ),  # not due
         ]
         db = self._build_stats_db(mastery_rows=rows)
         _override_db(db)

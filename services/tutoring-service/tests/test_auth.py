@@ -8,6 +8,7 @@ The User Service signs tokens with custom claims:
   acct       — account type ("standard" | "minor")
   sub_status — subscription status (optional)
 """
+
 import time
 import uuid
 
@@ -49,8 +50,10 @@ def _make_token(
 
 def _make_credentials(token: str):
     """Minimal stand-in for HTTPAuthorizationCredentials."""
+
     class _Creds:
         credentials = token
+
     return _Creds()
 
 
@@ -60,6 +63,7 @@ def _patch_jwt_secret(patch_settings):
 
 
 # ── happy path ────────────────────────────────────────────────────────────────
+
 
 def test_valid_token_returns_claims():
     token = _make_token()
@@ -87,7 +91,7 @@ def test_uid_takes_precedence_over_sub():
     other_id = str(uuid.uuid4())
     token = _make_token(uid=USER_ID, extra={"sub": other_id})
     claims = require_auth(_make_credentials(token))
-    assert str(claims.user_id) == USER_ID   # uid wins
+    assert str(claims.user_id) == USER_ID  # uid wins
 
 
 def test_sub_used_as_fallback_when_uid_missing():
@@ -105,6 +109,7 @@ def test_sub_used_as_fallback_when_uid_missing():
 
 
 # ── error cases ───────────────────────────────────────────────────────────────
+
 
 def test_expired_token_raises_401():
     token = _make_token(exp_offset=-1)

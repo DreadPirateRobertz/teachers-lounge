@@ -1,4 +1,5 @@
 """Spaced repetition review queue API — JWT-protected."""
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -24,6 +25,7 @@ router = APIRouter(prefix="/reviews", tags=["reviews"])
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 async def _get_or_create_mastery(
     db: AsyncSession,
@@ -54,6 +56,7 @@ async def _get_or_create_mastery(
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
+
 
 @router.get("/queue", response_model=ReviewQueueResponse)
 async def get_review_queue(
@@ -105,17 +108,19 @@ async def get_review_queue(
 
     items: list[ReviewQueueItem] = []
     for row in due:
-        items.append(ReviewQueueItem(
-            concept_id=row.concept_id,
-            concept_name=row.concept.name if row.concept else str(row.concept_id),
-            mastery_score=row.mastery_score,
-            ease_factor=row.ease_factor,
-            interval_days=row.interval_days,
-            repetitions=row.repetitions,
-            next_review_at=row.next_review_at,
-            last_reviewed_at=row.last_reviewed_at,
-            is_overdue=row.next_review_at is not None and row.next_review_at < now,
-        ))
+        items.append(
+            ReviewQueueItem(
+                concept_id=row.concept_id,
+                concept_name=row.concept.name if row.concept else str(row.concept_id),
+                mastery_score=row.mastery_score,
+                ease_factor=row.ease_factor,
+                interval_days=row.interval_days,
+                repetitions=row.repetitions,
+                next_review_at=row.next_review_at,
+                last_reviewed_at=row.last_reviewed_at,
+                is_overdue=row.next_review_at is not None and row.next_review_at < now,
+            )
+        )
 
     return ReviewQueueResponse(
         items=items,
@@ -202,20 +207,25 @@ async def get_review_stats(
             func.count().label("total"),
             func.avg(StudentConceptMastery.mastery_score).label("avg_mastery"),
             func.avg(StudentConceptMastery.ease_factor).label("avg_ef"),
-            func.count().filter(
+            func.count()
+            .filter(
                 (StudentConceptMastery.next_review_at == None)  # noqa: E711
                 | (StudentConceptMastery.next_review_at <= now)
-            ).label("due_now"),
-            func.count().filter(
+            )
+            .label("due_now"),
+            func.count()
+            .filter(
                 StudentConceptMastery.next_review_at != None,  # noqa: E711
                 StudentConceptMastery.next_review_at <= today_end,
-            ).label("due_today"),
-            func.count().filter(
+            )
+            .label("due_today"),
+            func.count()
+            .filter(
                 StudentConceptMastery.next_review_at != None,  # noqa: E711
                 StudentConceptMastery.next_review_at <= week_end,
-            ).label("due_week"),
-        )
-        .where(StudentConceptMastery.user_id == user.user_id)
+            )
+            .label("due_week"),
+        ).where(StudentConceptMastery.user_id == user.user_id)
     )
     row = stats_result.one()
 

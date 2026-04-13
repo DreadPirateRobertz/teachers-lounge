@@ -13,6 +13,7 @@ Cross-student insights:
 All cache operations are best-effort: errors are silently swallowed so a Redis
 outage never breaks the tutoring flow.
 """
+
 from __future__ import annotations
 
 import json
@@ -93,6 +94,7 @@ async def close_cache() -> None:
 
 
 # ── Session history cache ─────────────────────────────────────────────────────
+
 
 def _history_key(session_id: UUID) -> str:
     """Return the Redis key for a session's message history.

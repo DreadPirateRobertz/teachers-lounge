@@ -20,8 +20,8 @@ from typing import NamedTuple
 
 # ── constants ────────────────────────────────────────────────────────────────
 
-ALPHA: float = 0.15          # EMA smoothing factor — higher = faster adaptation
-THRESHOLD: float = 0.2       # |dial| must exceed this to emit style guidance
+ALPHA: float = 0.15  # EMA smoothing factor — higher = faster adaptation
+THRESHOLD: float = 0.2  # |dial| must exceed this to emit style guidance
 
 DIMENSIONS = ("active_reflective", "sensing_intuitive", "visual_verbal", "sequential_global")
 
@@ -29,6 +29,7 @@ DEFAULT_DIALS: dict[str, float] = {d: 0.0 for d in DIMENSIONS}
 
 
 # ── signal ───────────────────────────────────────────────────────────────────
+
 
 class StyleSignal(NamedTuple):
     """A single detected style cue extracted from a student message.
@@ -51,34 +52,77 @@ class StyleSignal(NamedTuple):
 
 _PATTERNS: list[tuple[re.Pattern, str, float]] = [
     # active/reflective
-    (re.compile(r"\b(let me try|let('s| us) try|i('ll| will) try|hands[- ]on|practice problem)\b", re.I),
-     "active_reflective", -1.0),
-    (re.compile(r"\bwhy (does|is|do|did|would|should|can|are|was|were)\b", re.I),
-     "active_reflective", +1.0),
-    (re.compile(r"\b(think|reflect|consider|ponder|reason|understand the reasoning)\b", re.I),
-     "active_reflective", +1.0),
-
+    (
+        re.compile(
+            r"\b(let me try|let('s| us) try|i('ll| will) try|hands[- ]on|practice problem)\b", re.I
+        ),
+        "active_reflective",
+        -1.0,
+    ),
+    (
+        re.compile(r"\bwhy (does|is|do|did|would|should|can|are|was|were)\b", re.I),
+        "active_reflective",
+        +1.0,
+    ),
+    (
+        re.compile(r"\b(think|reflect|consider|ponder|reason|understand the reasoning)\b", re.I),
+        "active_reflective",
+        +1.0,
+    ),
     # sensing/intuitive
-    (re.compile(r"\b(for example|for instance|give me an example|real[- ]world|concrete|specific case)\b", re.I),
-     "sensing_intuitive", -1.0),
-    (re.compile(r"\b(in general|theory|theoretical|abstract|concept|principle|underlying|fundamentally)\b", re.I),
-     "sensing_intuitive", +1.0),
-
+    (
+        re.compile(
+            r"\b(for example|for instance|give me an example|real[- ]world|concrete|specific case)\b",
+            re.I,
+        ),
+        "sensing_intuitive",
+        -1.0,
+    ),
+    (
+        re.compile(
+            r"\b(in general|theory|theoretical|abstract|concept|principle|underlying|fundamentally)\b",
+            re.I,
+        ),
+        "sensing_intuitive",
+        +1.0,
+    ),
     # visual/verbal
-    (re.compile(r"\b(diagram|draw|picture|visual|chart|graph|illustrate|show me|sketch|figure)\b", re.I),
-     "visual_verbal", -1.0),
-    (re.compile(r"\b(explain|describe|tell me|walk me through|in words|elaborate|clarify)\b", re.I),
-     "visual_verbal", +1.0),
-
+    (
+        re.compile(
+            r"\b(diagram|draw|picture|visual|chart|graph|illustrate|show me|sketch|figure)\b", re.I
+        ),
+        "visual_verbal",
+        -1.0,
+    ),
+    (
+        re.compile(
+            r"\b(explain|describe|tell me|walk me through|in words|elaborate|clarify)\b", re.I
+        ),
+        "visual_verbal",
+        +1.0,
+    ),
     # sequential/global
-    (re.compile(r"\b(step[- ]by[- ]step|first .{0,20} then|in order|one by one|each step|next step)\b", re.I),
-     "sequential_global", -1.0),
-    (re.compile(r"\b(big picture|overview|in general|overall|broadly|at a high level|summary|how does .{0,30} fit)\b", re.I),
-     "sequential_global", +1.0),
+    (
+        re.compile(
+            r"\b(step[- ]by[- ]step|first .{0,20} then|in order|one by one|each step|next step)\b",
+            re.I,
+        ),
+        "sequential_global",
+        -1.0,
+    ),
+    (
+        re.compile(
+            r"\b(big picture|overview|in general|overall|broadly|at a high level|summary|how does .{0,30} fit)\b",
+            re.I,
+        ),
+        "sequential_global",
+        +1.0,
+    ),
 ]
 
 
 # ── public API ────────────────────────────────────────────────────────────────
+
 
 def detect_signals(message: str) -> list[StyleSignal]:
     """Scan a student message and return every Felder-Silverman style signal found.
@@ -157,27 +201,43 @@ def build_style_prompt_section(dials: dict[str, float]) -> str:
 
     if abs(ar) > THRESHOLD:
         if ar < 0:
-            lines.append("- ACTIVE learner: include a short practice problem or 'try it' prompt at the end of your response.")
+            lines.append(
+                "- ACTIVE learner: include a short practice problem or 'try it' prompt at the end of your response."
+            )
         else:
-            lines.append("- REFLECTIVE learner: explain the reasoning and 'why' behind concepts before giving solutions.")
+            lines.append(
+                "- REFLECTIVE learner: explain the reasoning and 'why' behind concepts before giving solutions."
+            )
 
     if abs(si) > THRESHOLD:
         if si < 0:
-            lines.append("- SENSING learner: ground every concept in a concrete, real-world example before generalizing.")
+            lines.append(
+                "- SENSING learner: ground every concept in a concrete, real-world example before generalizing."
+            )
         else:
-            lines.append("- INTUITIVE learner: lead with the abstract principle or theory; examples can follow.")
+            lines.append(
+                "- INTUITIVE learner: lead with the abstract principle or theory; examples can follow."
+            )
 
     if abs(vv) > THRESHOLD:
         if vv < 0:
-            lines.append("- VISUAL learner: use ASCII diagrams, structured layouts, or spatial analogies wherever possible.")
+            lines.append(
+                "- VISUAL learner: use ASCII diagrams, structured layouts, or spatial analogies wherever possible."
+            )
         else:
-            lines.append("- VERBAL learner: use precise written explanations; avoid cluttering responses with diagrams.")
+            lines.append(
+                "- VERBAL learner: use precise written explanations; avoid cluttering responses with diagrams."
+            )
 
     if abs(sg) > THRESHOLD:
         if sg < 0:
-            lines.append("- SEQUENTIAL learner: structure your response as an ordered series of numbered steps (1, 2, 3…).")
+            lines.append(
+                "- SEQUENTIAL learner: structure your response as an ordered series of numbered steps (1, 2, 3…)."
+            )
         else:
-            lines.append("- GLOBAL learner: open with the big picture / context before drilling into details.")
+            lines.append(
+                "- GLOBAL learner: open with the big picture / context before drilling into details."
+            )
 
     if not lines:
         return ""

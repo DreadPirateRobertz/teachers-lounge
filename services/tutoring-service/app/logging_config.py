@@ -1,4 +1,5 @@
 """JSON structured logging configuration for tutoring-service — delegates to tl_logging."""
+
 from tl_logging.logging_config import (  # noqa: F401
     _trace_id_ctx,
     configure_logging,

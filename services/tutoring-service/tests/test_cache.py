@@ -2,6 +2,7 @@
 
 Uses fakeredis for in-process Redis emulation — no external service required.
 """
+
 import json
 from uuid import UUID, uuid4
 
@@ -41,6 +42,7 @@ def messages() -> list[dict]:
 
 # ── get / set round-trip ───────────────────���──────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_cache_miss_returns_none(session_id):
     """get_cached_history returns None when nothing is cached."""
@@ -67,6 +69,7 @@ async def test_set_cached_history_sets_ttl(fake_redis, user_id, session_id, mess
 
 # ── invalidation ─────────────────────────��──────────────────────────��────────
 
+
 @pytest.mark.asyncio
 async def test_invalidate_clears_cache(user_id, session_id, messages):
     """invalidate_session_history evicts the cached entry."""
@@ -77,6 +80,7 @@ async def test_invalidate_clears_cache(user_id, session_id, messages):
 
 
 # ── per-user session list ─────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_user_sessions_list_capped(fake_redis, user_id, messages):
@@ -103,6 +107,7 @@ async def test_user_sessions_list_no_duplicates(fake_redis, user_id, session_id,
 
 
 # ── resilience (Redis unavailable) ─────────────────────────────���─────────────
+
 
 @pytest.mark.asyncio
 async def test_get_returns_none_when_redis_unavailable(monkeypatch, session_id):
