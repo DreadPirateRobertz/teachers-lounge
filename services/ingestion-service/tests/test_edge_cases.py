@@ -21,10 +21,11 @@ Qdrant upsert error paths:
 PDF extraction cleanup:
   - doc.close() is called even when get_text() raises an exception
 """
+from unittest.mock import MagicMock, patch
+
 import httpx
 import pytest
 import tiktoken
-from unittest.mock import MagicMock, patch
 
 from app.chunker import chunk_pdf_pages, chunk_text
 from app.tasks.pdf_ingest import (
@@ -33,7 +34,6 @@ from app.tasks.pdf_ingest import (
     _upsert_to_qdrant,
     ingest_pdf,
 )
-
 
 # ---------------------------------------------------------------------------
 # Chunker edge cases
