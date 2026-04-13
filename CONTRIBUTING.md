@@ -14,6 +14,10 @@ without tests.
 ### Minimum per exported function
 - One happy-path test
 - One error or edge-case test
+- Outlier + failure scenarios — **not optional** (empty input, boundary values,
+  auth failure, network error, DB error, graceful degradation)
+
+A test suite covering only the happy path will be **rejected in review**.
 
 ### File placement
 | Language | Test file |
@@ -273,13 +277,37 @@ checklist before requesting review:
 
 ## Review Process
 
-1. Every PR needs **1 review minimum** (PM or another crew member).
-2. Reviewer checks: TDD compliance, docstring coverage, correctness, security.
-3. **Reject immediately** if: no tests, no docstrings, Codecov drops below
-   80% patch coverage.
-4. No force-pushes to `main` — PRs only.
+Every PR requires a **5-agent written code review** posted as a GitHub PR
+comment before merge.  Approve/reject without a written review is insufficient.
+
+### 5-Agent Review (required for every PR)
+
+Post the combined review as a single comment with all five sections labelled:
+
+| Agent | Checks |
+|-------|--------|
+| **code-reviewer** | Logic correctness, bug risk, security vulnerabilities |
+| **silent-failure-hunter** | Error handling, catch blocks, silent failures, fallback |
+| **type-design-analyzer** | Type invariants, encapsulation, usefulness |
+| **comment-analyzer** | Comment accuracy, WHY vs WHAT, technical debt |
+| **pr-test-analyzer** | Coverage completeness, missing edge cases, outlier tests |
+
+PM (Petra) or the Refinery posts the review and is final arbiter on merge.
+
+### Gate conditions — reject immediately if:
+- No tests for new feature code
+- No docstrings on exported symbols
+- Codecov patch coverage < 80%
+- Any CodeQL FAILURE in new code
+- CI not green (all required checks must pass)
+- No 5-agent review comment posted
+
+### Process
+1. Crew opens PR with filled-out body template (What / Why / How to test / Checklist).
+2. PM or Refinery runs 5-agent review, posts comment.
+3. Crew addresses review feedback.
+4. PM merges — no force-pushes to `main`.
 5. Squash merges preferred for clean history.
-6. Crew members **cannot self-merge** — PM or Refinery is final arbiter.
 
 ### Commit style
 ```
