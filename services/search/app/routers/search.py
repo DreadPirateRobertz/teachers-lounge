@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Query
 
 from app.config import settings
+from app.metrics import observe_query
 from app.models import SearchResponse
 from app.services.embedder import embed_query
 from app.services.hybrid import combine_dense_sparse
@@ -49,13 +50,14 @@ async def search(
     """
     fetch_limit = max(limit, settings.sparse_rerank_limit)
 
-    query_vector, dense_results, sparse_results = await _run_search(
-        q, course_id, fetch_limit, chapter, section, content_type
-    )
+    async with observe_query("hybrid"):
+        query_vector, dense_results, sparse_results = await _run_search(
+            q, course_id, fetch_limit, chapter, section, content_type
+        )
 
-    fused = combine_dense_sparse(dense_results, sparse_results)
-    ranked = await rerank(q, fused)
-    final = ranked[:limit]
+        fused = combine_dense_sparse(dense_results, sparse_results)
+        ranked = await rerank(q, fused)
+        final = ranked[:limit]
 
     search_mode = "hybrid" if sparse_results else "dense"
     return SearchResponse(

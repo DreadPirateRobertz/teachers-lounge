@@ -3,13 +3,14 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Response
 from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
 from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
 from opentelemetry.sdk.resources import Resource
 from opentelemetry.sdk.trace import TracerProvider
 from opentelemetry.sdk.trace.export import BatchSpanProcessor
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 
 from app.logging_config import configure_logging
 from app.routers import diagrams, search
@@ -61,3 +62,14 @@ async def healthz() -> dict:
         A dict ``{"status": "ok"}`` when the service is running.
     """
     return {"status": "ok"}
+
+
+@app.get("/metrics")
+async def metrics() -> Response:
+    """Prometheus scrape endpoint — renders the default registry (tl-he3).
+
+    Returns:
+        Plain-text Prometheus exposition including
+        ``search_query_duration_seconds`` plus any other registered metrics.
+    """
+    return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
