@@ -34,17 +34,11 @@ class Settings(BaseSettings):
     # Conversation limits
     # "last 10 exchanges" = 10 student messages + 10 tutor replies = 20 messages
     max_history_messages: int = 20
-    max_message_length: int = 8000  # chars per student message
-
-    # Context window management
-    # Sliding window: keep the last N full turns (student + tutor pairs) in the
-    # active prompt.  Older turns beyond this window are summarised instead.
-    context_window_max_turns: int = 20
-    # How many messages to fetch from DB when checking for summarisable history.
-    # Should be > context_window_max_turns * 2 so the older portion is visible.
-    context_summary_threshold: int = 60
-    # Approximate model context limit in tokens (used for 80% utilisation warnings).
-    model_context_limit_tokens: int = 128_000
+    max_message_length: int = 8000     # chars per student message
+    # Context window management (tl-8co)
+    context_summarise_threshold: int = 40   # total messages above which older context is summarised
+    model_context_limit: int = 131072       # target model context window in tokens (128k)
+    context_token_warn_ratio: float = 0.8   # log WARNING at this fraction of context limit
 
     # User Service — for learning profile reads/writes
     user_service_url: str = "http://user-service.teachers-lounge.svc.cluster.local:8080"

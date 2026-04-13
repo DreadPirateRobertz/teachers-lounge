@@ -26,7 +26,6 @@ sources event is emitted only when the session has a course_id and chunks were
 retrieved. Each source object contains: chunk_id, chapter, section, page,
 content_type, score.
 """
-
 import json
 import logging
 import re
@@ -42,10 +41,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import JWTClaims, require_auth
 from .config import settings
-from .context_manager import estimate_tokens, log_token_usage, prune_to_window, summarise_history
+from .context import build_pruned_history, log_token_usage
 from .database import get_db
 from .gateway import get_gateway_client
-from .history import append_message, get_history, get_session
+from .history import append_message, get_session
 from .knowledge_model import get_dials, get_due_review_prompt, update_learning_profile_dials
 from .models import MessageRequest
 from .rag_agent import PROFESSOR_NOVA_SYSTEM_PROMPT, build_rag_context
@@ -176,12 +175,8 @@ async def _chat_stream_generator(  # noqa: PLR0913
         elapsed_ms = int(time.time() * 1000) - start_ms
 
         await append_message(
-            db,
-            session_id,
-            user_id,
-            role="tutor",
-            content=complete_text,
-            response_time_ms=elapsed_ms,
+            db, session_id, user_id, role="tutor",
+            content=complete_text, response_time_ms=elapsed_ms,
         )
 
         if sources_payload:
@@ -251,11 +246,18 @@ async def send_message(
     if session.user_id != user.user_id:
         raise HTTPException(status_code=403, detail="Forbidden")
 
-    # Fetch enough history to detect whether summarisation is needed.
-    all_history = await get_history(db, session_id, limit=settings.context_summary_threshold)
-
     student_message = body.content
     await append_message(db, session_id, user.user_id, role="student", content=student_message)
+
+    client = get_gateway_client()
+    history, context_summary = await build_pruned_history(
+        db=db,
+        client=client,
+        session_id=session_id,
+        window_size=settings.max_history_messages,
+        summarise_threshold=settings.context_summarise_threshold,
+        fast_model=settings.tutor_fast_model,
+    )
 
     # Step 1: Fetch student's learning-style dials (non-fatal)
     try:
@@ -263,10 +265,8 @@ async def send_message(
     except Exception:  # noqa: BLE001
         logger.warning("Failed to load learning-style dials (user omitted)")
         current_dials = {
-            "active_reflective": 0.0,
-            "sensing_intuitive": 0.0,
-            "visual_verbal": 0.0,
-            "sequential_global": 0.0,
+            "active_reflective": 0.0, "sensing_intuitive": 0.0,
+            "visual_verbal": 0.0, "sequential_global": 0.0,
         }
 
     # Step 2: Build system prompt + retrieve grounding chunks
@@ -274,74 +274,47 @@ async def send_message(
     diagram_results = []
     if session.course_id is not None:
         base_prompt, source_chunks = await build_rag_context(
-            student_id=user.user_id,
-            session_id=session_id,
-            question=body.content,
-            course_id=session.course_id,
-            db=db,
+            student_id=user.user_id, session_id=session_id,
+            question=body.content, course_id=session.course_id, db=db,
         )
         if _VISUAL_QUERY_PATTERNS.search(body.content):
             diagram_results = await fetch_diagram_chunks(
-                query=body.content,
-                course_id=session.course_id,
+                query=body.content, course_id=session.course_id,
                 limit=settings.diagram_limit,
             )
     else:
         base_prompt = PROFESSOR_NOVA_SYSTEM_PROMPT
 
-    # Step 3: Apply sliding-window pruning and optional summarisation.
-    client = get_gateway_client()
-    active_history, older_history = prune_to_window(
-        all_history, max_turns=settings.context_window_max_turns
-    )
-    summary_text = ""
-    if older_history:
-        try:
-            summary_text = await summarise_history(
-                client, _history_to_messages(older_history), settings.tutor_fast_model
-            )
-        except Exception:  # noqa: BLE001
-            logger.warning("History summarisation failed — proceeding without summary")
-
     system_prompt = base_prompt + build_style_prompt_section(current_dials)
-    if summary_text:
-        system_prompt += f"\n\n[Earlier conversation summary: {summary_text}]"
-
+    if context_summary:
+        system_prompt += f"\n\n[Earlier conversation summary: {context_summary}]"
     messages = [
         {"role": "system", "content": system_prompt},
-        *_history_to_messages(active_history),
+        *_history_to_messages(history),
         {"role": "user", "content": body.content},
     ]
-
-    # Step 4: Token tracking — log when approaching the model context limit.
-    token_count = estimate_tokens(messages)
-    log_token_usage(str(session_id), token_count, settings.model_context_limit_tokens)
+    log_token_usage(
+        messages,
+        model_context_limit=settings.model_context_limit,
+        warn_ratio=settings.context_token_warn_ratio,
+        session_id=session_id,
+    )
 
     tutor_msg_id = str(uuid.uuid4())
     sources_payload = [
         {
-            "chunk_id": c.chunk_id,
-            "chapter": c.chapter,
-            "section": c.section,
-            "page": c.page,
-            "content_type": c.content_type,
-            "score": round(c.score, 4),
+            "chunk_id": c.chunk_id, "chapter": c.chapter, "section": c.section,
+            "page": c.page, "content_type": c.content_type, "score": round(c.score, 4),
         }
         for c in source_chunks
     ]
 
     return StreamingResponse(
         _chat_stream_generator(
-            db=db,
-            session_id=session_id,
-            user_id=user.user_id,
-            has_rag=session.course_id is not None,
-            messages=messages,
-            client=client,
-            tutor_msg_id=tutor_msg_id,
-            sources_payload=sources_payload,
-            diagram_results=diagram_results,
-            current_dials=current_dials,
+            db=db, session_id=session_id, user_id=user.user_id,
+            has_rag=session.course_id is not None, messages=messages,
+            client=client, tutor_msg_id=tutor_msg_id, sources_payload=sources_payload,
+            diagram_results=diagram_results, current_dials=current_dials,
             student_message=student_message,
         ),
         media_type="text/event-stream",
