@@ -7,10 +7,7 @@ import { NextRequest } from 'next/server'
 
 const MOCK_TOKEN = 'profile-test-token'
 
-function makeRequest(opts: {
-  token?: string | null
-  authHeader?: string
-}): NextRequest {
+function makeRequest(opts: { token?: string | null; authHeader?: string }): NextRequest {
   const headers: Record<string, string> = {}
   if (opts.token !== null) {
     headers['Cookie'] = `tl_token=${opts.token ?? MOCK_TOKEN}`

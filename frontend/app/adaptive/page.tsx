@@ -181,10 +181,25 @@ const MASTERY_CONFIG: Record<
   ConceptMastery['mastery_level'],
   { label: string; bg: string; text: string; border: string }
 > = {
-  weak:       { label: 'Weak',       bg: 'bg-red-500/20',     text: 'text-red-400',    border: 'border-red-500/30' },
-  developing: { label: 'Developing', bg: 'bg-yellow-500/15',  text: 'text-yellow-400', border: 'border-yellow-500/30' },
-  strong:     { label: 'Strong',     bg: 'bg-neon-blue/15',   text: 'text-neon-blue',  border: 'border-neon-blue/30' },
-  mastered:   { label: 'Mastered',   bg: 'bg-neon-green/15',  text: 'text-neon-green', border: 'border-neon-green/30' },
+  weak: { label: 'Weak', bg: 'bg-red-500/20', text: 'text-red-400', border: 'border-red-500/30' },
+  developing: {
+    label: 'Developing',
+    bg: 'bg-yellow-500/15',
+    text: 'text-yellow-400',
+    border: 'border-yellow-500/30',
+  },
+  strong: {
+    label: 'Strong',
+    bg: 'bg-neon-blue/15',
+    text: 'text-neon-blue',
+    border: 'border-neon-blue/30',
+  },
+  mastered: {
+    label: 'Mastered',
+    bg: 'bg-neon-green/15',
+    text: 'text-neon-green',
+    border: 'border-neon-green/30',
+  },
 }
 
 // ── MasteryHeatmap ────────────────────────────────────────────────────────────
@@ -225,9 +240,7 @@ function MasteryHeatmap({ concepts }: MasteryHeatmapProps) {
                 title={`${c.correct}/${c.total} correct`}
               >
                 <div className="text-[10px] text-text-dim truncate">{c.concept}</div>
-                <div className={`text-xs font-bold font-mono ${cfg.text}`}>
-                  {c.accuracy_pct}%
-                </div>
+                <div className={`text-xs font-bold font-mono ${cfg.text}`}>{c.accuracy_pct}%</div>
               </div>
             )
           })}
@@ -237,14 +250,17 @@ function MasteryHeatmap({ concepts }: MasteryHeatmapProps) {
       {/* Legend */}
       {concepts.length > 0 && (
         <div className="mt-3 flex flex-wrap gap-2">
-          {(Object.entries(MASTERY_CONFIG) as [ConceptMastery['mastery_level'], typeof MASTERY_CONFIG['weak']][]).map(
-            ([level, cfg]) => (
-              <div key={level} className="flex items-center gap-1">
-                <div className={`w-2 h-2 rounded-full ${cfg.bg} border ${cfg.border}`} />
-                <span className="text-[10px] text-text-dim">{cfg.label}</span>
-              </div>
-            ),
-          )}
+          {(
+            Object.entries(MASTERY_CONFIG) as [
+              ConceptMastery['mastery_level'],
+              (typeof MASTERY_CONFIG)['weak'],
+            ][]
+          ).map(([level, cfg]) => (
+            <div key={level} className="flex items-center gap-1">
+              <div className={`w-2 h-2 rounded-full ${cfg.bg} border ${cfg.border}`} />
+              <span className="text-[10px] text-text-dim">{cfg.label}</span>
+            </div>
+          ))}
         </div>
       )}
     </section>
@@ -260,8 +276,8 @@ interface UpcomingReviewsProps {
 
 /** Badge colour per review priority. */
 const PRIORITY_STYLE: Record<ReviewItem['priority'], string> = {
-  urgent:   'bg-red-500/20 text-red-400 border-red-500/30',
-  soon:     'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
+  urgent: 'bg-red-500/20 text-red-400 border-red-500/30',
+  soon: 'bg-yellow-500/15 text-yellow-400 border-yellow-500/30',
   upcoming: 'bg-neon-blue/10 text-neon-blue border-neon-blue/20',
 }
 
@@ -375,13 +391,23 @@ const DIMENSION_META: Record<
   string,
   { label: string; left: string; right: string; color: string }
 > = {
-  active_reflective: { label: 'Processing',    left: 'Active',     right: 'Reflective', color: '#00aaff' },
-  sensing_intuitive: { label: 'Perception',    left: 'Sensing',    right: 'Intuitive',  color: '#00ff88' },
-  visual_verbal:     { label: 'Input',         left: 'Visual',     right: 'Verbal',     color: '#ff00aa' },
-  sequential_global: { label: 'Understanding', left: 'Sequential', right: 'Global',     color: '#ffdc00' },
+  active_reflective: { label: 'Processing', left: 'Active', right: 'Reflective', color: '#00aaff' },
+  sensing_intuitive: { label: 'Perception', left: 'Sensing', right: 'Intuitive', color: '#00ff88' },
+  visual_verbal: { label: 'Input', left: 'Visual', right: 'Verbal', color: '#ff00aa' },
+  sequential_global: {
+    label: 'Understanding',
+    left: 'Sequential',
+    right: 'Global',
+    color: '#ffdc00',
+  },
 }
 
-const DIMENSION_ORDER = ['active_reflective', 'sensing_intuitive', 'visual_verbal', 'sequential_global']
+const DIMENSION_ORDER = [
+  'active_reflective',
+  'sensing_intuitive',
+  'visual_verbal',
+  'sequential_global',
+]
 
 /**
  * Felder-Silverman learning style profile visualisation.
@@ -405,8 +431,8 @@ function LearningStyleIndicator({ profile }: LearningStyleIndicatorProps) {
       {!hasData ? (
         <div className="text-center py-4">
           <p className="text-xs text-text-dim mb-3">
-            You haven&apos;t completed the learning style assessment yet. It takes ~3 minutes
-            and helps Professor Nova adapt explanations to how you learn best.
+            You haven&apos;t completed the learning style assessment yet. It takes ~3 minutes and
+            helps Professor Nova adapt explanations to how you learn best.
           </p>
           <Link
             href="/assessment"
@@ -421,22 +447,26 @@ function LearningStyleIndicator({ profile }: LearningStyleIndicatorProps) {
             const meta = DIMENSION_META[dim]
             if (!meta) return null
             const value = dials[dim] ?? 0
-            const leftPct  = Math.round(Math.max(0, -value * 50))
+            const leftPct = Math.round(Math.max(0, -value * 50))
             const rightPct = Math.round(Math.max(0, value * 50))
-            const isLeft    = value < -0.1
-            const isRight   = value > 0.1
+            const isLeft = value < -0.1
+            const isRight = value > 0.1
             const isNeutral = !isLeft && !isRight
 
             return (
               <div key={dim}>
                 <div className="flex justify-between items-center mb-1">
-                  <span className={`text-[11px] font-medium ${isLeft ? 'text-text-bright' : 'text-text-dim'}`}>
+                  <span
+                    className={`text-[11px] font-medium ${isLeft ? 'text-text-bright' : 'text-text-dim'}`}
+                  >
                     {meta.left}
                   </span>
                   <span className="text-[10px] text-text-dim uppercase tracking-wider font-mono">
                     {meta.label}
                   </span>
-                  <span className={`text-[11px] font-medium ${isRight ? 'text-text-bright' : 'text-text-dim'}`}>
+                  <span
+                    className={`text-[11px] font-medium ${isRight ? 'text-text-bright' : 'text-text-dim'}`}
+                  >
                     {meta.right}
                   </span>
                 </div>
@@ -446,10 +476,10 @@ function LearningStyleIndicator({ profile }: LearningStyleIndicatorProps) {
                   <div
                     className="absolute inset-0 rounded-full transition-all duration-700"
                     style={{
-                      left:       isLeft  ? `${50 - leftPct}%`  : '50%',
-                      right:      isRight ? `${50 - rightPct}%` : '50%',
+                      left: isLeft ? `${50 - leftPct}%` : '50%',
+                      right: isRight ? `${50 - rightPct}%` : '50%',
                       background: meta.color,
-                      boxShadow:  `0 0 6px ${meta.color}88`,
+                      boxShadow: `0 0 6px ${meta.color}88`,
                     }}
                   />
                   <div className="absolute left-1/2 top-0 bottom-0 w-px bg-border-mid" />
@@ -459,9 +489,7 @@ function LearningStyleIndicator({ profile }: LearningStyleIndicatorProps) {
                   <span className="text-[10px] text-text-dim font-mono">
                     {isLeft ? `${leftPct}%` : ''}
                   </span>
-                  <span className="text-[10px] text-text-dim">
-                    {isNeutral ? 'Balanced' : ''}
-                  </span>
+                  <span className="text-[10px] text-text-dim">{isNeutral ? 'Balanced' : ''}</span>
                   <span className="text-[10px] text-text-dim font-mono">
                     {isRight ? `${rightPct}%` : ''}
                   </span>
@@ -471,10 +499,7 @@ function LearningStyleIndicator({ profile }: LearningStyleIndicatorProps) {
           })}
 
           <div className="pt-1 border-t border-border-dim">
-            <Link
-              href="/assessment"
-              className="text-[11px] text-neon-blue hover:underline"
-            >
+            <Link href="/assessment" className="text-[11px] text-neon-blue hover:underline">
               Retake assessment →
             </Link>
           </div>

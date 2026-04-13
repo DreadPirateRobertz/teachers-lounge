@@ -258,7 +258,9 @@ describe('ChatPanel', () => {
 
     await waitFor(() => {
       const messages = screen.getAllByTestId('chat-message')
-      const errorMsg = messages.find((el) => el.textContent?.includes('Sorry, something went wrong'))
+      const errorMsg = messages.find((el) =>
+        el.textContent?.includes('Sorry, something went wrong'),
+      )
       expect(errorMsg).toBeTruthy()
     })
   })
@@ -321,7 +323,9 @@ describe('ChatPanel', () => {
 
     // The molecule builder is shown only when isKinesthetic(dials) is true.
     // Since dials=null, it won't show. Verify normal flow completes.
-    fireEvent.change(screen.getByTestId('chat-input'), { target: { value: 'draw benzene structure' } })
+    fireEvent.change(screen.getByTestId('chat-input'), {
+      target: { value: 'draw benzene structure' },
+    })
 
     await act(async () => {
       fireEvent.click(screen.getByTestId('send-btn'))

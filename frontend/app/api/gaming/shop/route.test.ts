@@ -121,9 +121,7 @@ describe('GET /api/gaming/shop — gaming-service proxy', () => {
   })
 
   it('returns upstream error status when GET fails', async () => {
-    global.fetch = jest.fn().mockResolvedValue(
-      new Response('upstream error', { status: 502 }),
-    )
+    global.fetch = jest.fn().mockResolvedValue(new Response('upstream error', { status: 502 }))
 
     const { GET: getProxy } = await import('./route')
     const req = new NextRequest('http://localhost/api/gaming/shop')
@@ -138,9 +136,7 @@ describe('GET /api/gaming/shop — gaming-service proxy', () => {
     let capturedHeaders: Record<string, string> = {}
     global.fetch = jest.fn().mockImplementation((_url: string, opts: RequestInit) => {
       capturedHeaders = opts.headers as Record<string, string>
-      return Promise.resolve(
-        new Response(JSON.stringify({ items: [] }), { status: 200 }),
-      )
+      return Promise.resolve(new Response(JSON.stringify({ items: [] }), { status: 200 }))
     })
 
     const { GET: getProxy } = await import('./route')
@@ -188,9 +184,7 @@ describe('POST /api/gaming/shop — gaming-service proxy', () => {
   })
 
   it('returns upstream error status with text body when POST fails', async () => {
-    global.fetch = jest.fn().mockResolvedValue(
-      new Response('insufficient gems', { status: 402 }),
-    )
+    global.fetch = jest.fn().mockResolvedValue(new Response('insufficient gems', { status: 402 }))
 
     const { POST: postProxy } = await import('./route')
     const req = new NextRequest('http://localhost/api/gaming/shop', {
