@@ -3,19 +3,32 @@
 /**
  * BossBattleClient.tsx
  *
- * Client-side state machine for a boss battle. Connects to the gaming-service
- * battle API (start, attack, powerup, forfeit) and drives the Three.js
- * BossScene animation state and BossHUD display.
+ * Client-side state machine for a boss battle.
  *
- * The page server component fetches the boss definition and passes it down.
- * This component owns all interactive state.
+ * Phase flow:
+ *   intro → question → attack → resolve → question (loop)
+ *                                       → victory | defeat
+ *
+ * - intro:   Boss introduction screen; player clicks "Begin Battle".
+ * - question: A multiple-choice question from the quiz API is shown alongside
+ *             the BossScene and health-bar HUD. Power-ups can be activated here.
+ * - attack:  The player's chosen answer triggers attack animations on BossScene
+ *            (1 s). Both the quiz-answer and battle-attack APIs are called.
+ * - resolve: Damage numbers and answer explanation are shown briefly (~2.5 s),
+ *            then the machine advances to the next question or ends the battle.
+ * - victory / defeat: End-screen sub-components.
+ *
+ * This component owns all interactive state. The page server component fetches
+ * the boss definition and passes it down.
  */
 
 import dynamic from 'next/dynamic'
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { type AnimationState, type BossVisualDef, getRandomTaunt } from './BossCharacterLibrary'
 import BossHUD, { type PowerUp } from './BossHUD'
+import BattleResolve from './BattleResolve'
+import QuestionCard, { type BattleQuestion } from './QuestionCard'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import useSwipeGesture, { SwipeDirection } from '@/hooks/useSwipeGesture'
 
@@ -39,6 +52,8 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+// ─── API response types ───────────────────────────────────────────────────────
+
 interface StartBattleResponse {
   session: {
     session_id: string
@@ -47,6 +62,18 @@ interface StartBattleResponse {
     player_hp: number
     player_max_hp: number
   }
+}
+
+interface StartQuizResponse {
+  session: { id: string }
+  question: BattleQuestion | null
+}
+
+interface SubmitAnswerResponse {
+  correct: boolean
+  correct_key: string
+  explanation: string
+  next_question: BattleQuestion | null
 }
 
 interface AttackResponse {
@@ -58,7 +85,20 @@ interface AttackResponse {
   turn: number
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
+// ─── State types ──────────────────────────────────────────────────────────────
+
+/** The five phases of a boss battle. */
+type BattlePhase = 'intro' | 'question' | 'attack' | 'resolve' | 'victory' | 'defeat'
+
+/** Data shown on the resolve screen after each round. */
+interface ResolveData {
+  playerDamage: number
+  bossDamage: number
+  correct: boolean
+  explanation: string
+}
+
+// ─── Component props ──────────────────────────────────────────────────────────
 
 /** Props passed from the server-side page. */
 interface BossBattleClientProps {
@@ -70,14 +110,16 @@ interface BossBattleClientProps {
   initialGems: number
 }
 
-type BattlePhase = 'start' | 'active' | 'victory' | 'defeat'
+// ─── Component ────────────────────────────────────────────────────────────────
 
 /**
- * BossBattleClient manages the full interactive boss battle experience.
- * It owns the battle session, drives animations, and wires player inputs.
+ * BossBattleClient manages the full interactive boss battle experience,
+ * driving the phase state machine, quiz questions, animations, and all
+ * player interactions.
  */
 export default function BossBattleClient({ boss, userId, initialGems }: BossBattleClientProps) {
-  const [phase, setPhase] = useState<BattlePhase>('start')
+  // ── Battle session ─────────────────────────────────────────────────────────
+  const [phase, setPhase] = useState<BattlePhase>('intro')
   const [sessionId, setSessionId] = useState<string | null>(null)
   const [bossHP, setBossHP] = useState(0)
   const [bossMaxHP, setBossMaxHP] = useState(0)
@@ -86,85 +128,178 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
   const [turn, setTurn] = useState(0)
   const [gems, setGems] = useState(initialGems)
   const [taunt, setTaunt] = useState<string | null>(null)
+
+  // ── Quiz session ───────────────────────────────────────────────────────────
+  const [quizSessionId, setQuizSessionId] = useState<string | null>(null)
+  const [currentQuestion, setCurrentQuestion] = useState<BattleQuestion | null>(null)
+  const [chosenKey, setChosenKey] = useState<string | null>(null)
+  const [correctKey, setCorrectKey] = useState<string | null>(null)
+
+  // ── Visual state ───────────────────────────────────────────────────────────
   const [animState, setAnimState] = useState<AnimationState>('idle')
+  const [resolveData, setResolveData] = useState<ResolveData | null>(null)
+
+  // ── Shared ─────────────────────────────────────────────────────────────────
   const [error, setError] = useState<string | null>(null)
   const [actionPending, setActionPending] = useState(false)
 
-  // ── Start the battle ──────────────────────────────────────────────────────
+  // Prevent double-firing resolve → question transition.
+  const resolveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // ── Start battle + quiz ────────────────────────────────────────────────────
 
   const startBattle = useCallback(async () => {
     setError(null)
     setActionPending(true)
     try {
-      const resp = await apiFetch<StartBattleResponse>('/gaming/boss/start', {
-        method: 'POST',
-        body: JSON.stringify({ user_id: userId, boss_id: boss.id }),
-      })
-      setSessionId(resp.session.session_id)
-      setBossHP(resp.session.boss_hp)
-      setBossMaxHP(resp.session.boss_max_hp)
-      setPlayerHP(resp.session.player_hp)
-      setPlayerMaxHP(resp.session.player_max_hp)
-      setPhase('active')
+      // Kick off both sessions in parallel.
+      const [battleResp, quizResp] = await Promise.all([
+        apiFetch<StartBattleResponse>('/gaming/boss/start', {
+          method: 'POST',
+          body: JSON.stringify({ user_id: userId, boss_id: boss.id }),
+        }),
+        apiFetch<StartQuizResponse>('/gaming/quiz/start', {
+          method: 'POST',
+          body: JSON.stringify({ user_id: userId, topic: boss.topic, question_count: 20 }),
+        }),
+      ])
+
+      setSessionId(battleResp.session.session_id)
+      setBossHP(battleResp.session.boss_hp)
+      setBossMaxHP(battleResp.session.boss_max_hp)
+      setPlayerHP(battleResp.session.player_hp)
+      setPlayerMaxHP(battleResp.session.player_max_hp)
       setTurn(1)
+
+      setQuizSessionId(quizResp.session.id)
+      setCurrentQuestion(quizResp.question)
+
+      setChosenKey(null)
+      setCorrectKey(null)
+      setPhase('question')
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to start battle')
     } finally {
       setActionPending(false)
     }
-  }, [userId, boss.id])
+  }, [userId, boss.id, boss.topic])
 
-  // ── Submit an answer (correct or wrong) ───────────────────────────────────
+  // ── Player selects an answer ───────────────────────────────────────────────
 
   const submitAnswer = useCallback(
-    async (correct: boolean) => {
-      if (!sessionId || phase !== 'active') return
+    async (key: string) => {
+      if (!sessionId || !quizSessionId || !currentQuestion) return
+      if (phase !== 'question' || chosenKey !== null || actionPending) return
+
+      setChosenKey(key)
+      setPhase('attack')
       setActionPending(true)
+
+      // Trigger boss attack animation for wrong answers, damage flash for correct.
+      setAnimState(key === 'pending_check' ? 'idle' : 'attack')
+
       try {
-        // Trigger boss attack animation if wrong answer
-        if (!correct) {
+        const difficulty = currentQuestion.difficulty ?? 1
+        const baseDamage = difficulty * 10
+
+        // Step 1: Submit quiz answer to find out if it was correct.
+        // The battle attack must be sequential (it needs the correct flag).
+        const quizResp = await apiFetch<SubmitAnswerResponse>(
+          `/gaming/quiz/sessions/${quizSessionId}/answer`,
+          {
+            method: 'POST',
+            body: JSON.stringify({
+              user_id: userId,
+              question_id: currentQuestion.id,
+              chosen_key: key,
+            }),
+          },
+        )
+
+        const correct = quizResp.correct
+        setCorrectKey(quizResp.correct_key)
+
+        // Trigger appropriate BossScene animation.
+        if (correct) {
+          setAnimState('damage')
+          setTimeout(() => setAnimState('idle'), 800)
+          setTaunt(null)
+        } else {
           setAnimState('attack')
           setTimeout(() => setAnimState('idle'), 1200)
           setTaunt(getRandomTaunt(boss.id))
-        } else {
-          setAnimState('damage')
-          setTimeout(() => setAnimState('idle'), 500)
-          setTaunt(null)
         }
 
-        const resp = await apiFetch<AttackResponse>('/gaming/boss/attack', {
+        // Now submit battle attack with the verified correct flag.
+        const battleResp = await apiFetch<AttackResponse>('/gaming/boss/attack', {
           method: 'POST',
           body: JSON.stringify({
             session_id: sessionId,
             answer_correct: correct,
-            base_damage: 40,
+            base_damage: baseDamage,
           }),
         })
 
-        setBossHP(resp.boss_hp)
-        setPlayerHP(resp.player_hp)
-        setTurn(resp.turn + 1)
+        setBossHP(battleResp.boss_hp)
+        setPlayerHP(battleResp.player_hp)
+        setTurn(battleResp.turn + 1)
 
-        if (resp.phase === 'victory') {
+        setResolveData({
+          playerDamage: battleResp.player_damage_dealt,
+          bossDamage: battleResp.boss_damage_dealt,
+          correct,
+          explanation: quizResp.explanation ?? '',
+        })
+        setPhase('resolve')
+
+        // Queue next question (or end of quiz — fall back to re-using topic).
+        const nextQ = quizResp.next_question ?? null
+
+        if (battleResp.phase === 'victory') {
           setAnimState('death')
-          // Wait for death animation to complete before switching phase
-        } else if (resp.phase === 'defeat') {
-          setPhase('defeat')
+          // handleDeathComplete will transition to victory phase.
+        } else if (battleResp.phase === 'defeat') {
+          // Brief resolve display, then defeat.
+          resolveTimerRef.current = setTimeout(() => {
+            setPhase('defeat')
+          }, 2500)
+        } else {
+          // Advance to next question after resolve display.
+          resolveTimerRef.current = setTimeout(() => {
+            setChosenKey(null)
+            setCorrectKey(null)
+            setResolveData(null)
+            if (nextQ) {
+              setCurrentQuestion(nextQ)
+            }
+            // If quiz ran out of questions, keep current question recycled
+            // (backend session expired — start a fresh quiz on next turn).
+            setPhase('question')
+          }, 2500)
         }
       } catch (e) {
         setError(e instanceof Error ? e.message : 'Attack failed')
+        setPhase('question')
+        setChosenKey(null)
+        setAnimState('idle')
       } finally {
         setActionPending(false)
       }
     },
-    [sessionId, phase, boss.id],
+    [sessionId, quizSessionId, currentQuestion, phase, chosenKey, actionPending, userId, boss.id],
   )
+
+  // ── Boss death animation complete → victory ────────────────────────────────
+
+  const handleDeathComplete = useCallback(() => {
+    setPhase('victory')
+  }, [])
 
   // ── Activate a power-up ───────────────────────────────────────────────────
 
   const activatePowerUp = useCallback(
     async (type: PowerUp['type']) => {
-      if (!sessionId || phase !== 'active') return
+      if (!sessionId || phase !== 'question') return
       setActionPending(true)
       try {
         const resp = await apiFetch<{ gems_left: number }>('/gaming/boss/powerup', {
@@ -181,12 +316,6 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
     [sessionId, phase],
   )
 
-  // ── Death animation complete ──────────────────────────────────────────────
-
-  const handleDeathComplete = useCallback(() => {
-    setPhase('victory')
-  }, [])
-
   // ── Forfeit ───────────────────────────────────────────────────────────────
 
   const forfeit = useCallback(async () => {
@@ -198,7 +327,7 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
         body: JSON.stringify({ session_id: sessionId }),
       })
     } catch {
-      // Ignore forfeit errors — still transition to defeat
+      // Ignore forfeit errors — still transition to defeat.
     } finally {
       setActionPending(false)
       setPhase('defeat')
@@ -213,7 +342,15 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
     return () => clearTimeout(t)
   }, [taunt])
 
-  // ── Swipe gesture: right = correct, left = wrong ─────────────────────────
+  // ── Cleanup pending timers on unmount ─────────────────────────────────────
+
+  useEffect(() => {
+    return () => {
+      if (resolveTimerRef.current) clearTimeout(resolveTimerRef.current)
+    }
+  }, [])
+
+  // ── Swipe gesture: right = option A, left = last option ──────────────────
 
   const {
     onTouchStart,
@@ -222,30 +359,35 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
     reset: resetSwipe,
   } = useSwipeGesture({
     onSwipe: (dir) => {
-      if (actionPending || phase !== 'active') return
-      submitAnswer(dir === SwipeDirection.Right)
+      if (actionPending || phase !== 'question' || !currentQuestion) return
+      const opts = currentQuestion.options
+      const key = dir === SwipeDirection.Right ? opts[0]?.key : opts[opts.length - 1]?.key
+      if (key) submitAnswer(key)
     },
   })
+
+  // ── Determine whether active battle is displayed ──────────────────────────
+
+  const showBattle =
+    phase === 'question' ||
+    phase === 'attack' ||
+    phase === 'resolve' ||
+    animState === 'death'
 
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
     <div className="flex flex-col items-center gap-6 min-h-screen bg-bg-deep py-8 px-4">
-      {/* Start screen */}
-      {phase === 'start' && (
+
+      {/* ── Intro screen ── */}
+      {phase === 'intro' && (
         <StartScreen boss={boss} onStart={startBattle} loading={actionPending} />
       )}
 
-      {/* Active battle */}
-      {(phase === 'active' || animState === 'death') && (
-        /*
-         * Swipe zone: right = correct, left = wrong.
-         * `touch-action: pan-y` allows vertical scroll while intercepting
-         * horizontal swipes.  A hint banner fades in briefly after a swipe
-         * to confirm the gesture was received.
-         */
+      {/* ── Active battle (question / attack / resolve) ── */}
+      {showBattle && (
         <div
-          className="flex flex-col items-center gap-6 w-full max-w-md"
+          className="flex flex-col items-center gap-5 w-full max-w-md"
           style={{ touchAction: 'pan-y' }}
           onTouchStart={onTouchStart as React.TouchEventHandler}
           onTouchEnd={(e) => {
@@ -253,6 +395,7 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
             setTimeout(resetSwipe, 600)
           }}
         >
+          {/* Boss 3-D scene */}
           <ErrorBoundary
             componentName="BossScene"
             fallback={
@@ -271,6 +414,8 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
               height={320}
             />
           </ErrorBoundary>
+
+          {/* Health bars + power-up HUD */}
           <BossHUD
             boss={boss}
             bossHP={bossHP}
@@ -281,62 +426,59 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
             gems={gems}
             taunt={taunt}
             onPowerUpAction={activatePowerUp}
-            disabled={actionPending}
+            disabled={actionPending || phase !== 'question'}
           />
-          {/* Swipe hint — briefly shown after a horizontal swipe on mobile */}
-          {swipeDirection && (
+
+          {/* Question card — visible during question phase */}
+          {(phase === 'question' || phase === 'attack') && currentQuestion && (
+            <QuestionCard
+              question={currentQuestion}
+              chosenKey={chosenKey}
+              correctKey={correctKey}
+              onAnswer={submitAnswer}
+              disabled={actionPending || phase !== 'question'}
+            />
+          )}
+
+          {/* Resolve overlay — visible after attack */}
+          {phase === 'resolve' && resolveData && (
+            <BattleResolve
+              playerDamage={resolveData.playerDamage}
+              bossDamage={resolveData.bossDamage}
+              correct={resolveData.correct}
+              explanation={resolveData.explanation}
+            />
+          )}
+
+          {/* Swipe hint */}
+          {swipeDirection && phase === 'question' && (
             <p aria-live="polite" className="text-xs font-mono text-text-dim animate-fade-in">
-              {swipeDirection === SwipeDirection.Right ? '→ Correct' : '← Wrong'}
+              {swipeDirection === SwipeDirection.Right ? '→ First option' : '← Last option'}
             </p>
           )}
 
-          {/* Demo attack buttons — replace with real quiz UI in Phase 4.
-              Min touch target 44×44 px (Apple HIG) for K-12 mobile usability. */}
-          <div className="flex gap-3 w-full">
-            <button
-              onClick={() => submitAnswer(true)}
-              disabled={actionPending}
-              className="flex-1 min-h-[44px] px-5 py-3 rounded-lg text-sm font-mono font-bold
-                bg-neon-green/10 border border-neon-green/40 text-neon-green
-                hover:bg-neon-green/20 active:bg-neon-green/30 transition-colors
-                disabled:opacity-40 disabled:cursor-not-allowed
-                touch-manipulation"
-              style={{ touchAction: 'manipulation' }}
-            >
-              ✓ Correct
-            </button>
-            <button
-              onClick={() => submitAnswer(false)}
-              disabled={actionPending}
-              className="flex-1 min-h-[44px] px-5 py-3 rounded-lg text-sm font-mono font-bold
-                bg-neon-pink/10 border border-neon-pink/40 text-neon-pink
-                hover:bg-neon-pink/20 active:bg-neon-pink/30 transition-colors
-                disabled:opacity-40 disabled:cursor-not-allowed
-                touch-manipulation"
-              style={{ touchAction: 'manipulation' }}
-            >
-              ✗ Wrong
-            </button>
+          {/* Forfeit button — only visible during question phase */}
+          {phase === 'question' && (
             <button
               onClick={forfeit}
               disabled={actionPending}
               className="min-h-[44px] px-4 py-3 rounded-lg text-xs font-mono text-text-dim
                 border border-border-dim hover:border-neon-pink/30 transition-colors
-                disabled:opacity-40 disabled:cursor-not-allowed
-                touch-manipulation"
+                disabled:opacity-40 disabled:cursor-not-allowed touch-manipulation"
               style={{ touchAction: 'manipulation' }}
             >
               Forfeit
             </button>
-          </div>
+          )}
+
           {error && <p className="text-xs text-neon-pink font-mono">{error}</p>}
         </div>
       )}
 
-      {/* Victory */}
+      {/* ── Victory ── */}
       {phase === 'victory' && <VictoryScreen boss={boss} />}
 
-      {/* Defeat */}
+      {/* ── Defeat ── */}
       {phase === 'defeat' && <DefeatScreen boss={boss} onRetry={startBattle} />}
     </div>
   )
