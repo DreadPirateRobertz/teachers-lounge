@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     # Number of candidates fetched per signal before RRF fusion + final limit
     sparse_rerank_limit: int = 20
 
+    # Query expansion via AI Gateway (tl-afb) — used for short (<5-token)
+    # follow-up queries when the caller supplies conversation context turns.
+    tutor_fast_model: str = "tutor-fast"
+    query_expansion_short_threshold: int = 5
+    query_expansion_max_context_turns: int = 6
+    query_expansion_max_tokens: int = 128
+
     # Diagram (CLIP) collection — Phase 6 multi-modal RAG
     diagrams_collection: str = "diagrams"
     clip_model: str = "openai/clip-vit-base-patch32"
