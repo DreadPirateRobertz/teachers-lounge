@@ -125,7 +125,7 @@ services:
     ports:
       - "127.0.0.1:8080:8080"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:8080/healthz || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/healthz || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -208,18 +208,151 @@ services:
         condition: service_healthy
       analytics-service:
         condition: service_healthy
+      gaming-service:
+        condition: service_healthy
     environment:
       NODE_ENV: production
-      # Disable HSTS + upgrade-insecure-requests for local dev (no TLS)
-      DISABLE_HSTS: "true"
       # Server-side (SSR) URLs use Docker internal hostnames — not exposed to browser
       USER_SERVICE_URL: http://user-service:8080
       TUTORING_SERVICE_URL: http://tutoring-service:8080
       ANALYTICS_SERVICE_URL: http://analytics-service:8085
+      GAMING_SERVICE_URL: http://gaming-service:8083
+      INGESTION_SERVICE_URL: http://ingestion-service:8080
+      SEARCH_SERVICE_URL: http://search-service:8080
     ports:
       - "0.0.0.0:3000:3000"
     healthcheck:
-      test: ["CMD-SHELL", "wget -qO- http://localhost:3000/api/health || exit 1"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:3000/api/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+  # ── Gaming Service ──────────────────────────────────────────────────────────
+
+  gaming-service:
+    build:
+      context: ./services/gaming-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    environment:
+      PORT: "8083"
+      DATABASE_URL: "postgres://tl_app:${POSTGRES_PASSWORD:-localdevpassword}@postgres:5432/teacherslounge?sslmode=disable"
+      REDIS_ADDR: "redis:6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-localredispassword}
+      JWT_SECRET: ${JWT_SECRET:-localdevjwtsecret-replace-in-prod}
+      AI_GATEWAY_URL: http://ai-gateway:4000
+      AI_GATEWAY_KEY: ${LITELLM_MASTER_KEY:-localdevmasterkey}
+      LOG_LEVEL: info
+    ports:
+      - "127.0.0.1:8083:8083"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8083/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── Ingestion Service ───────────────────────────────────────────────────────
+
+  ingestion-service:
+    build:
+      context: ./services/ingestion
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      db-migrate:
+        condition: service_completed_successfully
+    environment:
+      DATABASE_URL: "postgresql+asyncpg://tl_app:${POSTGRES_PASSWORD:-localdevpassword}@postgres:5432/teacherslounge"
+      JWT_SECRET: ${JWT_SECRET:-localdevjwtsecret-replace-in-prod}
+      GCS_BUCKET: ${GCS_BUCKET:-local-dev-bucket-placeholder}
+      GOOGLE_APPLICATION_CREDENTIALS: ${GOOGLE_APPLICATION_CREDENTIALS:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-placeholder-replace-me}
+      QDRANT_URL: http://qdrant:6333
+      LOG_LEVEL: info
+    ports:
+      - "127.0.0.1:8001:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ── Search Service ──────────────────────────────────────────────────────────
+
+  search-service:
+    build:
+      context: ./services/search
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      qdrant:
+        condition: service_healthy
+    environment:
+      JWT_SECRET: ${JWT_SECRET:-localdevjwtsecret-replace-in-prod}
+      QDRANT_URL: http://qdrant:6333
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-sk-placeholder-replace-me}
+      LOG_LEVEL: info
+    ports:
+      - "127.0.0.1:8002:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/healthz')\""]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+
+  # ── Notification Service ────────────────────────────────────────────────────
+
+  notification-service:
+    build:
+      context: ./services/notification-service
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      redis:
+        condition: service_healthy
+    environment:
+      PORT: "9000"
+      REDIS_ADDR: "redis:6379"
+      REDIS_PASSWORD: ${REDIS_PASSWORD:-localredispassword}
+      JWT_SECRET: ${JWT_SECRET:-localdevjwtsecret-replace-in-prod}
+      FCM_CREDENTIALS_FILE: ${FCM_CREDENTIALS_FILE:-}
+      SENDGRID_API_KEY: ${SENDGRID_API_KEY:-SG.placeholder}
+      LOG_LEVEL: info
+    ports:
+      - "127.0.0.1:9000:9000"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:9000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+  # ── Qdrant Vector DB ────────────────────────────────────────────────────────
+
+  qdrant:
+    image: qdrant/qdrant:v1.9.7
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6333:6333"
+    volumes:
+      - qdrant-data:/qdrant/storage
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:6333/healthz || exit 1"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -229,4 +362,6 @@ volumes:
   postgres-data:
     driver: local
   redis-data:
+    driver: local
+  qdrant-data:
     driver: local
