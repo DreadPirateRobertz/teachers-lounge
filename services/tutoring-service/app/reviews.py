@@ -65,18 +65,46 @@ async def get_review_queue(
     now = datetime.now(timezone.utc)
     week_later = now + timedelta(days=7)
 
-    result = await db.execute(
+    # Due: next_review_at IS NULL (never reviewed) or overdue.
+    # Uses ix_scm_user_next_review composite index — avoids full user-row scan.
+    due_result = await db.execute(
         select(StudentConceptMastery)
-        .where(StudentConceptMastery.user_id == user.user_id)
+        .where(
+            StudentConceptMastery.user_id == user.user_id,
+            (StudentConceptMastery.next_review_at == None)  # noqa: E711
+            | (StudentConceptMastery.next_review_at <= now),
+        )
         .order_by(StudentConceptMastery.next_review_at.asc().nullsfirst())
+        .limit(limit)
     )
-    all_rows = list(result.scalars().all())
+    due = list(due_result.scalars().all())
 
-    due = [r for r in all_rows if r.next_review_at is None or r.next_review_at <= now]
-    upcoming = [r for r in all_rows if r.next_review_at is not None and now < r.next_review_at <= week_later]
+    # Upcoming: due within the next 7 days (for the "coming up" preview).
+    upcoming_result = await db.execute(
+        select(func.count())
+        .select_from(StudentConceptMastery)
+        .where(
+            StudentConceptMastery.user_id == user.user_id,
+            StudentConceptMastery.next_review_at > now,
+            StudentConceptMastery.next_review_at <= week_later,
+        )
+    )
+    upcoming_count = upcoming_result.scalar_one()
+
+    # Total due count (may exceed `limit` — needed for the queue summary).
+    total_due_result = await db.execute(
+        select(func.count())
+        .select_from(StudentConceptMastery)
+        .where(
+            StudentConceptMastery.user_id == user.user_id,
+            (StudentConceptMastery.next_review_at == None)  # noqa: E711
+            | (StudentConceptMastery.next_review_at <= now),
+        )
+    )
+    total_due_count = total_due_result.scalar_one()
 
     items: list[ReviewQueueItem] = []
-    for row in due[:limit]:
+    for row in due:
         items.append(ReviewQueueItem(
             concept_id=row.concept_id,
             concept_name=row.concept.name if row.concept else str(row.concept_id),
@@ -91,8 +119,8 @@ async def get_review_queue(
 
     return ReviewQueueResponse(
         items=items,
-        total_due=len(due),
-        total_upcoming=len(upcoming),
+        total_due=total_due_count,
+        total_upcoming=upcoming_count,
     )
 
 
@@ -167,29 +195,41 @@ async def get_review_stats(
     today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
     week_end = now + timedelta(days=7)
 
-    mastery_result = await db.execute(
-        select(StudentConceptMastery).where(StudentConceptMastery.user_id == user.user_id)
+    # All aggregates pushed to Postgres — avoids loading full mastery table into Python.
+    # ix_scm_user_next_review covers the user_id filter + next_review_at conditions.
+    stats_result = await db.execute(
+        select(
+            func.count().label("total"),
+            func.avg(StudentConceptMastery.mastery_score).label("avg_mastery"),
+            func.avg(StudentConceptMastery.ease_factor).label("avg_ef"),
+            func.count().filter(
+                (StudentConceptMastery.next_review_at == None)  # noqa: E711
+                | (StudentConceptMastery.next_review_at <= now)
+            ).label("due_now"),
+            func.count().filter(
+                StudentConceptMastery.next_review_at != None,  # noqa: E711
+                StudentConceptMastery.next_review_at <= today_end,
+            ).label("due_today"),
+            func.count().filter(
+                StudentConceptMastery.next_review_at != None,  # noqa: E711
+                StudentConceptMastery.next_review_at <= week_end,
+            ).label("due_week"),
+        )
+        .where(StudentConceptMastery.user_id == user.user_id)
     )
-    mastery_rows = list(mastery_result.scalars().all())
+    row = stats_result.one()
 
     record_count_result = await db.execute(
         select(func.count(ReviewRecord.id)).where(ReviewRecord.user_id == user.user_id)
     )
     total_reviews = record_count_result.scalar_one() or 0
 
-    due_now = sum(1 for r in mastery_rows if r.next_review_at is None or r.next_review_at <= now)
-    due_today = sum(1 for r in mastery_rows if r.next_review_at is not None and r.next_review_at <= today_end)
-    due_week = sum(1 for r in mastery_rows if r.next_review_at is not None and r.next_review_at <= week_end)
-
-    avg_mastery = (sum(r.mastery_score for r in mastery_rows) / len(mastery_rows)) if mastery_rows else 0.0
-    avg_ef = (sum(r.ease_factor for r in mastery_rows) / len(mastery_rows)) if mastery_rows else 2.5
-
     return ReviewStatsResponse(
-        total_concepts_studied=len(mastery_rows),
+        total_concepts_studied=row.total or 0,
         total_reviews=total_reviews,
-        due_now=due_now,
-        due_today=due_today,
-        due_this_week=due_week,
-        average_mastery=round(avg_mastery, 4),
-        average_ease_factor=round(avg_ef, 4),
+        due_now=row.due_now or 0,
+        due_today=row.due_today or 0,
+        due_this_week=row.due_week or 0,
+        average_mastery=round(float(row.avg_mastery or 0.0), 4),
+        average_ease_factor=round(float(row.avg_ef or 2.5), 4),
     )
