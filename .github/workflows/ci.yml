@@ -50,10 +50,12 @@ jobs:
               - 'services/ingestion/**'
               - 'services/search/**'
               - 'services/analytics-service/**'
+              - 'services/tl-logging/**'
               - '.github/workflows/ci.yml'
             docker:
               - 'frontend/Dockerfile'
               - 'services/*/Dockerfile'
+              - 'services/tl-logging/**'
               - '.github/workflows/ci.yml'
             helm:
               - 'infra/helm/**'
@@ -188,6 +190,9 @@ jobs:
           cache: pip
       - run: pip install setuptools wheel grpcio-tools --quiet
         if: steps.check.outputs.exists == 'true'
+      - name: Install shared tl-logging package
+        run: pip install --no-cache-dir ../tl-logging --quiet
+        if: steps.check.outputs.exists == 'true'
       - run: pip install --no-build-isolation -r requirements.txt --quiet
         if: steps.check.outputs.exists == 'true'
       - run: pip install ruff pytest pytest-asyncio --quiet
@@ -261,6 +266,15 @@ jobs:
       - name: Set up Docker Buildx
         if: steps.check.outputs.exists == 'true'
         uses: docker/setup-buildx-action@v3
+      - name: Copy shared tl-logging package into build context
+        if: steps.check.outputs.exists == 'true'
+        env:
+          SVC_PATH: ${{ matrix.svc_path }}
+        run: |
+          # Only Python services use tl-logging; skip if no tl-logging dep in requirements.txt
+          if grep -q 'tl-logging' "${SVC_PATH}/requirements.txt" 2>/dev/null; then
+            cp -r services/tl-logging "${SVC_PATH}/tl-logging"
+          fi
       - name: Build Docker image
         if: steps.check.outputs.exists == 'true'
         uses: docker/build-push-action@v6
