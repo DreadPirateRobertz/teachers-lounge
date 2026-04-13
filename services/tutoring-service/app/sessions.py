@@ -17,6 +17,7 @@ from .models import (
     Role,
     SessionResponse,
 )
+from .summary import SessionSummary, compute_session_summary
 
 router = APIRouter(prefix="/sessions", tags=["sessions"])
 
@@ -98,3 +99,25 @@ async def get_session_history(
     )
 
     return HistoryResponse(session_id=session_id, messages=messages)
+
+
+@router.get("/{session_id}/summary", response_model=SessionSummary)
+async def get_session_summary(
+    session_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: JWTClaims = Depends(require_auth),
+) -> SessionSummary:
+    """Return aggregated statistics for a tutoring session.
+
+    Returns 404 if the session does not exist, 403 if it belongs to
+    another user. Owners receive the session's message count, average
+    tutor response latency, total duration, and the list of concept
+    topics touched during the session window.
+    """
+    session = await get_session(db, session_id)
+    if session is None:
+        raise HTTPException(status_code=404, detail="Session not found")
+    if session.user_id != user.user_id:
+        raise HTTPException(status_code=403, detail="Forbidden")
+
+    return await compute_session_summary(db, session)
