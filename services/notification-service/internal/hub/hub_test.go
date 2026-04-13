@@ -58,7 +58,7 @@ func connectMember(t *testing.T, h *hub.Hub, memberID string) (clientConn *webso
 	}
 
 	teardown = func() {
-		client.Close()
+		_ = client.Close() //nolint:errcheck // best-effort cleanup in test teardown
 		srv.Close()
 	}
 	return client, teardown
@@ -98,7 +98,7 @@ func TestDeregister(t *testing.T) {
 	defer teardown()
 
 	// Close the client; the server goroutine will deregister on read error.
-	client.Close()
+	_ = client.Close() //nolint:errcheck // best-effort cleanup in test
 
 	// Allow the server goroutine time to react.
 	deadline := time.Now().Add(time.Second)

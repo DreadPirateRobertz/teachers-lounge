@@ -86,7 +86,7 @@ func (s *SendGridSender) Send(ctx context.Context, to, subject, htmlBody string)
 	if err != nil {
 		return fmt.Errorf("email: http: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }() //nolint:errcheck // best-effort body drain
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		return fmt.Errorf("email: sendgrid returned %d", resp.StatusCode)

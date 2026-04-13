@@ -83,7 +83,7 @@ func (h *WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.hub.Register(memberID, conn)
 	defer func() {
 		h.hub.Deregister(memberID, conn)
-		conn.Close()
+		_ = conn.Close() //nolint:errcheck // best-effort cleanup on disconnect
 		h.logger.Info("ws: client disconnected", zap.String("member_id", memberID))
 	}()
 

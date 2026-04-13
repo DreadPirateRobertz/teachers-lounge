@@ -53,7 +53,7 @@ func main() {
 	if err := rdb.Ping(ctx).Err(); err != nil {
 		logger.Fatal("connect redis", zap.Error(err))
 	}
-	defer rdb.Close()
+	defer func() { _ = rdb.Close() }() //nolint:errcheck // best-effort cleanup on shutdown
 
 	// ── Dependencies ─────────────────────────────────────────────────────────
 	notifStore := store.New(db)
