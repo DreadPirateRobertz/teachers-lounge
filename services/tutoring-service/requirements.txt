@@ -13,5 +13,5 @@ prometheus_client==0.24.1
 opentelemetry-sdk==1.40.0
 opentelemetry-instrumentation-fastapi==0.61b0
 opentelemetry-exporter-otlp-proto-grpc==1.40.0
-redis[hiredis]==5.2.1
+redis[hiredis]==7.4.0
 python-json-logger==3.2.1
