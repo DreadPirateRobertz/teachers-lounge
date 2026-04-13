@@ -77,6 +77,61 @@ print(f"DEBUG: got response {resp}, now processing, user is {user}...")
 
 ---
 
+## Graceful Failure
+
+Errors must be handled explicitly. Silent failures and panics are rejected in review.
+
+### Rules
+
+1. **Never swallow errors.** Every error must be logged or returned — not ignored.
+2. **Return errors to the caller** from library/service code. Log at the boundary (HTTP handler, worker loop), not at every layer.
+3. **Fail loudly at startup** for missing config. If a required env var is absent, the process should exit with a clear message — not limp along with zero-values.
+4. **Partial failures need a decision.** If one item in a batch fails, decide explicitly: abort, skip + log, or retry. Never silently drop.
+5. **No panic in service code.** Recover panics at the top-level HTTP handler only (for crash isolation). Never panic in business logic.
+
+```go
+// Good — explicit, logged at boundary
+func (h *Handler) CreateUser(w http.ResponseWriter, r *http.Request) {
+    user, err := h.store.CreateUser(r.Context(), params)
+    if err != nil {
+        slog.Error("create_user_failed", "error", err)
+        http.Error(w, "internal error", http.StatusInternalServerError)
+        return
+    }
+    ...
+}
+
+// Bad — silent drop
+user, _ := h.store.CreateUser(r.Context(), params)
+```
+
+```python
+# Good — explicit failure with context
+try:
+    result = qdrant_client.upsert(collection_name=collection, points=points)
+except Exception as e:
+    logger.error("qdrant_upsert_failed", extra={"collection": collection, "error": str(e)})
+    raise
+
+# Bad — swallowed error
+try:
+    qdrant_client.upsert(...)
+except Exception:
+    pass
+```
+
+### Tests must cover failure paths
+
+Every exported function with error paths needs at least one test that triggers
+the error path and asserts the correct error is returned or logged.
+
+```go
+func TestCreateUser_ReturnsErrOnDuplicateEmail(t *testing.T) { ... }
+func TestCreateUser_LogsAndReturns500OnStoreFailure(t *testing.T) { ... }
+```
+
+---
+
 ## Comments
 
 Write **WHY**, never WHAT or HOW.

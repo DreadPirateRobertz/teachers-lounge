@@ -7,6 +7,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -72,6 +73,11 @@ class StudentConceptMastery(Base):
     """Per-student, per-concept mastery state including SM-2 scheduling fields."""
 
     __tablename__ = "student_concept_mastery"
+    __table_args__ = (
+        # Composite index for review queue: filter by user, sort by next_review_at.
+        # Powers: GET /reviews/queue and GET /reviews/stats (no full-scan per user).
+        Index("ix_scm_user_next_review", "user_id", "next_review_at"),
+    )
 
     user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     concept_id: Mapped[UUID] = mapped_column(
