@@ -141,6 +141,36 @@ class TestReformulateQuery:
         assert "why is that?" in messages[-1]["content"]
 
     @pytest.mark.asyncio
+    async def test_default_client_fetched_via_gateway(self, monkeypatch):
+        """When no client is passed, ``get_gateway_client`` supplies the default."""
+        history = [{"role": "student", "content": "hi"}]
+        client = _make_client_returning("rewritten")
+
+        import app.gateway as gateway_mod
+
+        monkeypatch.setattr(gateway_mod, "get_gateway_client", lambda: client)
+
+        result = await reformulate_query("q?", history)
+
+        assert result == "rewritten"
+        client.chat.completions.create.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_malformed_response_falls_back_to_original(self):
+        """A response with an empty ``choices`` list raises IndexError → fallback."""
+        history = [{"role": "student", "content": "hi"}]
+        client = MagicMock()
+        client.chat = MagicMock()
+        client.chat.completions = MagicMock()
+        client.chat.completions.create = AsyncMock(
+            return_value=SimpleNamespace(choices=[])
+        )
+
+        result = await reformulate_query("original", history, client=client)
+
+        assert result == "original"
+
+    @pytest.mark.asyncio
     async def test_orm_row_history_is_accepted(self):
         """ORM-like objects with ``role``/``content`` attributes are accepted."""
         row = SimpleNamespace(role="student", content="What is entropy?")
