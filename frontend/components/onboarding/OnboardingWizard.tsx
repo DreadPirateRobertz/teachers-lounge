@@ -52,6 +52,7 @@ export default function OnboardingWizard({
   const [currentName, setCurrentName] = useState(displayName)
   const [currentAvatar, setCurrentAvatar] = useState(avatarEmoji || '🎓')
   const [completionError, setCompletionError] = useState<string | null>(null)
+  const [finishing, setFinishing] = useState(false)
 
   const step = STEPS[stepIndex]
   const totalSteps = STEPS.length
@@ -89,6 +90,7 @@ export default function OnboardingWizard({
    */
   async function finishOnboarding() {
     setCompletionError(null)
+    setFinishing(true)
     try {
       const res = await fetch('/api/user/onboarding', { method: 'PATCH' })
       if (!res.ok && res.status !== 204) {
@@ -140,6 +142,7 @@ export default function OnboardingWizard({
           <ReadyStep
             avatarEmoji={currentAvatar}
             displayName={currentName}
+            finishing={finishing}
             onDone={finishOnboarding}
           />
         )}
