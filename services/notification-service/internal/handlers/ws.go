@@ -12,13 +12,8 @@ import (
 	"github.com/DreadPirateRobertz/teachers-lounge/services/notification-service/internal/hub"
 )
 
-const (
-	// writeWait is the maximum time allowed to write a message to the client.
-	writeWait = 10 * time.Second
-
-	// pongWait is the time allowed to read the next pong message from the client.
-	pongWait = 60 * time.Second
-)
+// pongWait is the time allowed to read the next pong message from the client.
+const pongWait = 60 * time.Second
 
 // Authenticator extracts a verified member ID from a raw JWT token string.
 // Returns an error when the token is missing, malformed, or expired.
@@ -95,9 +90,9 @@ func (h *WSHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.logger.Info("ws: client connected", zap.String("member_id", memberID))
 
 	// Configure read deadline so dead connections are detected after pongWait.
-	conn.SetReadDeadline(time.Now().Add(pongWait))
+	_ = conn.SetReadDeadline(time.Now().Add(pongWait)) //nolint:errcheck // best-effort deadline
 	conn.SetPongHandler(func(string) error {
-		conn.SetReadDeadline(time.Now().Add(pongWait))
+		_ = conn.SetReadDeadline(time.Now().Add(pongWait)) //nolint:errcheck // best-effort deadline
 		return nil
 	})
 
