@@ -39,12 +39,6 @@ export function useMaterialStatus(
     if (!materialId || TERMINAL.has(initialStatus)) return
 
     const id = setInterval(async () => {
-      // Stop early if we already reached a terminal state between ticks.
-      if (TERMINAL.has(statusRef.current)) {
-        clearInterval(id)
-        return
-      }
-
       try {
         const res = await fetch(`/api/materials/${materialId}/status`, {
           credentials: 'include',
