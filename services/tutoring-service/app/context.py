@@ -70,9 +70,12 @@ def log_token_usage(
     threshold = int(model_context_limit * warn_ratio)
     if tokens >= threshold:
         pct = 100.0 * tokens / model_context_limit
+        # Sanitize session_id to prevent log injection — strip newlines before
+        # interpolating user-correlated data into the log message.
+        safe_sid = str(session_id).replace("\n", "_").replace("\r", "_")
         logger.warning(
             "Session %s approaching context limit: ~%d tokens (%.0f%% of %d limit)",
-            session_id,
+            safe_sid,
             tokens,
             pct,
             model_context_limit,
