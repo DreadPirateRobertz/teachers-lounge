@@ -49,6 +49,25 @@ func (p *progressionStore) GetChapterMastery(_ context.Context, _ string, paths 
 	return 0.0, nil
 }
 
+func (p *progressionStore) GetChapterMasteryBatch(_ context.Context, _ string, pathsByBossID map[string][]string) (map[string]float64, error) {
+	if p.masteryErr != nil {
+		return nil, p.masteryErr
+	}
+	out := make(map[string]float64, len(pathsByBossID))
+	for bossID, paths := range pathsByBossID {
+		if len(paths) == 0 {
+			out[bossID] = 0.0
+			continue
+		}
+		if v, ok := p.masteryByPaths[paths[0]]; ok {
+			out[bossID] = v
+		} else {
+			out[bossID] = 0.0
+		}
+	}
+	return out, nil
+}
+
 var _ handler.Storer = (*progressionStore)(nil)
 
 func newProgressionHandler(s handler.Storer) *handler.Handler {

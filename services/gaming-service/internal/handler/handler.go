@@ -44,6 +44,7 @@ type Storer interface {
 	// Boss battle methods
 	GetDefeatedBossIDs(ctx context.Context, userID string) ([]string, error)
 	GetChapterMastery(ctx context.Context, userID string, conceptPaths []string) (float64, error)
+	GetChapterMasteryBatch(ctx context.Context, userID string, pathsByBossID map[string][]string) (map[string]float64, error)
 	SaveBattleSession(ctx context.Context, session *model.BattleSession) error
 	GetBattleSession(ctx context.Context, sessionID string) (*model.BattleSession, error)
 	DeleteBattleSession(ctx context.Context, sessionID string) error

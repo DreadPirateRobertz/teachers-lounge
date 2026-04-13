@@ -67,7 +67,7 @@ func connectMember(t *testing.T, h *hub.Hub, memberID string) (clientConn *webso
 // readJSON reads one JSON message from conn and unmarshals it into dst.
 func readJSON(t *testing.T, conn *websocket.Conn, dst any) {
 	t.Helper()
-	conn.SetReadDeadline(time.Now().Add(2 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(2 * time.Second)) //nolint:errcheck // best-effort test deadline
 	_, msg, err := conn.ReadMessage()
 	if err != nil {
 		t.Fatalf("read message: %v", err)
@@ -187,7 +187,7 @@ func TestMultiSession(t *testing.T) {
 		go func(idx int, c *websocket.Conn) {
 			defer wg.Done()
 			var got hub.BossUnlockPayload
-			c.SetReadDeadline(time.Now().Add(2 * time.Second))
+			_ = c.SetReadDeadline(time.Now().Add(2 * time.Second)) //nolint:errcheck // best-effort test deadline
 			_, msg, err := c.ReadMessage()
 			if err != nil {
 				t.Errorf("client %d read: %v", idx, err)

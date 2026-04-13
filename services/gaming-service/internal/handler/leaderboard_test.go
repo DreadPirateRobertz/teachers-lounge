@@ -138,6 +138,9 @@ func (s *leaderboardStore) GetDefeatedBossIDs(_ context.Context, _ string) ([]st
 func (s *leaderboardStore) GetChapterMastery(_ context.Context, _ string, _ []string) (float64, error) {
 	return 0.0, nil
 }
+func (s *leaderboardStore) GetChapterMasteryBatch(_ context.Context, _ string, _ map[string][]string) (map[string]float64, error) {
+	return nil, nil
+}
 func (s *leaderboardStore) CreateFlashcard(_ context.Context, c *model.Flashcard) (*model.Flashcard, error) {
 	return c, nil
 }
