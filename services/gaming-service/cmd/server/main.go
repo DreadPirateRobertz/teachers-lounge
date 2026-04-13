@@ -98,6 +98,7 @@ func main() {
 		r.With(middleware.RateLimit(rl, ratelimit.BucketXP, logger)).Post("/gaming/xp", h.GainXP)
 		r.Get("/gaming/profile/{userId}", h.GetProfile)
 		r.With(middleware.RateLimit(rl, ratelimit.BucketStreak, logger)).Post("/gaming/streak/checkin", h.StreakCheckin)
+		r.Post("/gaming/streak/freeze", h.StreakFreeze)
 		r.Post("/gaming/leaderboard/update", h.LeaderboardUpdate)
 		r.Get("/gaming/leaderboard", h.GetLeaderboard)
 		r.Get("/gaming/leaderboard/friends", h.GetFriendLeaderboard)

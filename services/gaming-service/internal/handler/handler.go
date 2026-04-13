@@ -53,6 +53,10 @@ type Storer interface {
 	SaveTaunt(ctx context.Context, bossID string, round int, tauntText string) error
 	GetRandomTaunt(ctx context.Context, bossID string, round int) (tauntText string, ok bool, err error)
 
+	// Streak freeze methods
+	CreateStreakFreeze(ctx context.Context, userID string) (gemsLeft int, err error)
+	IsStreakFrozen(ctx context.Context, userID string) (bool, error)
+
 	// Shop methods
 	BuyPowerUp(ctx context.Context, userID string, pu model.PowerUpType, gemCost int) (gemsLeft, newCount int, err error)
 

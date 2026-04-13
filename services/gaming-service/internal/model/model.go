@@ -112,6 +112,19 @@ type QuestProgressRequest struct {
 	Action string `json:"action"`
 }
 
+// StreakFreezeRequest is the request body for POST /gaming/streak/freeze.
+type StreakFreezeRequest struct {
+	UserID string `json:"user_id"`
+}
+
+// StreakFreezeResponse is the response body for POST /gaming/streak/freeze.
+type StreakFreezeResponse struct {
+	// Active is true when the freeze was successfully applied.
+	Active bool `json:"active"`
+	// GemsLeft is the caller's gem balance after the purchase.
+	GemsLeft int `json:"gems_left"`
+}
+
 // QuestProgressResponse is the response body for POST /gaming/quests/progress.
 type QuestProgressResponse struct {
 	Quests      []QuestState `json:"quests"`

@@ -231,6 +231,8 @@ func (noopStore) FlashcardsForSession(_ context.Context, _ string) ([]*model.Fla
 func (noopStore) AllFlashcardsForExport(_ context.Context, _ string) ([]*model.Flashcard, error) {
 	return nil, nil
 }
+func (noopStore) CreateStreakFreeze(_ context.Context, _ string) (int, error) { return 0, nil }
+func (noopStore) IsStreakFrozen(_ context.Context, _ string) (bool, error)    { return false, nil }
 func (noopStore) BuyPowerUp(_ context.Context, _ string, _ model.PowerUpType, _ int) (int, int, error) {
 	return 0, 0, nil
 }

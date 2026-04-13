@@ -68,6 +68,13 @@ func (p *progressionStore) GetChapterMasteryBatch(_ context.Context, _ string, p
 	return out, nil
 }
 
+func (p *progressionStore) CreateStreakFreeze(_ context.Context, _ string) (int, error) {
+	return 0, nil
+}
+func (p *progressionStore) IsStreakFrozen(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
+
 var _ handler.Storer = (*progressionStore)(nil)
 
 func newProgressionHandler(s handler.Storer) *handler.Handler {
