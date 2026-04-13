@@ -80,9 +80,7 @@ export default function LootReveal({
             </span>
             <span className="text-xs font-mono text-text-bright flex-1">{item.label}</span>
             {item.amount !== null && (
-              <span className="text-xs font-mono font-bold text-neon-gold">
-                +{item.amount}
-              </span>
+              <span className="text-xs font-mono font-bold text-neon-gold">+{item.amount}</span>
             )}
           </div>
         )
