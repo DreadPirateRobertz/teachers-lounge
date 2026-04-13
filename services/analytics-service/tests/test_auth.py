@@ -47,3 +47,40 @@ def test_require_auth_missing_sub_claim():
     with pytest.raises(HTTPException) as exc_info:
         require_auth(cred)
     assert exc_info.value.status_code == 401
+
+
+def test_require_auth_expired_token():
+    """require_auth raises 401 for a token whose exp claim is in the past."""
+    import time
+    from fastapi import HTTPException
+    from fastapi.security import HTTPAuthorizationCredentials
+
+    expired_token = jwt.encode(
+        {
+            "sub": TEST_USER_ID,
+            "aud": settings.jwt_audience,
+            "exp": int(time.time()) - 3600,  # 1 hour ago
+        },
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+    cred = HTTPAuthorizationCredentials(scheme="Bearer", credentials=expired_token)
+    with pytest.raises(HTTPException) as exc_info:
+        require_auth(cred)
+    assert exc_info.value.status_code == 401
+
+
+def test_require_auth_wrong_audience():
+    """require_auth raises 401 for a token signed for a different service audience."""
+    from fastapi import HTTPException
+    from fastapi.security import HTTPAuthorizationCredentials
+
+    wrong_aud_token = jwt.encode(
+        {"sub": TEST_USER_ID, "aud": "some-other-service"},
+        settings.jwt_secret,
+        algorithm=settings.jwt_algorithm,
+    )
+    cred = HTTPAuthorizationCredentials(scheme="Bearer", credentials=wrong_aud_token)
+    with pytest.raises(HTTPException) as exc_info:
+        require_auth(cred)
+    assert exc_info.value.status_code == 401

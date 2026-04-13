@@ -252,6 +252,16 @@ class TestQuizBreakdown:
 
         assert resp.json()["topics"][0]["accuracy_pct"] == 66.7
 
+    def test_quiz_breakdown_requires_auth(self):
+        """Returns 401/403 when no Authorization header is sent."""
+        app.dependency_overrides[get_db] = make_db_override([])
+        app.dependency_overrides.pop(require_auth, None)
+        client = TestClient(app)
+
+        resp = client.get(f"/v1/analytics/student/{TEST_USER_ID}/quiz-breakdown")
+
+        assert resp.status_code in (401, 403)
+
 
 # ── /activity ────────────────────────────────────────────────────────────────
 
@@ -339,6 +349,34 @@ class TestActivity:
         )
 
         assert resp.status_code == 403
+
+    def test_activity_requires_auth(self):
+        """Returns 401/403 when no Authorization header is sent."""
+        app.dependency_overrides[get_db] = make_db_override([])
+        app.dependency_overrides.pop(require_auth, None)
+        client = TestClient(app)
+
+        resp = client.get(f"/v1/analytics/student/{TEST_USER_ID}/activity")
+
+        assert resp.status_code in (401, 403)
+
+    def test_activity_multiple_active_days(self):
+        """Multiple active days are all reflected in the response."""
+        today = date.today()
+        rows = [
+            {"day": str(today - timedelta(days=2)), "messages": 3},
+            {"day": str(today - timedelta(days=1)), "messages": 5},
+        ]
+        client = self._setup(rows)
+
+        resp = client.get(
+            f"/v1/analytics/student/{TEST_USER_ID}/activity",
+            headers=auth_headers(),
+        )
+
+        days = {d["date"]: d["messages"] for d in resp.json()["days"]}
+        assert days[str(today - timedelta(days=2))] == 3
+        assert days[str(today - timedelta(days=1))] == 5
 
 
 # ── _check_self_or_raise unit test ───────────────────────────────────────────
@@ -589,6 +627,38 @@ class TestUpcomingReviews:
         )
 
         assert resp.status_code == 403
+
+    def test_upcoming_reviews_upcoming_priority(self):
+        """A review due 4+ days away is marked 'upcoming'."""
+        # mastered → 14-day interval; last_attempted 4 days ago → due in 10 days
+        last = date.today() - timedelta(days=4)
+        rows = [{"topic": "Biology", "total": 10, "correct": 10, "last_attempted": last}]
+        client = self._setup(rows)
+
+        resp = client.get(
+            f"/v1/analytics/student/{TEST_USER_ID}/upcoming-reviews",
+            headers=auth_headers(),
+        )
+
+        review = resp.json()["reviews"][0]
+        assert review["priority"] == "upcoming"
+        assert review["days_overdue"] < -3
+
+    def test_upcoming_reviews_last_attempted_none_uses_today(self):
+        """When last_attempted is None the review interval is measured from today."""
+        rows = [{"topic": "Chemistry", "total": 10, "correct": 3, "last_attempted": None}]
+        client = self._setup(rows)
+
+        resp = client.get(
+            f"/v1/analytics/student/{TEST_USER_ID}/upcoming-reviews",
+            headers=auth_headers(),
+        )
+
+        # weak mastery → 1-day interval from today → due tomorrow → days_overdue = -1 ("soon")
+        review = resp.json()["reviews"][0]
+        assert review["concept"] == "Chemistry"
+        assert review["days_overdue"] == -1
+        assert review["priority"] == "soon"
 
 
 # ── Helper unit tests ─────────────────────────────────────────────────────────
