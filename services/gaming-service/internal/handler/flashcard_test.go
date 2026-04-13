@@ -240,6 +240,9 @@ func (noopStore) GetDefeatedBossIDs(_ context.Context, _ string) ([]string, erro
 func (noopStore) GetChapterMastery(_ context.Context, _ string, _ []string) (float64, error) {
 	return 0.0, nil
 }
+func (noopStore) GetChapterMasteryBatch(_ context.Context, _ string, _ map[string][]string) (map[string]float64, error) {
+	return map[string]float64{}, nil
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

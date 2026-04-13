@@ -88,18 +88,25 @@ func (h *Handler) GetBossProgression(w http.ResponseWriter, r *http.Request) {
 		return sorted[i].Tier < sorted[j].Tier
 	})
 
+	// One round-trip for chapter mastery across every boss, keyed by boss_id.
+	// Replaces the prior N+1 GetChapterMastery loop.
+	pathsByBoss := make(map[string][]string, len(sorted))
+	for _, def := range sorted {
+		pathsByBoss[def.ID] = def.ChapterConceptPaths
+	}
+	masteryByBoss, err := h.store.GetChapterMasteryBatch(r.Context(), callerID, pathsByBoss)
+	if err != nil {
+		h.logger.Error("get boss progression: batch chapter mastery",
+			zap.String("user_id", callerID),
+			zap.Error(err),
+		)
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
 	nodes := make([]BossProgressionNode, 0, len(sorted))
 	for _, def := range sorted {
-		mastery, err := h.store.GetChapterMastery(r.Context(), callerID, def.ChapterConceptPaths)
-		if err != nil {
-			h.logger.Error("get boss progression: query chapter mastery",
-				zap.String("user_id", callerID),
-				zap.String("boss_id", def.ID),
-				zap.Error(err),
-			)
-			writeError(w, http.StatusInternalServerError, "internal error")
-			return
-		}
+		mastery := masteryByBoss[def.ID]
 
 		nodes = append(nodes, BossProgressionNode{
 			BossID:           def.ID,

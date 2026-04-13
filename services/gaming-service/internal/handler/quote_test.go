@@ -141,6 +141,9 @@ func (s *quoteStorer) GetDefeatedBossIDs(_ context.Context, _ string) ([]string,
 func (s *quoteStorer) GetChapterMastery(_ context.Context, _ string, _ []string) (float64, error) {
 	return 0.0, nil
 }
+func (s *quoteStorer) GetChapterMasteryBatch(_ context.Context, _ string, _ map[string][]string) (map[string]float64, error) {
+	return map[string]float64{}, nil
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 
