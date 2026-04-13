@@ -3,6 +3,15 @@
 All database interaction is replaced with AsyncMock fixtures so no real
 Postgres instance is required.  JWT auth is overridden where appropriate to
 isolate route logic from infrastructure.
+
+Covers:
+  - GET /v1/analytics/student/{id}/overview
+  - GET /v1/analytics/student/{id}/quiz-breakdown
+  - GET /v1/analytics/student/{id}/activity
+  - GET /v1/analytics/student/{id}/mastery
+  - GET /v1/analytics/student/{id}/upcoming-reviews
+  - Unit tests for helper functions: _check_self_or_raise, _mastery_level,
+    _review_priority, _review_interval
 """
 from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock
@@ -350,3 +359,319 @@ class TestCheckSelfOrRaise:
         with pytest.raises(HTTPException) as exc_info:
             _check_self_or_raise(OTHER_USER_ID, TEST_USER_ID)
         assert exc_info.value.status_code == 403
+
+
+# ── /mastery ─────────────────────────────────────────────────────────────────
+
+class TestMastery:
+    """Tests for GET /v1/analytics/student/{user_id}/mastery."""
+
+    def _setup(self, rows):
+        """Override dependencies and return a configured TestClient.
+
+        Args:
+            rows: List of dicts to return from the quiz_results aggregate query.
+
+        Returns:
+            TestClient with DB and auth overrides applied.
+        """
+        app.dependency_overrides[get_db] = make_db_override([_mapping_result(rows)])
+        app.dependency_overrides[require_auth] = lambda: TEST_USER_ID
+        return TestClient(app)
+
+    def teardown_method(self):
+        """Remove all dependency overrides after each test."""
+        app.dependency_overrides.clear()
+
+    def test_mastery_with_data_returns_concepts(self):
+        """Returns one ConceptMastery entry per topic row."""
+        rows = [
+            {"topic": "Algebra", "total": 10, "correct": 9},
+            {"topic": "Calculus", "total": 10, "correct": 6},
+            {"topic": "Geometry", "total": 10, "correct": 4},
+        ]
+        client = self._setup(rows)
+
+        resp = client.get(
+            f"/v1/analytics/student/{TEST_USER_ID}/mastery",
+            headers=auth_headers(),
+        )
+
+        assert resp.status_code == 200
+        concepts = resp.json()["concepts"]
+        assert len(concepts) == 3
+
+    def test_mastery_level_mastered(self):
+        """Accuracy >= 90% maps to 'mastered'."""
+        rows = [{"topic": "Algebra", "total": 10, "correct": 9}]
+        client = self._setup(rows)
+
+        resp = client.get(
+            f"/v1/analytics/student/{TEST_USER_ID}/mastery",
+            headers=auth_headers(),
+        )
+
+        concept = resp.json()["concepts"][0]
+        assert concept["mastery_level"] == "mastered"
+        assert concept["accuracy_pct"] == 90.0
+
+    def test_mastery_level_strong(self):
+        """70% ≤ accuracy < 90% maps to 'strong'."""
+        rows = [{"topic": "Calculus", "total": 10, "correct": 8}]
+        client = self._setup(rows)
+
+        resp = client.get(
+            f"/v1/analytics/student/{TEST_USER_ID}/mastery",
+            headers=auth_headers(),
+        )
+
+        assert resp.json()["concepts"][0]["mastery_level"] == "strong"
+
+    def test_mastery_level_developing(self):
+        """50% ≤ accuracy < 70% maps to 'developing'."""
+        rows = [{"topic": "Physics", "total": 10, "correct": 6}]
+        client = self._setup(rows)
+
+        resp = client.get(
+            f"/v1/analytics/student/{TEST_USER_ID}/mastery",
+            headers=auth_headers(),
+        )
+
+        assert resp.json()["concepts"][0]["mastery_level"] == "developing"
+
+    def test_mastery_level_weak(self):
+        """Accuracy < 50% maps to 'weak'."""
+        rows = [{"topic": "Chemistry", "total": 10, "correct": 4}]
+        client = self._setup(rows)
+
+        resp = client.get(
+            f"/v1/analytics/student/{TEST_USER_ID}/mastery",
+            headers=auth_headers(),
+        )
+
+        assert resp.json()["concepts"][0]["mastery_level"] == "weak"
+
+    def test_mastery_empty_when_no_quiz_data(self):
+        """Returns empty list when the student has no quiz_results."""
+        client = self._setup([])
+
+        resp = client.get(
+            f"/v1/analytics/student/{TEST_USER_ID}/mastery",
+            headers=auth_headers(),
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["concepts"] == []
+
+    def test_mastery_forbidden_for_other_user(self):
+        """Returns 403 when caller requests another user's mastery data."""
+        app.dependency_overrides[get_db] = make_db_override([])
+        app.dependency_overrides[require_auth] = lambda: OTHER_USER_ID
+        client = TestClient(app)
+
+        resp = client.get(
+            f"/v1/analytics/student/{TEST_USER_ID}/mastery",
+            headers=auth_headers(OTHER_USER_ID),
+        )
+
+        assert resp.status_code == 403
+
+
+# ── /upcoming-reviews ─────────────────────────────────────────────────────────
+
+class TestUpcomingReviews:
+    """Tests for GET /v1/analytics/student/{user_id}/upcoming-reviews."""
+
+    def _setup(self, rows):
+        """Override dependencies and return a configured TestClient.
+
+        Args:
+            rows: List of dicts with topic, total, correct, last_attempted keys.
+
+        Returns:
+            TestClient with DB and auth overrides applied.
+        """
+        app.dependency_overrides[get_db] = make_db_override([_mapping_result(rows)])
+        app.dependency_overrides[require_auth] = lambda: TEST_USER_ID
+        return TestClient(app)
+
+    def teardown_method(self):
+        """Remove all dependency overrides after each test."""
+        app.dependency_overrides.clear()
+
+    def test_upcoming_reviews_empty_when_no_data(self):
+        """Returns empty list when the student has no quiz_results."""
+        client = self._setup([])
+
+        resp = client.get(
+            f"/v1/analytics/student/{TEST_USER_ID}/upcoming-reviews",
+            headers=auth_headers(),
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["reviews"] == []
+
+    def test_upcoming_reviews_overdue_gets_urgent(self):
+        """A review that is past due is marked 'urgent'."""
+        past_date = date.today() - timedelta(days=10)
+        rows = [{"topic": "Algebra", "total": 10, "correct": 4, "last_attempted": past_date}]
+        client = self._setup(rows)
+
+        resp = client.get(
+            f"/v1/analytics/student/{TEST_USER_ID}/upcoming-reviews",
+            headers=auth_headers(),
+        )
+
+        review = resp.json()["reviews"][0]
+        assert review["priority"] == "urgent"
+        assert review["days_overdue"] >= 0
+
+    def test_upcoming_reviews_due_today_gets_urgent(self):
+        """A concept due exactly today is marked 'urgent'."""
+        # weak accuracy → 1-day interval; last_attempted = yesterday
+        yesterday = date.today() - timedelta(days=1)
+        rows = [{"topic": "Physics", "total": 10, "correct": 3, "last_attempted": yesterday}]
+        client = self._setup(rows)
+
+        resp = client.get(
+            f"/v1/analytics/student/{TEST_USER_ID}/upcoming-reviews",
+            headers=auth_headers(),
+        )
+
+        review = resp.json()["reviews"][0]
+        assert review["priority"] == "urgent"
+        assert review["days_overdue"] == 0
+
+    def test_upcoming_reviews_soon_due_within_3_days(self):
+        """A review due within 3 days is marked 'soon'."""
+        # mastered accuracy → 14-day interval; last_attempted = 13 days ago → due tomorrow
+        last = date.today() - timedelta(days=13)
+        rows = [{"topic": "Calculus", "total": 10, "correct": 10, "last_attempted": last}]
+        client = self._setup(rows)
+
+        resp = client.get(
+            f"/v1/analytics/student/{TEST_USER_ID}/upcoming-reviews",
+            headers=auth_headers(),
+        )
+
+        review = resp.json()["reviews"][0]
+        assert review["priority"] == "soon"
+
+    def test_upcoming_reviews_ordered_most_urgent_first(self):
+        """Reviews are sorted with the most overdue entry first."""
+        today = date.today()
+        rows = [
+            # Due in 6 days (upcoming)
+            {"topic": "Chemistry", "total": 10, "correct": 10, "last_attempted": today - timedelta(days=8)},
+            # Overdue by 5 days (urgent)
+            {"topic": "Algebra", "total": 10, "correct": 3, "last_attempted": today - timedelta(days=6)},
+        ]
+        client = self._setup(rows)
+
+        resp = client.get(
+            f"/v1/analytics/student/{TEST_USER_ID}/upcoming-reviews",
+            headers=auth_headers(),
+        )
+
+        reviews = resp.json()["reviews"]
+        assert reviews[0]["concept"] == "Algebra"
+        assert reviews[1]["concept"] == "Chemistry"
+
+    def test_upcoming_reviews_forbidden_for_other_user(self):
+        """Returns 403 when caller requests another user's reviews."""
+        app.dependency_overrides[get_db] = make_db_override([])
+        app.dependency_overrides[require_auth] = lambda: OTHER_USER_ID
+        client = TestClient(app)
+
+        resp = client.get(
+            f"/v1/analytics/student/{TEST_USER_ID}/upcoming-reviews",
+            headers=auth_headers(OTHER_USER_ID),
+        )
+
+        assert resp.status_code == 403
+
+
+# ── Helper unit tests ─────────────────────────────────────────────────────────
+
+class TestMasteryLevel:
+    """Unit tests for the _mastery_level helper function."""
+
+    def test_below_50_is_weak(self):
+        """Accuracy below 50% returns 'weak'."""
+        from app.routes.student import _mastery_level
+        assert _mastery_level(0.0) == "weak"
+        assert _mastery_level(49.9) == "weak"
+
+    def test_50_to_69_is_developing(self):
+        """Accuracy in [50, 70) returns 'developing'."""
+        from app.routes.student import _mastery_level
+        assert _mastery_level(50.0) == "developing"
+        assert _mastery_level(69.9) == "developing"
+
+    def test_70_to_89_is_strong(self):
+        """Accuracy in [70, 90) returns 'strong'."""
+        from app.routes.student import _mastery_level
+        assert _mastery_level(70.0) == "strong"
+        assert _mastery_level(89.9) == "strong"
+
+    def test_90_and_above_is_mastered(self):
+        """Accuracy >= 90% returns 'mastered'."""
+        from app.routes.student import _mastery_level
+        assert _mastery_level(90.0) == "mastered"
+        assert _mastery_level(100.0) == "mastered"
+
+
+class TestReviewPriority:
+    """Unit tests for the _review_priority helper function."""
+
+    def test_positive_days_overdue_is_urgent(self):
+        """Past-due reviews (days_overdue > 0) are 'urgent'."""
+        from app.routes.student import _review_priority
+        assert _review_priority(1) == "urgent"
+        assert _review_priority(10) == "urgent"
+
+    def test_zero_days_overdue_is_urgent(self):
+        """Due-today reviews (days_overdue == 0) are 'urgent'."""
+        from app.routes.student import _review_priority
+        assert _review_priority(0) == "urgent"
+
+    def test_minus_1_to_minus_3_is_soon(self):
+        """Reviews due within 3 days are 'soon'."""
+        from app.routes.student import _review_priority
+        assert _review_priority(-1) == "soon"
+        assert _review_priority(-3) == "soon"
+
+    def test_minus_4_and_beyond_is_upcoming(self):
+        """Reviews due 4+ days away are 'upcoming'."""
+        from app.routes.student import _review_priority
+        assert _review_priority(-4) == "upcoming"
+        assert _review_priority(-30) == "upcoming"
+
+
+class TestReviewInterval:
+    """Unit tests for the _review_interval helper function."""
+
+    def test_weak_interval_is_1(self):
+        """'weak' mastery level returns a 1-day interval."""
+        from app.routes.student import _review_interval
+        assert _review_interval("weak") == 1
+
+    def test_developing_interval_is_3(self):
+        """'developing' mastery level returns a 3-day interval."""
+        from app.routes.student import _review_interval
+        assert _review_interval("developing") == 3
+
+    def test_strong_interval_is_7(self):
+        """'strong' mastery level returns a 7-day interval."""
+        from app.routes.student import _review_interval
+        assert _review_interval("strong") == 7
+
+    def test_mastered_interval_is_14(self):
+        """'mastered' mastery level returns a 14-day interval."""
+        from app.routes.student import _review_interval
+        assert _review_interval("mastered") == 14
+
+    def test_unknown_level_defaults_to_1(self):
+        """Unknown mastery levels default to a 1-day interval."""
+        from app.routes.student import _review_interval
+        assert _review_interval("unknown") == 1

@@ -1,9 +1,16 @@
 """Student analytics endpoints.
 
-Provides three read-only endpoints that aggregate a student's learning data
+Provides five read-only endpoints that aggregate a student's learning data
 from the gaming_profiles, quiz_results, and interactions tables.  All
 endpoints require a valid JWT and enforce that callers may only read their own
 data (self-access only).
+
+Endpoints:
+  GET /{user_id}/overview           - Level, XP, streaks, accuracy, session counts
+  GET /{user_id}/quiz-breakdown     - Per-topic quiz accuracy
+  GET /{user_id}/activity           - Message activity over last 30 days
+  GET /{user_id}/mastery            - Per-concept mastery level and accuracy
+  GET /{user_id}/upcoming-reviews   - SM-2-style spaced-review schedule per concept
 """
 from datetime import date, timedelta
 
@@ -301,3 +308,240 @@ async def get_activity(
         days.append(DayActivity(date=d, messages=rows.get(d, 0)))
 
     return ActivityHistory(days=days)
+
+
+# ── Mastery endpoint ──────────────────────────────────────────────────────────
+
+# Accuracy thresholds that define each mastery tier.
+_MASTERY_WEAK       = 50.0   # accuracy < 50%
+_MASTERY_DEVELOPING = 70.0   # accuracy < 70%
+_MASTERY_STRONG     = 90.0   # accuracy < 90%
+# accuracy >= 90%  → mastered
+
+
+def _mastery_level(accuracy_pct: float) -> str:
+    """Map an accuracy percentage to a mastery tier label.
+
+    Args:
+        accuracy_pct: Percentage of correct answers in [0.0, 100.0].
+
+    Returns:
+        One of ``"weak"``, ``"developing"``, ``"strong"``, or ``"mastered"``.
+    """
+    if accuracy_pct < _MASTERY_WEAK:
+        return "weak"
+    if accuracy_pct < _MASTERY_DEVELOPING:
+        return "developing"
+    if accuracy_pct < _MASTERY_STRONG:
+        return "strong"
+    return "mastered"
+
+
+class ConceptMastery(BaseModel):
+    """Mastery data for a single concept/topic."""
+
+    concept: str
+    correct: int
+    total: int
+    accuracy_pct: float
+    mastery_level: str  # "weak" | "developing" | "strong" | "mastered"
+
+
+class MasteryData(BaseModel):
+    """Mastery breakdown across all concepts a student has attempted."""
+
+    concepts: list[ConceptMastery]
+
+
+@router.get("/{user_id}/mastery", response_model=MasteryData)
+async def get_mastery(
+    user_id: str,
+    caller: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+) -> MasteryData:
+    """Return per-concept mastery levels for a student.
+
+    Aggregates quiz_results by topic and classifies each into one of four
+    mastery tiers based on accuracy:
+      - weak       (accuracy < 50%)
+      - developing (50% ≤ accuracy < 70%)
+      - strong     (70% ≤ accuracy < 90%)
+      - mastered   (accuracy ≥ 90%)
+
+    Args:
+        user_id: Target student UUID (path parameter).
+        caller: Authenticated user ID from JWT (injected by require_auth).
+        db: Async SQLAlchemy session (injected by get_db).
+
+    Returns:
+        MasteryData with a list of ConceptMastery entries ordered by attempt
+        volume descending, capped at 30 concepts.
+
+    Raises:
+        HTTPException: 401 if the JWT is missing or invalid.
+        HTTPException: 403 if caller != user_id.
+    """
+    _check_self_or_raise(caller, user_id)
+
+    result = await db.execute(
+        text("""
+            SELECT
+                topic,
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE is_correct) AS correct
+            FROM quiz_results
+            WHERE user_id = :uid
+            GROUP BY topic
+            ORDER BY total DESC
+            LIMIT 30
+        """),
+        {"uid": user_id},
+    )
+    rows = result.mappings().all()
+
+    concepts = []
+    for row in rows:
+        total = int(row["total"])
+        correct = int(row["correct"])
+        accuracy = round(correct / total * 100, 1) if total > 0 else 0.0
+        concepts.append(
+            ConceptMastery(
+                concept=row["topic"],
+                correct=correct,
+                total=total,
+                accuracy_pct=accuracy,
+                mastery_level=_mastery_level(accuracy),
+            )
+        )
+    return MasteryData(concepts=concepts)
+
+
+# ── Upcoming-reviews endpoint ─────────────────────────────────────────────────
+
+# Days until next review by mastery tier (simplified SM-2-style intervals).
+_REVIEW_INTERVAL: dict[str, int] = {
+    "weak": 1,
+    "developing": 3,
+    "strong": 7,
+    "mastered": 14,
+}
+
+
+class ReviewItem(BaseModel):
+    """A single scheduled review for one concept."""
+
+    concept: str
+    due_date: str    # ISO 8601 date string (YYYY-MM-DD)
+    days_overdue: int  # negative = due in the future; 0 = due today; positive = overdue
+    priority: str    # "urgent" | "soon" | "upcoming"
+
+
+class UpcomingReviews(BaseModel):
+    """Scheduled reviews for the student, ordered by urgency."""
+
+    reviews: list[ReviewItem]
+
+
+def _review_priority(days_overdue: int) -> str:
+    """Map days_overdue to a display priority label.
+
+    Args:
+        days_overdue: Signed integer — negative = future, 0 = today, positive = past-due.
+
+    Returns:
+        ``"urgent"`` when overdue or due today, ``"soon"`` when due within 3 days,
+        ``"upcoming"`` otherwise.
+    """
+    if days_overdue >= 0:
+        return "urgent"
+    if days_overdue >= -3:
+        return "soon"
+    return "upcoming"
+
+
+@router.get("/{user_id}/upcoming-reviews", response_model=UpcomingReviews)
+async def get_upcoming_reviews(
+    user_id: str,
+    caller: str = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+) -> UpcomingReviews:
+    """Return a spaced-repetition review schedule for a student.
+
+    For each concept the student has attempted, computes a due date by adding
+    the mastery-tier review interval to the date of the student's most recent
+    attempt.  Reviews are ordered from most-urgent to least-urgent and capped
+    at 20 items.
+
+    Review intervals by mastery tier:
+      - weak       → 1 day
+      - developing → 3 days
+      - strong     → 7 days
+      - mastered   → 14 days
+
+    Args:
+        user_id: Target student UUID (path parameter).
+        caller: Authenticated user ID from JWT (injected by require_auth).
+        db: Async SQLAlchemy session (injected by get_db).
+
+    Returns:
+        UpcomingReviews ordered by urgency (most overdue first).
+
+    Raises:
+        HTTPException: 401 if the JWT is missing or invalid.
+        HTTPException: 403 if caller != user_id.
+    """
+    _check_self_or_raise(caller, user_id)
+
+    result = await db.execute(
+        text("""
+            SELECT
+                topic,
+                COUNT(*) AS total,
+                COUNT(*) FILTER (WHERE is_correct) AS correct,
+                MAX(answered_at)::date AS last_attempted
+            FROM quiz_results
+            WHERE user_id = :uid
+            GROUP BY topic
+            ORDER BY MAX(answered_at) ASC
+            LIMIT 20
+        """),
+        {"uid": user_id},
+    )
+    rows = result.mappings().all()
+
+    today = date.today()
+    reviews: list[ReviewItem] = []
+    for row in rows:
+        total = int(row["total"])
+        correct = int(row["correct"])
+        accuracy = round(correct / total * 100, 1) if total > 0 else 0.0
+        level = _mastery_level(accuracy)
+        interval = _review_interval(level)
+        last_attempted: date = row["last_attempted"] or today
+        due = last_attempted + timedelta(days=interval)
+        days_overdue = (today - due).days
+        reviews.append(
+            ReviewItem(
+                concept=row["topic"],
+                due_date=str(due),
+                days_overdue=days_overdue,
+                priority=_review_priority(days_overdue),
+            )
+        )
+
+    # Sort: most urgent (highest days_overdue) first
+    reviews.sort(key=lambda r: r.days_overdue, reverse=True)
+    return UpcomingReviews(reviews=reviews)
+
+
+def _review_interval(mastery_level: str) -> int:
+    """Return the spaced-repetition review interval in days for a mastery level.
+
+    Args:
+        mastery_level: One of ``"weak"``, ``"developing"``, ``"strong"``,
+            ``"mastered"``.
+
+    Returns:
+        Number of days until the next review.  Defaults to 1 for unknown levels.
+    """
+    return _REVIEW_INTERVAL.get(mastery_level, 1)

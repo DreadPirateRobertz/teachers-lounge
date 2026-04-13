@@ -20,6 +20,13 @@ export default function AppHeader() {
           <span>📊</span>
           <span>Analytics</span>
         </Link>
+        <Link
+          href="/adaptive"
+          className="hidden sm:flex items-center gap-1 text-[10px] font-mono text-text-dim hover:text-neon-green transition-colors border border-border-dim rounded-full px-2 py-0.5 hover:border-neon-green/40"
+        >
+          <span>🧠</span>
+          <span>Adaptive</span>
+        </Link>
       </div>
 
       {/* Prof Nova status */}
