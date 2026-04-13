@@ -47,6 +47,7 @@ from .gateway import get_gateway_client
 from .history import append_message, get_session
 from .knowledge_model import get_dials, get_due_review_prompt, update_learning_profile_dials
 from .models import MessageRequest
+from .rag import reformulate_query
 from .rag_agent import PROFESSOR_NOVA_SYSTEM_PROMPT, build_rag_context
 from .search_client import fetch_diagram_chunks
 from .style_detector import build_style_prompt_section, detect_signals, update_dials
@@ -273,9 +274,15 @@ async def send_message(
     source_chunks = []
     diagram_results = []
     if session.course_id is not None:
+        # Rewrite pronoun-heavy follow-ups into a self-contained retrieval
+        # query so the Search Service doesn't lose antecedents at embedding
+        # time. Falls back to body.content on any gateway failure.
+        retrieval_question = await reformulate_query(
+            body.content, history[-4:], client=client,
+        )
         base_prompt, source_chunks = await build_rag_context(
             student_id=user.user_id, session_id=session_id,
-            question=body.content, course_id=session.course_id, db=db,
+            question=retrieval_question, course_id=session.course_id, db=db,
         )
         if _VISUAL_QUERY_PATTERNS.search(body.content):
             diagram_results = await fetch_diagram_chunks(
