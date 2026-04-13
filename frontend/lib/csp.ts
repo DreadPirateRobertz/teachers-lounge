@@ -25,9 +25,7 @@
  *   HTTP `Content-Security-Policy` header.
  */
 export function buildCsp(nonce?: string): string {
-  const scriptSrc = nonce
-    ? `'self' 'nonce-${nonce}' 'strict-dynamic'`
-    : "'self'"
+  const scriptSrc = nonce ? `'self' 'nonce-${nonce}' 'strict-dynamic'` : "'self'"
 
   const directives = [
     "default-src 'self'",
