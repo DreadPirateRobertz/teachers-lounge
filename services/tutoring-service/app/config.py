@@ -34,7 +34,17 @@ class Settings(BaseSettings):
     # Conversation limits
     # "last 10 exchanges" = 10 student messages + 10 tutor replies = 20 messages
     max_history_messages: int = 20
-    max_message_length: int = 8000     # chars per student message
+    max_message_length: int = 8000  # chars per student message
+
+    # Context window management
+    # Sliding window: keep the last N full turns (student + tutor pairs) in the
+    # active prompt.  Older turns beyond this window are summarised instead.
+    context_window_max_turns: int = 20
+    # How many messages to fetch from DB when checking for summarisable history.
+    # Should be > context_window_max_turns * 2 so the older portion is visible.
+    context_summary_threshold: int = 60
+    # Approximate model context limit in tokens (used for 80% utilisation warnings).
+    model_context_limit_tokens: int = 128_000
 
     # User Service — for learning profile reads/writes
     user_service_url: str = "http://user-service.teachers-lounge.svc.cluster.local:8080"
@@ -48,10 +58,10 @@ class Settings(BaseSettings):
     search_service_url: str = "http://search-service.teachers-lounge.svc.cluster.local:8080"
 
     # RAG pipeline
-    rag_chunk_limit: int = 8   # max curriculum chunks retrieved per query
+    rag_chunk_limit: int = 8  # max curriculum chunks retrieved per query
 
     # Diagram retrieval (Phase 6 CLIP search)
-    diagram_limit: int = 1     # diagrams embedded per tutor response
+    diagram_limit: int = 1  # diagrams embedded per tutor response
     # GCS signed URL expiry in seconds (used when generating pre-signed URLs)
     gcs_signed_url_expiry: int = 3600
 

@@ -1,4 +1,5 @@
 """Conversation history — CRUD helpers for sessions and interactions."""
+
 from uuid import UUID, uuid4
 
 from sqlalchemy import select
@@ -48,25 +49,31 @@ async def get_history(
     session_id: UUID,
     limit: int = 20,
 ) -> list[Interaction]:
-    """Load interaction history for a session.
+    """Load the most recent interaction history for a session.
+
+    Fetches the newest ``limit`` messages via a descending index scan and
+    reverses them so the caller receives interactions in ascending
+    (oldest-first) order — the format expected by the chat message builder.
 
     Args:
         db: Async SQLAlchemy session.
         session_id: UUID of the tutoring session.
         limit: Maximum messages to return. Defaults to 20 (10 exchanges).
             Uses the composite index on (session_id, created_at DESC) for
-            efficient pagination without full-table sort.
+            efficient pagination without a full-table sort.
 
     Returns:
-        Interactions ordered oldest-first (ascending created_at).
+        Up to ``limit`` most-recent interactions ordered oldest-first.
     """
     result = await db.execute(
         select(Interaction)
         .where(Interaction.session_id == session_id)
-        .order_by(Interaction.created_at)
+        .order_by(Interaction.created_at.desc())
         .limit(limit)
     )
-    return list(result.scalars().all())
+    rows = list(result.scalars().all())
+    rows.reverse()  # return oldest-first for message-list construction
+    return rows
 
 
 async def append_message(
