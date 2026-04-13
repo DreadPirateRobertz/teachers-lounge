@@ -1,9 +1,19 @@
-"""Redis cache — session history snapshots.
+"""Redis cache — session history snapshots and cross-student insights.
 
-Caches the last N session IDs (by user) and their history payloads
-for session_history_cache_ttl seconds.  Cache is best-effort: all errors
-are silently swallowed so a Redis outage never breaks the tutoring flow.
+Session history:
+  Caches the last N session IDs (by user) and their history payloads
+  for session_history_cache_ttl seconds.
+
+Cross-student insights:
+  Caches aggregate per-concept insights (e.g. "72% of students struggle here")
+  for INSIGHT_TTL seconds (6 h).  These are written by an offline analytics job
+  that queries BigQuery; the tutoring service only reads them.  Missing entries
+  are silently skipped so the pipeline degrades gracefully.
+
+All cache operations are best-effort: errors are silently swallowed so a Redis
+outage never breaks the tutoring flow.
 """
+
 from __future__ import annotations
 
 import json
@@ -12,6 +22,7 @@ from typing import Any
 from uuid import UUID
 
 import redis.asyncio as aioredis
+from prometheus_client import Counter
 
 from .config import settings
 
@@ -36,8 +47,24 @@ _redis: aioredis.Redis | None = None
 # Key schema
 _SESSION_HISTORY_PREFIX = "tutoring:session_history:"
 _USER_SESSIONS_PREFIX = "tutoring:user_sessions:"
+_INSIGHT_PREFIX = "tutoring:insight:"
 # Keep the last 5 session IDs per user in a Redis list
 _MAX_CACHED_SESSIONS_PER_USER = 5
+# Cross-student insight cache lifetime (6 hours — matches BigQuery job cadence)
+_INSIGHT_TTL = 6 * 3600
+
+# ── Cache hit/miss counters (Prometheus) ─────────────────────────────────────
+
+_cache_hits = Counter(
+    "tl_cache_hits_total",
+    "Total Redis cache hits, labelled by key namespace.",
+    labelnames=["namespace"],
+)
+_cache_misses = Counter(
+    "tl_cache_misses_total",
+    "Total Redis cache misses (including errors), labelled by key namespace.",
+    labelnames=["namespace"],
+)
 
 
 async def init_cache() -> None:
@@ -67,6 +94,7 @@ async def close_cache() -> None:
 
 
 # ── Session history cache ─────────────────────────────────────────────────────
+
 
 def _history_key(session_id: UUID) -> str:
     """Return the Redis key for a session's message history.
@@ -106,9 +134,12 @@ async def get_cached_history(session_id: UUID) -> list[dict[str, Any]] | None:
     try:
         raw = await _redis.get(_history_key(session_id))
         if raw is None:
+            _cache_misses.labels(namespace="session_history").inc()
             return None
+        _cache_hits.labels(namespace="session_history").inc()
         return json.loads(raw)
     except Exception as exc:  # noqa: BLE001
+        _cache_misses.labels(namespace="session_history").inc()
         log.debug("cache get_history miss/error for %s: %s", _log_safe(session_id), exc)
         return None
 
@@ -157,3 +188,74 @@ async def invalidate_session_history(session_id: UUID) -> None:
         await _redis.delete(_history_key(session_id))
     except Exception as exc:  # noqa: BLE001
         log.debug("cache invalidate error for %s: %s", _log_safe(session_id), exc)
+
+
+# ── Cross-student insight cache ───────────────────────────────────────────────
+
+def _insight_key(concept_name: str) -> str:
+    """Return the Redis key for cross-student insights about a concept.
+
+    The concept name is lower-cased and whitespace-normalised so that minor
+    capitalisation differences do not cause cache misses.
+
+    Args:
+        concept_name: Human-readable concept name (e.g. "Mitosis").
+
+    Returns:
+        Redis key string under the insight prefix.
+    """
+    normalised = concept_name.lower().strip()
+    return f"{_INSIGHT_PREFIX}{normalised}"
+
+
+async def get_cross_student_insights(concept_name: str) -> list[str] | None:
+    """Return cached cross-student insights for a concept, or None on miss / error.
+
+    Insights are aggregate observations produced offline by a BigQuery analytics
+    job and written into Redis by that job.  The tutoring service is a read-only
+    consumer: it surfaces insights in the system prompt so Professor Nova can
+    mention common struggle points and effective explanation styles.
+
+    Args:
+        concept_name: Human-readable name of the concept being discussed.
+
+    Returns:
+        List of insight strings if a cached entry exists, otherwise None.
+    """
+    if _redis is None:
+        return None
+    try:
+        raw = await _redis.get(_insight_key(concept_name))
+        if raw is None:
+            _cache_misses.labels(namespace="insight").inc()
+            return None
+        _cache_hits.labels(namespace="insight").inc()
+        return json.loads(raw)
+    except Exception as exc:  # noqa: BLE001
+        _cache_misses.labels(namespace="insight").inc()
+        log.debug("cache get_insight miss/error for %s: %s", _log_safe(concept_name), exc)
+        return None
+
+
+async def set_cross_student_insights(concept_name: str, insights: list[str]) -> None:
+    """Cache cross-student insights for a concept with a 6-hour TTL.
+
+    Intended to be called by the offline BigQuery analytics job, not by the
+    tutoring service request path.  Provided here so tests and scripts can
+    seed the cache without coupling to the analytics job internals.
+
+    Args:
+        concept_name: Human-readable name of the concept.
+        insights: List of insight strings to cache (e.g. aggregated struggle %,
+            effective explanation styles, common misconceptions).
+    """
+    if _redis is None:
+        return
+    try:
+        await _redis.set(
+            _insight_key(concept_name),
+            json.dumps(insights),
+            ex=_INSIGHT_TTL,
+        )
+    except Exception as exc:  # noqa: BLE001
+        log.debug("cache set_insight error for %s: %s", _log_safe(concept_name), exc)

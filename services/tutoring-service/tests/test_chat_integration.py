@@ -9,6 +9,7 @@ Covers:
   POST /v1/sessions/{id}/messages — RAG path: sources event emitted
   POST /v1/chat                   — plain-text stream, happy path + 401
 """
+
 import json
 import time
 import uuid
@@ -73,13 +74,12 @@ def auth_headers(user_id):
 
 @pytest_asyncio.fixture()
 async def client():
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as ac:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac
 
 
 # ── SSE stream — no course (base Professor Nova, no RAG) ────────────────────
+
 
 @pytest.mark.asyncio
 async def test_sse_stream_happy_path(client, auth_headers, user_id, session_id):
@@ -107,12 +107,17 @@ async def test_sse_stream_happy_path(client, auth_headers, user_id, session_id):
         patch("app.chat.get_history", AsyncMock(return_value=[])),
         patch("app.chat.append_message", AsyncMock()),
         patch("app.chat.get_gateway_client", return_value=fake_openai),
-        patch("app.chat.get_dials", AsyncMock(return_value={
-            "active_reflective": 0.0,
-            "sensing_intuitive": 0.0,
-            "visual_verbal": 0.0,
-            "sequential_global": 0.0,
-        })),
+        patch(
+            "app.chat.get_dials",
+            AsyncMock(
+                return_value={
+                    "active_reflective": 0.0,
+                    "sensing_intuitive": 0.0,
+                    "visual_verbal": 0.0,
+                    "sequential_global": 0.0,
+                }
+            ),
+        ),
         patch("app.chat.update_learning_profile_dials", AsyncMock()),
         patch("app.chat.get_due_review_prompt", AsyncMock(return_value=None)),
     ):
@@ -126,7 +131,7 @@ async def test_sse_stream_happy_path(client, auth_headers, user_id, session_id):
     assert "text/event-stream" in resp.headers["content-type"]
 
     events = [
-        json.loads(line[len("data: "):])
+        json.loads(line[len("data: ") :])
         for line in resp.text.splitlines()
         if line.startswith("data: ")
     ]
@@ -142,6 +147,7 @@ async def test_sse_stream_happy_path(client, auth_headers, user_id, session_id):
 
 
 # ── SSE stream — with course_id → RAG path with sources event ───────────────
+
 
 @pytest.mark.asyncio
 async def test_sse_stream_rag_emits_sources_event(client, auth_headers, user_id, session_id):
@@ -182,13 +188,20 @@ async def test_sse_stream_rag_emits_sources_event(client, auth_headers, user_id,
         patch("app.chat.get_history", AsyncMock(return_value=[])),
         patch("app.chat.append_message", AsyncMock()),
         patch("app.chat.get_gateway_client", return_value=fake_openai),
-        patch("app.chat.build_rag_context", AsyncMock(return_value=("system prompt", [fake_chunk]))),
-        patch("app.chat.get_dials", AsyncMock(return_value={
-            "active_reflective": 0.0,
-            "sensing_intuitive": 0.0,
-            "visual_verbal": 0.0,
-            "sequential_global": 0.0,
-        })),
+        patch(
+            "app.chat.build_rag_context", AsyncMock(return_value=("system prompt", [fake_chunk]))
+        ),
+        patch(
+            "app.chat.get_dials",
+            AsyncMock(
+                return_value={
+                    "active_reflective": 0.0,
+                    "sensing_intuitive": 0.0,
+                    "visual_verbal": 0.0,
+                    "sequential_global": 0.0,
+                }
+            ),
+        ),
         patch("app.chat.update_learning_profile_dials", AsyncMock()),
         patch("app.chat.get_due_review_prompt", AsyncMock(return_value=None)),
     ):
@@ -200,7 +213,7 @@ async def test_sse_stream_rag_emits_sources_event(client, auth_headers, user_id,
 
     assert resp.status_code == 200
     events = [
-        json.loads(line[len("data: "):])
+        json.loads(line[len("data: ") :])
         for line in resp.text.splitlines()
         if line.startswith("data: ")
     ]
@@ -244,12 +257,17 @@ async def test_sse_stream_no_sources_event_when_chunks_empty(
         patch("app.chat.append_message", AsyncMock()),
         patch("app.chat.get_gateway_client", return_value=fake_openai),
         patch("app.chat.build_rag_context", AsyncMock(return_value=("system prompt", []))),
-        patch("app.chat.get_dials", AsyncMock(return_value={
-            "active_reflective": 0.0,
-            "sensing_intuitive": 0.0,
-            "visual_verbal": 0.0,
-            "sequential_global": 0.0,
-        })),
+        patch(
+            "app.chat.get_dials",
+            AsyncMock(
+                return_value={
+                    "active_reflective": 0.0,
+                    "sensing_intuitive": 0.0,
+                    "visual_verbal": 0.0,
+                    "sequential_global": 0.0,
+                }
+            ),
+        ),
         patch("app.chat.update_learning_profile_dials", AsyncMock()),
         patch("app.chat.get_due_review_prompt", AsyncMock(return_value=None)),
     ):
@@ -260,7 +278,7 @@ async def test_sse_stream_no_sources_event_when_chunks_empty(
         )
 
     events = [
-        json.loads(line[len("data: "):])
+        json.loads(line[len("data: ") :])
         for line in resp.text.splitlines()
         if line.startswith("data: ")
     ]
@@ -269,6 +287,7 @@ async def test_sse_stream_no_sources_event_when_chunks_empty(
 
 
 # ── SSE stream — review_reminder event ──────────────────────────────────────
+
 
 @pytest.mark.asyncio
 async def test_sse_stream_emits_review_reminder_when_concepts_due(
@@ -297,12 +316,17 @@ async def test_sse_stream_emits_review_reminder_when_concepts_due(
         patch("app.chat.get_history", AsyncMock(return_value=[])),
         patch("app.chat.append_message", AsyncMock()),
         patch("app.chat.get_gateway_client", return_value=fake_openai),
-        patch("app.chat.get_dials", AsyncMock(return_value={
-            "active_reflective": 0.0,
-            "sensing_intuitive": 0.0,
-            "visual_verbal": 0.0,
-            "sequential_global": 0.0,
-        })),
+        patch(
+            "app.chat.get_dials",
+            AsyncMock(
+                return_value={
+                    "active_reflective": 0.0,
+                    "sensing_intuitive": 0.0,
+                    "visual_verbal": 0.0,
+                    "sequential_global": 0.0,
+                }
+            ),
+        ),
         patch("app.chat.update_learning_profile_dials", AsyncMock()),
         patch("app.chat.get_due_review_prompt", AsyncMock(return_value=reminder_text)),
     ):
@@ -314,7 +338,7 @@ async def test_sse_stream_emits_review_reminder_when_concepts_due(
 
     assert resp.status_code == 200
     events = [
-        json.loads(line[len("data: "):])
+        json.loads(line[len("data: ") :])
         for line in resp.text.splitlines()
         if line.startswith("data: ")
     ]
@@ -331,9 +355,11 @@ async def test_sse_stream_emits_review_reminder_when_concepts_due(
 
 # ── POST /v1/chat (stateless plain-text stream) ──────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_simple_chat_happy_path(client, auth_headers):
     """POST /v1/chat with valid JWT + messages array → plain-text chunked stream."""
+
     async def _fake_stream():
         for token in ["Photosynthesis", " is", " the", " process"]:
             yield _make_chunk(token)
@@ -369,6 +395,7 @@ async def test_simple_chat_requires_auth(client):
 
 # ── _chat_stream_generator error paths ──────────────────────────────────────
 
+
 @pytest.mark.asyncio
 async def test_sse_stream_api_connection_error_yields_fallback(
     client, auth_headers, user_id, session_id
@@ -381,9 +408,7 @@ async def test_sse_stream_api_connection_error_yields_fallback(
     fake_session.course_id = None
 
     fake_completions = AsyncMock()
-    fake_completions.create = AsyncMock(
-        side_effect=APIConnectionError(request=MagicMock())
-    )
+    fake_completions.create = AsyncMock(side_effect=APIConnectionError(request=MagicMock()))
     fake_openai = MagicMock()
     fake_openai.chat.completions = fake_completions
 
@@ -402,7 +427,7 @@ async def test_sse_stream_api_connection_error_yields_fallback(
 
     assert resp.status_code == 200
     events = [
-        json.loads(line[len("data: "):])
+        json.loads(line[len("data: ") :])
         for line in resp.text.splitlines()
         if line.startswith("data: ")
     ]
@@ -449,7 +474,7 @@ async def test_sse_stream_api_status_error_yields_fallback(
 
     assert resp.status_code == 200
     events = [
-        json.loads(line[len("data: "):])
+        json.loads(line[len("data: ") :])
         for line in resp.text.splitlines()
         if line.startswith("data: ")
     ]
@@ -488,7 +513,7 @@ async def test_sse_stream_unexpected_exception_yields_error_event(
 
     assert resp.status_code == 200
     events = [
-        json.loads(line[len("data: "):])
+        json.loads(line[len("data: ") :])
         for line in resp.text.splitlines()
         if line.startswith("data: ")
     ]
@@ -496,9 +521,7 @@ async def test_sse_stream_unexpected_exception_yields_error_event(
 
 
 @pytest.mark.asyncio
-async def test_sse_stream_emits_diagram_events(
-    client, auth_headers, user_id, session_id
-):
+async def test_sse_stream_emits_diagram_events(client, auth_headers, user_id, session_id):
     """When fetch_diagram_chunks returns results, diagram events are emitted."""
     from app.search_client import DiagramResult
 
@@ -548,7 +571,7 @@ async def test_sse_stream_emits_diagram_events(
 
     assert resp.status_code == 200
     events = [
-        json.loads(line[len("data: "):])
+        json.loads(line[len("data: ") :])
         for line in resp.text.splitlines()
         if line.startswith("data: ")
     ]
@@ -556,3 +579,156 @@ async def test_sse_stream_emits_diagram_events(
     assert len(diagram_events) == 1
     assert diagram_events[0]["diagram"]["diagram_id"] == diagram_id
     assert diagram_events[0]["diagram"]["figure_type"] == "diagram"
+
+
+# ── Context window: chat still works after 30+ turns ────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_chat_works_after_30_turns(client, auth_headers, user_id, session_id):
+    """Chat endpoint returns valid SSE stream when history has more than 30 turns.
+
+    Simulates a session with 62 historical messages (31 full turns), which
+    exceeds the default context_window_max_turns (20).  Verifies that:
+      - The sliding-window prune runs without error.
+      - The summarisation fallback is attempted for the older portion.
+      - A valid delta + done event stream is returned.
+    """
+    from unittest.mock import MagicMock
+
+    from app.orm import Interaction
+
+    fake_session = MagicMock()
+    fake_session.user_id = uuid.UUID(user_id)
+    fake_session.course_id = None
+
+    # Build 62 mock Interaction objects (31 student+tutor turns).
+    def _make_interaction(i: int) -> MagicMock:
+        msg = MagicMock(spec=Interaction)
+        msg.role = "student" if i % 2 == 0 else "tutor"
+        msg.content = f"Turn {i // 2} {'question' if i % 2 == 0 else 'answer'}."
+        return msg
+
+    long_history = [_make_interaction(i) for i in range(62)]
+
+    async def _fake_stream():
+        yield _make_chunk("Great")
+        yield _make_chunk(" question!")
+        yield _make_chunk(None)
+
+    fake_completions = AsyncMock()
+    # The first call is for summarisation (non-streaming), subsequent for chat.
+    summary_choice = MagicMock()
+    summary_choice.message.content = "The student reviewed basic algebra."
+    summary_response = MagicMock()
+    summary_response.choices = [summary_choice]
+
+    fake_completions.create = AsyncMock(side_effect=[summary_response, _fake_stream()])
+    fake_openai = MagicMock()
+    fake_openai.chat.completions = fake_completions
+
+    with (
+        patch("app.chat.get_session", AsyncMock(return_value=fake_session)),
+        patch("app.chat.get_history", AsyncMock(return_value=long_history)),
+        patch("app.chat.append_message", AsyncMock()),
+        patch("app.chat.get_gateway_client", return_value=fake_openai),
+        patch(
+            "app.chat.get_dials",
+            AsyncMock(
+                return_value={
+                    "active_reflective": 0.0,
+                    "sensing_intuitive": 0.0,
+                    "visual_verbal": 0.0,
+                    "sequential_global": 0.0,
+                }
+            ),
+        ),
+        patch("app.chat.update_learning_profile_dials", AsyncMock()),
+        patch("app.chat.get_due_review_prompt", AsyncMock(return_value=None)),
+    ):
+        resp = await client.post(
+            f"/v1/sessions/{session_id}/messages",
+            json={"content": "Can you explain quadratic equations?"},
+            headers=auth_headers,
+        )
+
+    assert resp.status_code == 200
+    assert "text/event-stream" in resp.headers["content-type"]
+
+    events = [
+        json.loads(line[len("data: ") :])
+        for line in resp.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    types = [e["type"] for e in events]
+    assert "delta" in types
+    assert types[-1] == "done"
+    assert "error" not in types
+
+    # Verify summarisation was called (the first completions.create call).
+    assert fake_completions.create.call_count == 2
+    summary_call = fake_completions.create.call_args_list[0]
+    assert summary_call.kwargs.get("stream") is False
+
+
+@pytest.mark.asyncio
+async def test_chat_works_within_window_no_summary(client, auth_headers, user_id, session_id):
+    """When history is within the sliding window, no summarisation call is made."""
+    fake_session = MagicMock()
+    fake_session.user_id = uuid.UUID(user_id)
+    fake_session.course_id = None
+
+    # 20 messages = 10 turns — within the default context_window_max_turns (20).
+    from app.orm import Interaction
+
+    def _make_interaction(i: int) -> MagicMock:
+        msg = MagicMock(spec=Interaction)
+        msg.role = "student" if i % 2 == 0 else "tutor"
+        msg.content = f"message {i}"
+        return msg
+
+    short_history = [_make_interaction(i) for i in range(20)]
+
+    async def _fake_stream():
+        yield _make_chunk("Answer.")
+        yield _make_chunk(None)
+
+    fake_completions = AsyncMock()
+    fake_completions.create = AsyncMock(return_value=_fake_stream())
+    fake_openai = MagicMock()
+    fake_openai.chat.completions = fake_completions
+
+    with (
+        patch("app.chat.get_session", AsyncMock(return_value=fake_session)),
+        patch("app.chat.get_history", AsyncMock(return_value=short_history)),
+        patch("app.chat.append_message", AsyncMock()),
+        patch("app.chat.get_gateway_client", return_value=fake_openai),
+        patch(
+            "app.chat.get_dials",
+            AsyncMock(
+                return_value={
+                    "active_reflective": 0.0,
+                    "sensing_intuitive": 0.0,
+                    "visual_verbal": 0.0,
+                    "sequential_global": 0.0,
+                }
+            ),
+        ),
+        patch("app.chat.update_learning_profile_dials", AsyncMock()),
+        patch("app.chat.get_due_review_prompt", AsyncMock(return_value=None)),
+    ):
+        resp = await client.post(
+            f"/v1/sessions/{session_id}/messages",
+            json={"content": "What is calculus?"},
+            headers=auth_headers,
+        )
+
+    assert resp.status_code == 200
+    events = [
+        json.loads(line[len("data: ") :])
+        for line in resp.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    assert events[-1]["type"] == "done"
+    # Only one completions call (the chat stream, no summarisation).
+    assert fake_completions.create.call_count == 1

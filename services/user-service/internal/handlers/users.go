@@ -14,11 +14,13 @@ import (
 	"github.com/teacherslounge/user-service/internal/store"
 )
 
+// UsersHandler handles user profile endpoints (GET/PATCH /users/...).
 type UsersHandler struct {
 	store store.Storer
 	cache cache.Cacher
 }
 
+// NewUsersHandler creates a UsersHandler backed by the given store and cache.
 func NewUsersHandler(s store.Storer, c cache.Cacher) *UsersHandler {
 	return &UsersHandler{store: s, cache: c}
 }

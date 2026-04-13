@@ -17,6 +17,7 @@ const (
 	AccountTypeMinor    AccountType = "minor"
 )
 
+// User represents a registered account in TeachersLounge.
 type User struct {
 	ID           uuid.UUID   `json:"id"`
 	Email        string      `json:"email"`
@@ -72,6 +73,7 @@ const (
 	PlanSemesterly SubscriptionPlan = "semesterly"
 )
 
+// SubscriptionStatus enumerates the lifecycle states of a user's subscription.
 type SubscriptionStatus string
 
 const (
@@ -82,6 +84,7 @@ const (
 	StatusExpired  SubscriptionStatus = "expired"
 )
 
+// Subscription records a user's Stripe subscription and its current billing state.
 type Subscription struct {
 	ID                   uuid.UUID          `json:"id"`
 	UserID               uuid.UUID          `json:"user_id"`
@@ -114,6 +117,7 @@ type LearningProfile struct {
 	UpdatedAt                time.Time          `json:"updated_at"`
 }
 
+// Misconception captures a single identified knowledge gap in a student's learning profile.
 type Misconception struct {
 	Topic        string `json:"topic"`
 	Misconception string `json:"misconception"`
@@ -134,17 +138,20 @@ type RegisterRequest struct {
 	GuardianEmail *string `json:"guardian_email,omitempty"`
 }
 
+// LoginRequest is the POST /auth/login request body.
 type LoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
+// AuthResponse is returned on successful login/register; the refresh token is set as an HTTP-only cookie.
 type AuthResponse struct {
 	AccessToken string        `json:"access_token"`
 	User        *UserResponse `json:"user"`
 	// Refresh token is set as HTTP-only cookie, not in body
 }
 
+// UserResponse is the public-facing user payload returned by /users/me and auth endpoints.
 type UserResponse struct {
 	ID                     uuid.UUID            `json:"id"`
 	Email                  string               `json:"email"`
@@ -155,12 +162,14 @@ type UserResponse struct {
 	Subscription           *SubscriptionSummary `json:"subscription,omitempty"`
 }
 
+// SubscriptionSummary is the abbreviated subscription view embedded in UserResponse.
 type SubscriptionSummary struct {
 	Plan   SubscriptionPlan   `json:"plan"`
 	Status SubscriptionStatus `json:"status"`
 	TrialEnd *time.Time       `json:"trial_end,omitempty"`
 }
 
+// UpdatePreferencesRequest is the PATCH /users/me/preferences request body; all fields are optional.
 type UpdatePreferencesRequest struct {
 	DisplayName            *string            `json:"display_name,omitempty"`
 	AvatarEmoji            *string            `json:"avatar_emoji,omitempty"`
@@ -315,24 +324,28 @@ type CreateTeacherProfileRequest struct {
 	Bio        string `json:"bio"`
 }
 
+// CreateClassRequest is the POST /teachers/classes request body.
 type CreateClassRequest struct {
 	Name        string `json:"name"`
 	Subject     string `json:"subject"`
 	Description string `json:"description"`
 }
 
+// UpdateClassRequest is the PATCH /teachers/classes/:id request body; all fields are optional.
 type UpdateClassRequest struct {
 	Name        *string `json:"name,omitempty"`
 	Subject     *string `json:"subject,omitempty"`
 	Description *string `json:"description,omitempty"`
 }
 
+// AddStudentRequest is the POST /teachers/classes/:id/students request body.
 type AddStudentRequest struct {
 	// StudentID or Email — at least one must be provided
 	StudentID *string `json:"student_id,omitempty"`
 	Email     *string `json:"email,omitempty"`
 }
 
+// AssignMaterialRequest is the POST /teachers/classes/:id/materials request body.
 type AssignMaterialRequest struct {
 	MaterialID string     `json:"material_id"`
 	DueDate    *time.Time `json:"due_date,omitempty"`

@@ -11,6 +11,7 @@ Phase 8 additions:
 - Prometheus metrics at /metrics (RED metrics + RAG-specific histograms)
 - OpenTelemetry distributed tracing exported to Google Cloud Trace
 """
+
 import logging
 import os
 

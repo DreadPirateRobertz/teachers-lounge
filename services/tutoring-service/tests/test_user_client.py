@@ -8,6 +8,7 @@ Covers:
   patch_felder_silverman_dials — 200, 204, 500, timeout
   Bearer token forwarded on every request
 """
+
 import uuid
 
 import httpx
@@ -28,6 +29,7 @@ def client():
 
 
 # ── get_felder_silverman_dials ────────────────────────────────────────────────
+
 
 @respx.mock
 @pytest.mark.asyncio
@@ -54,9 +56,7 @@ async def test_get_dials_returns_dials_on_200(client):
 @pytest.mark.asyncio
 async def test_get_dials_returns_empty_on_404(client):
     """404 response returns an empty dict (user has no profile yet)."""
-    respx.get(f"{BASE}/users/{USER_ID}/profile").mock(
-        return_value=httpx.Response(404)
-    )
+    respx.get(f"{BASE}/users/{USER_ID}/profile").mock(return_value=httpx.Response(404))
     result = await client.get_felder_silverman_dials(USER_ID)
     assert result == {}
 
@@ -65,9 +65,7 @@ async def test_get_dials_returns_empty_on_404(client):
 @pytest.mark.asyncio
 async def test_get_dials_returns_empty_on_500(client):
     """5xx response returns an empty dict (non-fatal)."""
-    respx.get(f"{BASE}/users/{USER_ID}/profile").mock(
-        return_value=httpx.Response(500)
-    )
+    respx.get(f"{BASE}/users/{USER_ID}/profile").mock(return_value=httpx.Response(500))
     result = await client.get_felder_silverman_dials(USER_ID)
     assert result == {}
 
@@ -76,9 +74,7 @@ async def test_get_dials_returns_empty_on_500(client):
 @pytest.mark.asyncio
 async def test_get_dials_returns_empty_on_connection_error(client):
     """Connection error returns an empty dict (non-fatal)."""
-    respx.get(f"{BASE}/users/{USER_ID}/profile").mock(
-        side_effect=httpx.ConnectError("refused")
-    )
+    respx.get(f"{BASE}/users/{USER_ID}/profile").mock(side_effect=httpx.ConnectError("refused"))
     result = await client.get_felder_silverman_dials(USER_ID)
     assert result == {}
 
@@ -87,9 +83,7 @@ async def test_get_dials_returns_empty_on_connection_error(client):
 @pytest.mark.asyncio
 async def test_get_dials_returns_empty_on_timeout(client):
     """Read timeout returns an empty dict (non-fatal)."""
-    respx.get(f"{BASE}/users/{USER_ID}/profile").mock(
-        side_effect=httpx.ReadTimeout("timed out")
-    )
+    respx.get(f"{BASE}/users/{USER_ID}/profile").mock(side_effect=httpx.ReadTimeout("timed out"))
     result = await client.get_felder_silverman_dials(USER_ID)
     assert result == {}
 
@@ -119,13 +113,12 @@ async def test_get_dials_forwards_bearer_token(client):
 
 # ── patch_felder_silverman_dials ──────────────────────────────────────────────
 
+
 @respx.mock
 @pytest.mark.asyncio
 async def test_patch_dials_returns_true_on_200(client):
     """200 OK response returns True."""
-    respx.patch(f"{BASE}/users/{USER_ID}/preferences").mock(
-        return_value=httpx.Response(200)
-    )
+    respx.patch(f"{BASE}/users/{USER_ID}/preferences").mock(return_value=httpx.Response(200))
     result = await client.patch_felder_silverman_dials(USER_ID, {"visual_verbal": -0.3})
     assert result is True
 
@@ -134,9 +127,7 @@ async def test_patch_dials_returns_true_on_200(client):
 @pytest.mark.asyncio
 async def test_patch_dials_returns_true_on_204(client):
     """204 No Content is also a success."""
-    respx.patch(f"{BASE}/users/{USER_ID}/preferences").mock(
-        return_value=httpx.Response(204)
-    )
+    respx.patch(f"{BASE}/users/{USER_ID}/preferences").mock(return_value=httpx.Response(204))
     result = await client.patch_felder_silverman_dials(USER_ID, {})
     assert result is True
 
@@ -145,9 +136,7 @@ async def test_patch_dials_returns_true_on_204(client):
 @pytest.mark.asyncio
 async def test_patch_dials_returns_false_on_500(client):
     """Server error returns False (non-fatal)."""
-    respx.patch(f"{BASE}/users/{USER_ID}/preferences").mock(
-        return_value=httpx.Response(500)
-    )
+    respx.patch(f"{BASE}/users/{USER_ID}/preferences").mock(return_value=httpx.Response(500))
     result = await client.patch_felder_silverman_dials(USER_ID, {"visual_verbal": 0.1})
     assert result is False
 

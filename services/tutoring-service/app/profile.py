@@ -11,6 +11,7 @@ Exposes the Student Knowledge Model (SKM) adaptive layer via REST:
 Each write route owns its own db.commit() — helpers in knowledge_model.py are
 commit-free so multiple writes can be batched in a single transaction if needed.
 """
+
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException

@@ -14,6 +14,7 @@ returns a fixed JWTClaims for user STUDENT_ID.
 DB is mocked via app.dependency_overrides[get_db] → an async generator
 yielding an AsyncMock session configured per test.
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -37,6 +38,7 @@ NOW = datetime.now(timezone.utc)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _fake_claims(user_id: UUID = STUDENT_ID) -> JWTClaims:
     """Return a minimal JWTClaims for the given user."""
@@ -89,8 +91,10 @@ def _override_auth(user_id: UUID = STUDENT_ID):
 
 def _override_db(mock_session):
     """Install DB override and return the session mock."""
+
     async def _fake_db():
         yield mock_session
+
     app.dependency_overrides[get_db] = _fake_db
     return mock_session
 
@@ -102,6 +106,7 @@ def _clear_overrides():
 
 
 # ── GET /v1/reviews/queue ─────────────────────────────────────────────────────
+
 
 class TestReviewQueue:
     """Tests for GET /v1/reviews/queue."""
@@ -117,9 +122,11 @@ class TestReviewQueue:
     async def test_empty_queue_returns_zero_counts(self):
         """With no mastery rows the queue is empty and counts are zero."""
         db = AsyncMock()
-        result_mock = MagicMock()
-        result_mock.scalars.return_value.all.return_value = []
-        db.execute = AsyncMock(return_value=result_mock)
+        due_result = MagicMock()
+        due_result.scalars.return_value.all.return_value = []
+        count_zero = MagicMock()
+        count_zero.scalar_one.return_value = 0
+        db.execute = AsyncMock(side_effect=[due_result, count_zero, count_zero])
         _override_db(db)
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -173,13 +180,12 @@ class TestReviewQueue:
     @pytest.mark.asyncio
     async def test_future_concept_is_not_due(self):
         """A concept scheduled far in the future does not appear in due items."""
-        future_at = NOW + timedelta(days=30)
-        row = _make_mastery_row(next_review_at=future_at)
-
         db = AsyncMock()
-        result_mock = MagicMock()
-        result_mock.scalars.return_value.all.return_value = [row]
-        db.execute = AsyncMock(return_value=result_mock)
+        due_result = MagicMock()
+        due_result.scalars.return_value.all.return_value = []  # SQL WHERE excludes future row
+        count_zero = MagicMock()
+        count_zero.scalar_one.return_value = 0
+        db.execute = AsyncMock(side_effect=[due_result, count_zero, count_zero])
         _override_db(db)
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -193,13 +199,14 @@ class TestReviewQueue:
     @pytest.mark.asyncio
     async def test_upcoming_within_7_days_counted(self):
         """A concept due within 7 days is not in items but is counted as upcoming."""
-        soon = NOW + timedelta(days=3)
-        row = _make_mastery_row(next_review_at=soon)
-
         db = AsyncMock()
-        result_mock = MagicMock()
-        result_mock.scalars.return_value.all.return_value = [row]
-        db.execute = AsyncMock(return_value=result_mock)
+        due_result = MagicMock()
+        due_result.scalars.return_value.all.return_value = []  # not yet due
+        upcoming_result = MagicMock()
+        upcoming_result.scalar_one.return_value = 1  # 1 concept within 7-day window
+        total_due_result = MagicMock()
+        total_due_result.scalar_one.return_value = 0
+        db.execute = AsyncMock(side_effect=[due_result, upcoming_result, total_due_result])
         _override_db(db)
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -217,9 +224,13 @@ class TestReviewQueue:
         rows = [_make_mastery_row(concept_id=uuid4(), next_review_at=None) for _ in range(5)]
 
         db = AsyncMock()
-        result_mock = MagicMock()
-        result_mock.scalars.return_value.all.return_value = rows
-        db.execute = AsyncMock(return_value=result_mock)
+        due_result = MagicMock()
+        due_result.scalars.return_value.all.return_value = rows[:3]  # SQL LIMIT 3 applied
+        upcoming_result = MagicMock()
+        upcoming_result.scalar_one.return_value = 0
+        total_due_result = MagicMock()
+        total_due_result.scalar_one.return_value = 5
+        db.execute = AsyncMock(side_effect=[due_result, upcoming_result, total_due_result])
         _override_db(db)
 
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
@@ -264,6 +275,7 @@ class TestReviewQueue:
 
 
 # ── POST /v1/reviews/{concept_id}/answer ──────────────────────────────────────
+
 
 class TestRecordAnswer:
     """Tests for POST /v1/reviews/{concept_id}/answer."""
@@ -335,6 +347,7 @@ class TestRecordAnswer:
         db.add.assert_called_once()
         added = db.add.call_args[0][0]
         from app.orm import ReviewRecord
+
         assert isinstance(added, ReviewRecord)
         db.commit.assert_awaited_once()
 
@@ -459,6 +472,7 @@ class TestRecordAnswer:
 
 # ── GET /v1/reviews/stats ─────────────────────────────────────────────────────
 
+
 class TestReviewStats:
     """Tests for GET /v1/reviews/stats."""
 
@@ -477,16 +491,38 @@ class TestReviewStats:
         db = AsyncMock()
 
         rows = mastery_rows or []
+        now = datetime.now(timezone.utc)
+        today_end = now.replace(hour=23, minute=59, second=59, microsecond=999999)
+        week_end = now + timedelta(days=7)
 
-        # First execute → StudentConceptMastery rows
-        mastery_result = MagicMock()
-        mastery_result.scalars.return_value.all.return_value = rows
+        total = len(rows)
+        avg_mastery = sum(r.mastery_score for r in rows) / total if rows else 0.0
+        avg_ef = sum(r.ease_factor for r in rows) / total if rows else 2.5
+        due_now = sum(1 for r in rows if r.next_review_at is None or r.next_review_at <= now)
+        due_today = sum(
+            1 for r in rows if r.next_review_at is not None and r.next_review_at <= today_end
+        )
+        due_week = sum(
+            1 for r in rows if r.next_review_at is not None and r.next_review_at <= week_end
+        )
+
+        # First execute → aggregate row (mimics the SQL aggregate query)
+        agg_row = MagicMock()
+        agg_row.total = total
+        agg_row.avg_mastery = avg_mastery
+        agg_row.avg_ef = avg_ef
+        agg_row.due_now = due_now
+        agg_row.due_today = due_today
+        agg_row.due_week = due_week
+
+        agg_result = MagicMock()
+        agg_result.one.return_value = agg_row
 
         # Second execute → COUNT(review_records.id)
         count_result = MagicMock()
         count_result.scalar_one.return_value = total_reviews
 
-        db.execute = AsyncMock(side_effect=[mastery_result, count_result])
+        db.execute = AsyncMock(side_effect=[agg_result, count_result])
         return db
 
     @pytest.mark.asyncio
@@ -527,9 +563,13 @@ class TestReviewStats:
     async def test_stats_counts_due_now(self):
         """due_now counts concepts with next_review_at <= now or null."""
         rows = [
-            _make_mastery_row(concept_id=uuid4(), next_review_at=None),                             # due (null)
-            _make_mastery_row(concept_id=uuid4(), next_review_at=NOW - timedelta(hours=1)),         # due (past)
-            _make_mastery_row(concept_id=uuid4(), next_review_at=NOW + timedelta(days=3)),          # not due
+            _make_mastery_row(concept_id=uuid4(), next_review_at=None),  # due (null)
+            _make_mastery_row(
+                concept_id=uuid4(), next_review_at=NOW - timedelta(hours=1)
+            ),  # due (past)
+            _make_mastery_row(
+                concept_id=uuid4(), next_review_at=NOW + timedelta(days=3)
+            ),  # not due
         ]
         db = self._build_stats_db(mastery_rows=rows)
         _override_db(db)

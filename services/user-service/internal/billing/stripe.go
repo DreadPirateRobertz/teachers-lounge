@@ -34,6 +34,8 @@ type Client struct {
 	store    Storer
 }
 
+// NewClient creates a billing Client configured with the given Stripe secret key,
+// plan price IDs, webhook signing secret, and user store.
 func NewClient(secretKey string, prices PlanPrices, whSecret string, s Storer) *Client {
 	stripe.Key = secretKey
 	return &Client{

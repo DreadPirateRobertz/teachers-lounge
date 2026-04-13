@@ -4,9 +4,10 @@ Phase 2 scope (tl-dkm):
   Step 1 — Student context: recent interaction history
   Step 2 — Concept graph prerequisite check (IMPLEMENTED in tl-vki)
   Step 3 — Hybrid curriculum retrieval via Search Service (IMPLEMENTED)
-  Step 4 — Cross-student insights from BigQuery: deferred to Phase 7
+  Step 4 — Cross-student insights from BigQuery cache (IMPLEMENTED)
   Step 5 — Enriched system prompt with chapter/section/page citations (IMPLEMENTED)
-  Step 6 — Interaction log + spaced rep: log only (spaced rep in Phase 5)
+  Step 6 — Interaction log: record concept engagement in SKM (IMPLEMENTED)
+            Spaced repetition scheduling deferred to Phase 5.
 
 Phase 5 additions (tl-vki):
   Step 2 — Load course concepts + student mastery; keyword-match the question
@@ -18,21 +19,27 @@ Phase 7 additions (tl-dkg):
   Records chunk_count, gap_count, and course_id as span attributes for
   latency-per-step analysis in Grafana Cloud Trace.
 
-Exit criteria (tl-vki): when a student asks about a concept they lack
-prerequisites for, Professor Nova redirects to the gaps before answering.
+Exit criteria (tl-dkm):
+  Step 4: when cross-student insights are cached in Redis for the target concept,
+  Professor Nova's system prompt includes aggregate struggle/style observations.
+  Step 6: after concept detection, the student's SKM is updated (last_reviewed_at)
+  so the concept is marked as recently engaged even before quiz confirmation.
 """
+
 import logging
 from uuid import UUID
 
 from opentelemetry import trace
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from .cache import get_cross_student_insights
 from .graph import (
     detect_gaps,
     get_course_concepts,
     get_student_mastery,
 )
 from .history import get_history
+from .knowledge_model import log_concept_interaction
 from .orm import Concept
 from .search_client import SearchResult, fetch_curriculum_chunks
 
@@ -50,6 +57,7 @@ def _log_safe(val: object) -> str:
         String with newline characters escaped.
     """
     return str(val).replace("\n", "\\n").replace("\r", "\\r")
+
 
 PROFESSOR_NOVA_SYSTEM_PROMPT = """\
 You are Professor Nova, the AI tutor for TeachersLounge — a gamified learning \
@@ -106,6 +114,7 @@ async def build_rag_context(
         # Keyword-match the question to a course concept, then detect mastery gaps
         # in its transitive prerequisites. Non-fatal: skip on any DB error.
         gaps: list[dict] = []
+        target: Concept | None = None
         try:
             concepts = await get_course_concepts(db, course_id)
             if concepts:
@@ -116,7 +125,9 @@ async def build_rag_context(
                     if gaps:
                         logger.info(
                             "prereq_gaps student_id=%s target_concept=%s gaps=%d",
-                            _log_safe(student_id), _log_safe(target.name), len(gaps),
+                            _log_safe(student_id),
+                            _log_safe(target.name),
+                            len(gaps),
                         )
         except Exception:
             # Non-fatal: concept graph is best-effort; skip rather than break chat.
@@ -125,17 +136,46 @@ async def build_rag_context(
         # Step 3: Retrieve curriculum chunks via hybrid vector search.
         chunks = await fetch_curriculum_chunks(question, course_id, limit=8)
 
-        # Step 4: Cross-student insights (72% struggle here, visual works better) — Phase 7
+        # Step 4: Cross-student insights from Redis cache (populated by BigQuery job).
+        # If the target concept has cached aggregate insights, inject them into the
+        # prompt so Professor Nova can mention common struggle points and effective
+        # explanation styles. Non-fatal: gracefully skip on cache miss or Redis error.
+        insights: list[str] = []
+        if target is not None:
+            try:
+                cached = await get_cross_student_insights(target.name)
+                if cached:
+                    insights = cached
+                    logger.info(
+                        "cross_student_insights student_id=%s concept=%s count=%d",
+                        _log_safe(student_id), _log_safe(target.name), len(insights),
+                    )
+            except Exception:
+                # Non-fatal: insights are best-effort enrichment.
+                logger.exception("step4 cross-student insight lookup failed — skipping")
 
-        # Step 5: Build enriched system prompt including retrieved context and gaps.
-        system_prompt = _build_system_prompt(chunks, student_turns, gaps=gaps)
+        # Step 5: Build enriched system prompt including retrieved context, gaps, and insights.
+        system_prompt = _build_system_prompt(chunks, student_turns, gaps=gaps, insights=insights)
 
-        # Step 6: Interaction embedding + spaced-repetition scheduling — Phase 5
+        # Step 6: Log concept interaction in the Student Knowledge Model (tl-dkm).
+        # Creates or touches the StudentConceptMastery row to record engagement.
+        # Mastery score is NOT modified here — that is managed by the SRS system (Phase 5).
+        # Non-fatal: a DB error must not prevent the tutoring response from streaming.
+        if target is not None:
+            try:
+                await log_concept_interaction(db, student_id, target.id)
+            except Exception:
+                logger.exception(
+                    "step6 SKM interaction log failed for concept %s — skipping",
+                    _log_safe(target.name),
+                )
+
         span.set_attribute("chunk_count", len(chunks))
         span.set_attribute("gap_count", len(gaps))
+        span.set_attribute("insight_count", len(insights))
         logger.info(
-            "rag_context student_id=%s course_id=%s chunks=%d gaps=%d",
-            _log_safe(student_id), _log_safe(course_id), len(chunks), len(gaps),
+            "rag_context student_id=%s course_id=%s chunks=%d gaps=%d insights=%d",
+            _log_safe(student_id), _log_safe(course_id), len(chunks), len(gaps), len(insights),
         )
 
         return system_prompt, chunks
@@ -171,18 +211,26 @@ def _build_system_prompt(
     chunks: list[SearchResult],
     student_turns: int,
     gaps: list[dict] | None = None,
+    insights: list[str] | None = None,
 ) -> str:
-    """Build the enriched system prompt from retrieved chunks, student context, and gaps.
+    """Build the enriched system prompt from retrieved chunks, student context, gaps, and insights.
 
     When prerequisite gaps are detected, appends a redirect block instructing
     Professor Nova to gently steer toward foundational concepts before answering
     the student's original question.
+
+    When cross-student insights are available, appends an observation block so
+    Professor Nova can proactively address common struggle points and prefer
+    explanation styles with higher success rates for this topic.
 
     Args:
         chunks: Curriculum chunks returned by the Search Service.
         student_turns: Number of student messages in the current session.
         gaps: List of gap dicts from detect_gaps() — each has concept_name,
             mastery_score, required_by. None or empty means no gaps detected.
+        insights: List of insight strings from the cross-student cache (e.g.
+            "72% of students struggle with step 3 of this derivation"). None or
+            empty means no insights available.
 
     Returns:
         Full system prompt string for the AI Gateway.
@@ -213,12 +261,14 @@ when you reference them.
 
 Student context: {experience_note}"""
 
+    if insights:
+        base = base + _build_insight_block(insights)
+
     if not gaps:
         return base
 
     gap_lines = "\n".join(
-        f"  - {g['concept_name']} (mastery: {g['mastery_score']:.0%})"
-        for g in gaps
+        f"  - {g['concept_name']} (mastery: {g['mastery_score']:.0%})" for g in gaps
     )
     gap_block = f"""
 
@@ -235,6 +285,29 @@ Recommended approach:
 --- END PREREQUISITE GAPS ---"""
 
     return base + gap_block
+
+
+def _build_insight_block(insights: list[str]) -> str:
+    """Format cross-student insights as a system prompt block.
+
+    Args:
+        insights: Non-empty list of aggregate insight strings produced by the
+            offline BigQuery analytics job (e.g. difficulty rates, effective
+            explanation styles, common misconceptions).
+
+    Returns:
+        Formatted prompt block string to append to the base system prompt.
+    """
+    insight_lines = "\n".join(f"  - {insight}" for insight in insights)
+    return f"""
+
+--- CROSS-STUDENT INSIGHTS ---
+Aggregate observations from students who have studied this concept before:
+{insight_lines}
+
+Use these insights to proactively address common struggles, prefer explanation
+styles with higher success rates, and warn about frequent misconceptions.
+--- END CROSS-STUDENT INSIGHTS ---"""
 
 
 def _format_chunks(chunks: list[SearchResult]) -> str:

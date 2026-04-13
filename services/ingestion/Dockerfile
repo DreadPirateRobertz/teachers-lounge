@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# tl-logging is copied here by CI before docker build (see ci.yml docker-build job)
+COPY tl-logging/ ./tl-logging/
 COPY requirements.txt .
 
 # Pre-install modern onnx wheel so transitive deps (effdet via
@@ -22,6 +24,10 @@ RUN pip install --no-cache-dir setuptools wheel grpcio-tools \
     "onnx>=1.16.0" "onnxruntime>=1.18.0"
 
 RUN printf "onnx>=1.16.0\nonnxruntime>=1.18.0\n" > /tmp/constraints.txt
+
+# Install shared logging package first (path reference in requirements.txt
+# uses ../tl-logging for local dev; Docker uses ./tl-logging via COPY above).
+RUN pip install --no-cache-dir ./tl-logging
 
 # Install all Python deps into the system site-packages so they can be
 # cleanly COPY'd into the slim runtime stage.

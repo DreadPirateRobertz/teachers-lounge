@@ -14,10 +14,11 @@ class Role(str, Enum):
 
 # ── Request / Response DTOs ───────────────────────────────────────────────────
 
+
 class CreateSessionRequest(BaseModel):
     """Request body for POST /v1/sessions."""
 
-    course_id: UUID | None = None       # user_id comes from JWT, not request body
+    course_id: UUID | None = None  # user_id comes from JWT, not request body
 
 
 class SessionResponse(BaseModel):
@@ -54,6 +55,7 @@ class HistoryResponse(BaseModel):
 
 
 # ── Spaced-repetition review DTOs ────────────────────────────────────────────
+
 
 class ReviewQueueItem(BaseModel):
     """A single concept in the spaced-repetition review queue."""
@@ -110,9 +112,11 @@ class ReviewStatsResponse(BaseModel):
 
 # ── SSE event shapes ──────────────────────────────────────────────────────────
 
+
 class SSEEvent(BaseModel):
     """Single token/chunk emitted over the SSE stream."""
-    type: str   # "delta" | "sources" | "done" | "error" | "diagram" | "molecule_builder"
+
+    type: str  # "delta" | "sources" | "done" | "error" | "diagram" | "molecule_builder"
     content: str = ""
     message_id: str = ""
     # Populated on "sources" events — list of curriculum chunks used for grounding
@@ -123,12 +127,14 @@ class SSEEvent(BaseModel):
 
 # ── Quiz answer DTOs (Phase 6 molecule builder) ───────────────────────────────
 
+
 class QuizAnswerRequest(BaseModel):
     """Request body for POST /v1/quiz/answer.
 
     Supports both multiple-choice (chosen_key) and molecule-builder (smiles_answer)
     answer types.  At least one of the two fields must be provided.
     """
+
     chosen_key: str | None = Field(
         default=None,
         description="Answer key for multiple-choice questions (e.g. 'A', 'B').",
@@ -147,10 +153,11 @@ class QuizAnswerRequest(BaseModel):
 
 class QuizAnswerResponse(BaseModel):
     """Result of evaluating a quiz answer."""
+
     correct: bool
     feedback: str
-    answer_type: str   # "multiple_choice" | "smiles"
-    submitted: str     # the value that was evaluated
+    answer_type: str  # "multiple_choice" | "smiles"
+    submitted: str  # the value that was evaluated
 
 
 # ── Concept Dependency Graph DTOs ────────────────────────────────────────────
@@ -237,8 +244,8 @@ class PrerequisiteChainEntry(BaseModel):
     path: str
     difficulty: float
     mastery_score: float
-    mastery_adequate: bool   # True if mastery_score >= gap threshold
-    depth: int               # hops from the target concept (1 = direct prerequisite)
+    mastery_adequate: bool  # True if mastery_score >= gap threshold
+    depth: int  # hops from the target concept (1 = direct prerequisite)
 
 
 class PrerequisiteChainResponse(BaseModel):
@@ -252,22 +259,24 @@ class PrerequisiteChainResponse(BaseModel):
 class MasteryUpdateRequest(BaseModel):
     """Body for PATCH mastery — caller supplies the new observed mastery score."""
 
-    mastery_score: float = Field(..., ge=0.0, le=1.0,
-                                 description="New mastery score (0-1) from interaction evidence")
+    mastery_score: float = Field(
+        ..., ge=0.0, le=1.0, description="New mastery score (0-1) from interaction evidence"
+    )
 
 
 class MasteryUpdateResponse(BaseModel):
     """Result after updating a student's mastery for a concept."""
 
     concept_id: UUID
-    mastery_before_decay: float   # stored score at time of update
-    mastery_after_decay: float    # score after applying forgetting-curve decay
-    mastery_updated: float        # final stored value (the new score)
+    mastery_before_decay: float  # stored score at time of update
+    mastery_after_decay: float  # score after applying forgetting-curve decay
+    mastery_updated: float  # final stored value (the new score)
     decay_rate: float
     last_reviewed_at: datetime
 
 
 # ── Learning profile DTOs ──────────────────────────────────────────────────────
+
 
 class LearningProfileDials(BaseModel):
     """Felder-Silverman dial values — all four dimensions, each in [-1, 1]."""
@@ -309,8 +318,7 @@ class LearningProfileUpdateRequest(BaseModel):
         for k, v in self.dials.items():
             if k not in _VALID_DIAL_KEYS:
                 raise ValueError(
-                    f"Unknown dial dimension '{k}'. "
-                    f"Valid keys: {sorted(_VALID_DIAL_KEYS)}"
+                    f"Unknown dial dimension '{k}'. Valid keys: {sorted(_VALID_DIAL_KEYS)}"
                 )
             if not -1.0 <= v <= 1.0:
                 raise ValueError(f"Dial '{k}' value {v} is outside [-1, 1]")
@@ -318,10 +326,13 @@ class LearningProfileUpdateRequest(BaseModel):
 
 # ── Misconception DTOs ────────────────────────────────────────────────────────
 
+
 class MisconceptionLogRequest(BaseModel):
     """Request body for POST /students/me/misconceptions/{concept_id}."""
 
-    description: str = Field(..., max_length=2000, description="Description of the detected misconception.")
+    description: str = Field(
+        ..., max_length=2000, description="Description of the detected misconception."
+    )
 
 
 class MisconceptionEntry(BaseModel):

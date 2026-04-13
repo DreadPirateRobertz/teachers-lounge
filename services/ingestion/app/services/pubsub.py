@@ -36,6 +36,7 @@ def start_subscriber() -> None:
     )
 
     def callback(msg: pubsub_v1.subscriber.message.Message) -> None:
+        """Handle an incoming Pub/Sub message: parse, process, then ack or nack."""
         try:
             payload = IngestJobMessage.model_validate_json(msg.data)
             logger.info(

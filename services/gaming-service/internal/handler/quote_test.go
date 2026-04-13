@@ -135,6 +135,9 @@ func (s *quoteStorer) RecordAssessmentAnswer(ctx context.Context, sID, uID, qID,
 func (s *quoteStorer) BuyPowerUp(_ context.Context, _ string, _ model.PowerUpType, _ int) (int, int, error) {
 	return 0, 0, nil
 }
+func (s *quoteStorer) GetDefeatedBossIDs(_ context.Context, _ string) ([]string, error) {
+	return nil, nil
+}
 
 // ── helpers ───────────────────────────────────────────────────────────────────
 

@@ -10,8 +10,10 @@
  * Build a Content-Security-Policy header value.
  *
  * When a `nonce` is supplied the `script-src` directive uses
- * `'nonce-<value>'` in place of `'unsafe-inline'`, satisfying
- * Level-2 CSP without weakening XSS protection.
+ * `'nonce-<value>' 'strict-dynamic'` in place of `'unsafe-inline'`.
+ * `'strict-dynamic'` allows Next.js to load code-split chunks that are
+ * dynamically injected by nonce-trusted bootstrap scripts, satisfying
+ * CSP Level 3 without `'unsafe-inline'` or a per-chunk URL allowlist.
  *
  * Without a nonce (e.g. static API routes that bypass middleware)
  * `script-src` falls back to `'self'` only — no inline scripts are
@@ -23,7 +25,7 @@
  *   HTTP `Content-Security-Policy` header.
  */
 export function buildCsp(nonce?: string): string {
-  const scriptSrc = nonce ? `'self' 'nonce-${nonce}'` : "'self'"
+  const scriptSrc = nonce ? `'self' 'nonce-${nonce}' 'strict-dynamic'` : "'self'"
 
   const directives = [
     "default-src 'self'",
@@ -36,8 +38,11 @@ export function buildCsp(nonce?: string): string {
     'worker-src blob:',
     "frame-ancestors 'none'",
     "form-action 'self'",
-    'upgrade-insecure-requests',
   ]
+
+  // upgrade-insecure-requests is handled by the reverse proxy (nginx/caddy)
+  // in production. Next.js standalone bakes CSP at build time, so we cannot
+  // toggle it with runtime env vars.
 
   return directives.join('; ')
 }

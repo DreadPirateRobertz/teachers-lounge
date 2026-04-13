@@ -1,4 +1,5 @@
 """Tests for concept dependency graph — prerequisite mapping, gap detection, remediation paths."""
+
 from dataclasses import dataclass, field
 from uuid import UUID, uuid4
 
@@ -58,11 +59,13 @@ def _concept(name: str, prereqs: list | None = None) -> FakeConcept:
     )
     if prereqs:
         for prereq_concept, weight in prereqs:
-            c.prerequisites.append(FakeEdge(
-                concept_id=c.id,
-                prerequisite_id=prereq_concept.id,
-                weight=weight,
-            ))
+            c.prerequisites.append(
+                FakeEdge(
+                    concept_id=c.id,
+                    prerequisite_id=prereq_concept.id,
+                    weight=weight,
+                )
+            )
     return c
 
 
@@ -72,6 +75,7 @@ def _mastery(user_id, concept_id, score):
 
 # ── Graph: linear chain A -> B -> C ─────────────────────────────────────────
 # C depends on B, B depends on A
+
 
 @pytest.fixture
 def linear_chain():
@@ -83,6 +87,7 @@ def linear_chain():
 
 # ── Graph: diamond A -> B, A -> C, B+C -> D ─────────────────────────────────
 
+
 @pytest.fixture
 def diamond_graph():
     a = _concept("Arithmetic")
@@ -93,6 +98,7 @@ def diamond_graph():
 
 
 # ── Tests: _build_prereq_graph ───────────────────────────────────────────────
+
 
 class TestBuildPrereqGraph:
     def test_linear_chain(self, linear_chain):
@@ -111,6 +117,7 @@ class TestBuildPrereqGraph:
 
 
 # ── Tests: _get_all_prerequisites ────────────────────────────────────────────
+
 
 class TestGetAllPrerequisites:
     def test_transitive_linear(self, linear_chain):
@@ -134,6 +141,7 @@ class TestGetAllPrerequisites:
 
 
 # ── Tests: detect_gaps ──────────────────────────────────────────────────────
+
 
 class TestDetectGaps:
     def test_all_mastered_no_gaps(self, linear_chain):
@@ -194,6 +202,7 @@ class TestDetectGaps:
 
 # ── Tests: generate_remediation_path ─────────────────────────────────────────
 
+
 class TestRemediationPath:
     def test_no_gaps_empty_path(self, linear_chain):
         a, b, c = linear_chain
@@ -246,6 +255,7 @@ class TestRemediationPath:
 
 # ── Tests: _build_remediation_steps ─────────────────────────────────────────
 
+
 class TestBuildRemediationSteps:
     """Tests for the _build_remediation_steps helper extracted from generate_remediation_path."""
 
@@ -255,7 +265,7 @@ class TestBuildRemediationSteps:
         target_id = uuid4()
         steps = _build_remediation_steps(
             order=[ghost_id],
-            concept_map={},       # ghost_id not present
+            concept_map={},  # ghost_id not present
             mastery={},
             graph={},
             target_concept_id=target_id,
@@ -295,9 +305,11 @@ class TestBuildRemediationSteps:
 
 # ── Tests: API endpoint response shapes (unit, no DB) ───────────────────────
 
+
 class TestConceptResponseModel:
     def test_concept_response_serialization(self):
         from app.models import ConceptResponse
+
         resp = ConceptResponse(
             id=uuid4(),
             course_id=uuid4(),
@@ -312,6 +324,7 @@ class TestConceptResponseModel:
 
     def test_gap_detection_response_serialization(self):
         from app.models import GapDetectionResponse, GapInfo
+
         resp = GapDetectionResponse(
             target_concept_id=uuid4(),
             target_concept_name="Quadratics",
@@ -329,6 +342,7 @@ class TestConceptResponseModel:
 
     def test_remediation_path_response_serialization(self):
         from app.models import RemediationPathResponse, RemediationStep
+
         resp = RemediationPathResponse(
             target_concept_id=uuid4(),
             target_concept_name="Quadratics",
@@ -347,6 +361,7 @@ class TestConceptResponseModel:
 
 
 # ── Tests: get_prerequisite_chain ────────────────────────────────────────────
+
 
 class TestGetPrerequisiteChain:
     def test_linear_chain_returns_all_prereqs(self, linear_chain):
@@ -418,9 +433,11 @@ class TestGetPrerequisiteChain:
 
 # ── Tests: new response models ────────────────────────────────────────────────
 
+
 class TestNewResponseModels:
     def test_prerequisite_chain_response_serialization(self):
         from app.models import PrerequisiteChainEntry, PrerequisiteChainResponse
+
         resp = PrerequisiteChainResponse(
             target_concept_id=uuid4(),
             target_concept_name="Stereochemistry",
@@ -444,6 +461,7 @@ class TestNewResponseModels:
         from pydantic import ValidationError
 
         from app.models import MasteryUpdateRequest
+
         req = MasteryUpdateRequest(mastery_score=0.75)
         assert req.mastery_score == 0.75
 

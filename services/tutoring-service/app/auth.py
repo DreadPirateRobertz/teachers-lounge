@@ -12,6 +12,7 @@ Usage:
     async def create(body: ..., user: JWTClaims = Depends(require_auth)):
         # user.user_id is the validated UUID
 """
+
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, status
@@ -29,8 +30,8 @@ class JWTClaims(BaseModel):
 
     user_id: UUID
     email: str
-    account_type: str   # "standard" | "minor"
-    sub_status: str     # "active" | "trial" | "past_due" | "cancelled" | ""
+    account_type: str  # "standard" | "minor"
+    sub_status: str  # "active" | "trial" | "past_due" | "cancelled" | ""
 
 
 def require_auth(

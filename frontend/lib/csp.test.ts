@@ -10,25 +10,28 @@ describe('buildCsp', () => {
     const csp = buildCsp()
     expect(csp).toContain("default-src 'self'")
     expect(csp).toContain("frame-ancestors 'none'")
-    expect(csp).toContain('upgrade-insecure-requests')
+    expect(csp).not.toContain('upgrade-insecure-requests')
     expect(csp).toContain("form-action 'self'")
   })
 
-  it('without nonce: script-src is self only, no unsafe-inline', () => {
+  it('without nonce: script-src is self only, no unsafe-inline, no strict-dynamic', () => {
     const csp = buildCsp()
     expect(csp).toContain("script-src 'self'")
     const scriptSrc = csp.match(/script-src([^;]+)/)?.[1] ?? ''
     expect(scriptSrc).not.toContain('unsafe-inline')
     expect(scriptSrc).not.toContain('nonce-')
+    // strict-dynamic without a nonce would block all scripts — must be absent
+    expect(scriptSrc).not.toContain('strict-dynamic')
   })
 
-  it('with nonce: script-src contains the nonce directive', () => {
+  it('with nonce: script-src contains nonce and strict-dynamic', () => {
     const nonce = 'abc123=='
     const csp = buildCsp(nonce)
     expect(csp).toContain(`'nonce-${nonce}'`)
-    expect(csp).toContain("script-src 'self' 'nonce-abc123=='")
+    expect(csp).toContain("script-src 'self' 'nonce-abc123==' 'strict-dynamic'")
     const scriptSrc = csp.match(/script-src([^;]+)/)?.[1] ?? ''
     expect(scriptSrc).not.toContain('unsafe-inline')
+    expect(scriptSrc).toContain('strict-dynamic')
   })
 
   it('with nonce: nonce value is embedded verbatim', () => {

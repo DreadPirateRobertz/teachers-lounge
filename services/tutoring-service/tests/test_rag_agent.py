@@ -8,6 +8,7 @@ Covers:
   - build_rag_context orchestration: happy path, no-chunks fallback,
     gap detection + prompt injection, step-2 errors silently skipped
 """
+
 import uuid
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -62,6 +63,7 @@ def _make_gap(name: str, mastery: float = 0.0) -> dict:
 # _format_chunks
 # ---------------------------------------------------------------------------
 
+
 class TestFormatChunks:
     def test_empty_input_returns_empty_string(self):
         assert _format_chunks([]) == ""
@@ -96,6 +98,7 @@ class TestFormatChunks:
 # ---------------------------------------------------------------------------
 # _find_concept_for_question
 # ---------------------------------------------------------------------------
+
 
 class TestFindConceptForQuestion:
     def test_exact_name_match(self):
@@ -133,6 +136,7 @@ class TestFindConceptForQuestion:
 # ---------------------------------------------------------------------------
 # _build_system_prompt
 # ---------------------------------------------------------------------------
+
 
 class TestBuildSystemPrompt:
     def test_no_chunks_returns_no_material_notice(self):
@@ -188,6 +192,7 @@ class TestBuildSystemPrompt:
 # ---------------------------------------------------------------------------
 # build_rag_context
 # ---------------------------------------------------------------------------
+
 
 class TestBuildRagContext:
     @pytest.mark.asyncio
@@ -257,8 +262,9 @@ class TestBuildRagContext:
         """Early-stage student (<5 turns) gets foundational framing."""
         mock_db = AsyncMock()
 
-        fake_interactions = [MagicMock(role="student") for _ in range(3)] + \
-                            [MagicMock(role="tutor") for _ in range(3)]
+        fake_interactions = [MagicMock(role="student") for _ in range(3)] + [
+            MagicMock(role="tutor") for _ in range(3)
+        ]
 
         with (
             patch("app.rag_agent.get_history", AsyncMock(return_value=fake_interactions)),
@@ -337,7 +343,9 @@ class TestBuildRagContext:
 
         with (
             patch("app.rag_agent.get_history", AsyncMock(return_value=[])),
-            patch("app.rag_agent.get_course_concepts", AsyncMock(side_effect=RuntimeError("db down"))),
+            patch(
+                "app.rag_agent.get_course_concepts", AsyncMock(side_effect=RuntimeError("db down"))
+            ),
             patch("app.rag_agent.fetch_curriculum_chunks", AsyncMock(return_value=chunks)),
         ):
             prompt, returned = await build_rag_context(
@@ -381,6 +389,7 @@ class TestBuildRagContext:
 # Phase 7 OTel span — build_rag_context
 # ---------------------------------------------------------------------------
 
+
 class TestBuildRagContextOtelSpan:
     """Verify that build_rag_context emits a correctly-attributed OTel span."""
 
@@ -402,6 +411,7 @@ class TestBuildRagContextOtelSpan:
         import importlib
 
         import app.rag_agent as ra_mod
+
         importlib.reload(ra_mod)
         from app.rag_agent import build_rag_context as _build
 
@@ -434,3 +444,254 @@ class TestBuildRagContextOtelSpan:
         # Restore default no-op provider so other tests aren't affected
         trace.set_tracer_provider(trace.NoOpTracerProvider())
         importlib.reload(ra_mod)
+
+
+# ---------------------------------------------------------------------------
+# _build_insight_block
+# ---------------------------------------------------------------------------
+
+class TestBuildInsightBlock:
+    def test_empty_insights_not_called(self):
+        """_build_system_prompt with empty insights list omits insight block."""
+        from app.rag_agent import _build_system_prompt
+        prompt = _build_system_prompt([_make_chunk()], student_turns=5, insights=[])
+        assert "CROSS-STUDENT INSIGHTS" not in prompt
+
+    def test_none_insights_omits_block(self):
+        """_build_system_prompt with insights=None omits insight block."""
+        from app.rag_agent import _build_system_prompt
+        prompt = _build_system_prompt([_make_chunk()], student_turns=5, insights=None)
+        assert "CROSS-STUDENT INSIGHTS" not in prompt
+
+    def test_insights_inject_block(self):
+        """_build_system_prompt with non-empty insights injects the insight block."""
+        from app.rag_agent import _build_system_prompt
+        insights = [
+            "72% of students confuse this with meiosis",
+            "Visual cell diagrams have 40% higher success rate",
+        ]
+        prompt = _build_system_prompt([_make_chunk()], student_turns=5, insights=insights)
+        assert "CROSS-STUDENT INSIGHTS" in prompt
+        assert "72% of students confuse this with meiosis" in prompt
+        assert "40% higher success rate" in prompt
+
+    def test_insights_appear_before_gap_block(self):
+        """Insight block is injected before the prerequisite gap block."""
+        from app.rag_agent import _build_system_prompt
+        gaps = [_make_gap("Functions", mastery=0.3)]
+        insights = ["Most students struggle with step 2"]
+        prompt = _build_system_prompt([_make_chunk()], student_turns=5, gaps=gaps, insights=insights)
+        insight_pos = prompt.index("CROSS-STUDENT INSIGHTS")
+        gap_pos = prompt.index("PREREQUISITE GAPS DETECTED")
+        assert insight_pos < gap_pos
+
+    def test_insights_with_no_chunks(self):
+        """Insight block is injected even when no curriculum chunks are available."""
+        from app.rag_agent import _build_system_prompt
+        insights = ["Visual explanation preferred by 60% of students"]
+        prompt = _build_system_prompt([], student_turns=0, insights=insights)
+        assert "CROSS-STUDENT INSIGHTS" in prompt
+        assert "No curriculum content was retrieved" in prompt
+
+
+# ---------------------------------------------------------------------------
+# build_rag_context — cross-student insights (Step 4) + SKM log (Step 6)
+# ---------------------------------------------------------------------------
+
+class TestBuildRagContextInsightsAndSKM:
+    @pytest.mark.asyncio
+    async def test_cross_student_insights_injected_when_cached(self):
+        """When Redis has insights for the target concept, they appear in the prompt."""
+        mock_db = AsyncMock()
+        chunks = [_make_chunk()]
+        concept_id = uuid.uuid4()
+        target_concept = _make_concept("Mitosis", concept_id)
+        cached_insights = ["72% struggle with phase ordering", "diagrams help"]
+
+        with (
+            patch("app.rag_agent.get_history", AsyncMock(return_value=[])),
+            patch("app.rag_agent.get_course_concepts", AsyncMock(return_value=[target_concept])),
+            patch("app.rag_agent.get_student_mastery", AsyncMock(return_value={})),
+            patch("app.rag_agent.detect_gaps", return_value=[]),
+            patch("app.rag_agent._find_concept_for_question", return_value=target_concept),
+            patch("app.rag_agent.fetch_curriculum_chunks", AsyncMock(return_value=chunks)),
+            patch("app.rag_agent.get_cross_student_insights", AsyncMock(return_value=cached_insights)),
+            patch("app.rag_agent.log_concept_interaction", AsyncMock()),
+        ):
+            prompt, returned = await build_rag_context(
+                student_id=uuid.uuid4(),
+                session_id=uuid.uuid4(),
+                question="What is mitosis?",
+                course_id=uuid.uuid4(),
+                db=mock_db,
+            )
+
+        assert "CROSS-STUDENT INSIGHTS" in prompt
+        assert "72% struggle with phase ordering" in prompt
+        assert returned == chunks
+
+    @pytest.mark.asyncio
+    async def test_no_insights_when_cache_returns_none(self):
+        """When Redis has no insights for the concept, the insight block is absent."""
+        mock_db = AsyncMock()
+        chunks = [_make_chunk()]
+        target_concept = _make_concept("Meiosis")
+
+        with (
+            patch("app.rag_agent.get_history", AsyncMock(return_value=[])),
+            patch("app.rag_agent.get_course_concepts", AsyncMock(return_value=[target_concept])),
+            patch("app.rag_agent.get_student_mastery", AsyncMock(return_value={})),
+            patch("app.rag_agent.detect_gaps", return_value=[]),
+            patch("app.rag_agent._find_concept_for_question", return_value=target_concept),
+            patch("app.rag_agent.fetch_curriculum_chunks", AsyncMock(return_value=chunks)),
+            patch("app.rag_agent.get_cross_student_insights", AsyncMock(return_value=None)),
+            patch("app.rag_agent.log_concept_interaction", AsyncMock()),
+        ):
+            prompt, _ = await build_rag_context(
+                student_id=uuid.uuid4(),
+                session_id=uuid.uuid4(),
+                question="What is meiosis?",
+                course_id=uuid.uuid4(),
+                db=mock_db,
+            )
+
+        assert "CROSS-STUDENT INSIGHTS" not in prompt
+
+    @pytest.mark.asyncio
+    async def test_insight_lookup_error_is_silently_skipped(self):
+        """An exception from get_cross_student_insights does not break the pipeline."""
+        mock_db = AsyncMock()
+        chunks = [_make_chunk()]
+        target_concept = _make_concept("Entropy")
+
+        with (
+            patch("app.rag_agent.get_history", AsyncMock(return_value=[])),
+            patch("app.rag_agent.get_course_concepts", AsyncMock(return_value=[target_concept])),
+            patch("app.rag_agent.get_student_mastery", AsyncMock(return_value={})),
+            patch("app.rag_agent.detect_gaps", return_value=[]),
+            patch("app.rag_agent._find_concept_for_question", return_value=target_concept),
+            patch("app.rag_agent.fetch_curriculum_chunks", AsyncMock(return_value=chunks)),
+            patch("app.rag_agent.get_cross_student_insights",
+                  AsyncMock(side_effect=RuntimeError("Redis down"))),
+            patch("app.rag_agent.log_concept_interaction", AsyncMock()),
+        ):
+            prompt, returned = await build_rag_context(
+                student_id=uuid.uuid4(),
+                session_id=uuid.uuid4(),
+                question="What is entropy?",
+                course_id=uuid.uuid4(),
+                db=mock_db,
+            )
+
+        assert returned == chunks
+        assert "CROSS-STUDENT INSIGHTS" not in prompt
+
+    @pytest.mark.asyncio
+    async def test_no_insight_lookup_when_no_concept_matched(self):
+        """get_cross_student_insights is not called when no concept matches the question."""
+        mock_db = AsyncMock()
+        chunks = [_make_chunk()]
+        concepts = [_make_concept("Algebra")]
+
+        with (
+            patch("app.rag_agent.get_history", AsyncMock(return_value=[])),
+            patch("app.rag_agent.get_course_concepts", AsyncMock(return_value=concepts)),
+            patch("app.rag_agent.get_student_mastery", AsyncMock(return_value={})),
+            patch("app.rag_agent.detect_gaps", return_value=[]),
+            patch("app.rag_agent.fetch_curriculum_chunks", AsyncMock(return_value=chunks)),
+            patch("app.rag_agent.get_cross_student_insights") as mock_insights,
+            patch("app.rag_agent.log_concept_interaction", AsyncMock()),
+        ):
+            await build_rag_context(
+                student_id=uuid.uuid4(),
+                session_id=uuid.uuid4(),
+                question="What is the speed of light?",  # no concept keyword match
+                course_id=uuid.uuid4(),
+                db=mock_db,
+            )
+
+        mock_insights.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skm_log_called_when_concept_matched(self):
+        """log_concept_interaction is called with the matched concept when target is found."""
+        mock_db = AsyncMock()
+        chunks = [_make_chunk()]
+        concept_id = uuid.uuid4()
+        target_concept = _make_concept("Photosynthesis", concept_id)
+        student_id = uuid.uuid4()
+
+        with (
+            patch("app.rag_agent.get_history", AsyncMock(return_value=[])),
+            patch("app.rag_agent.get_course_concepts", AsyncMock(return_value=[target_concept])),
+            patch("app.rag_agent.get_student_mastery", AsyncMock(return_value={})),
+            patch("app.rag_agent.detect_gaps", return_value=[]),
+            patch("app.rag_agent._find_concept_for_question", return_value=target_concept),
+            patch("app.rag_agent.fetch_curriculum_chunks", AsyncMock(return_value=chunks)),
+            patch("app.rag_agent.get_cross_student_insights", AsyncMock(return_value=None)),
+            patch("app.rag_agent.log_concept_interaction") as mock_log,
+        ):
+            await build_rag_context(
+                student_id=student_id,
+                session_id=uuid.uuid4(),
+                question="How does photosynthesis work?",
+                course_id=uuid.uuid4(),
+                db=mock_db,
+            )
+
+        mock_log.assert_awaited_once_with(mock_db, student_id, concept_id)
+
+    @pytest.mark.asyncio
+    async def test_skm_log_not_called_when_no_concept_matched(self):
+        """log_concept_interaction is not called when the question matches no concept."""
+        mock_db = AsyncMock()
+        chunks = [_make_chunk()]
+        concepts = [_make_concept("Biology")]
+
+        with (
+            patch("app.rag_agent.get_history", AsyncMock(return_value=[])),
+            patch("app.rag_agent.get_course_concepts", AsyncMock(return_value=concepts)),
+            patch("app.rag_agent.get_student_mastery", AsyncMock(return_value={})),
+            patch("app.rag_agent.detect_gaps", return_value=[]),
+            patch("app.rag_agent.fetch_curriculum_chunks", AsyncMock(return_value=chunks)),
+            patch("app.rag_agent.get_cross_student_insights", AsyncMock(return_value=None)),
+            patch("app.rag_agent.log_concept_interaction") as mock_log,
+        ):
+            await build_rag_context(
+                student_id=uuid.uuid4(),
+                session_id=uuid.uuid4(),
+                question="What is the speed of light?",
+                course_id=uuid.uuid4(),
+                db=mock_db,
+            )
+
+        mock_log.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_skm_log_error_is_silently_skipped(self):
+        """A DB error in log_concept_interaction does not propagate to the caller."""
+        mock_db = AsyncMock()
+        chunks = [_make_chunk()]
+        target_concept = _make_concept("Calculus")
+
+        with (
+            patch("app.rag_agent.get_history", AsyncMock(return_value=[])),
+            patch("app.rag_agent.get_course_concepts", AsyncMock(return_value=[target_concept])),
+            patch("app.rag_agent.get_student_mastery", AsyncMock(return_value={})),
+            patch("app.rag_agent.detect_gaps", return_value=[]),
+            patch("app.rag_agent._find_concept_for_question", return_value=target_concept),
+            patch("app.rag_agent.fetch_curriculum_chunks", AsyncMock(return_value=chunks)),
+            patch("app.rag_agent.get_cross_student_insights", AsyncMock(return_value=None)),
+            patch("app.rag_agent.log_concept_interaction",
+                  AsyncMock(side_effect=RuntimeError("db error"))),
+        ):
+            # Must not raise
+            prompt, returned = await build_rag_context(
+                student_id=uuid.uuid4(),
+                session_id=uuid.uuid4(),
+                question="What is calculus?",
+                course_id=uuid.uuid4(),
+                db=mock_db,
+            )
+
+        assert returned == chunks

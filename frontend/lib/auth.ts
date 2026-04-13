@@ -1,5 +1,8 @@
 'use client'
 
+/** Account classification returned by the user-service. */
+export type AccountType = 'standard' | 'minor'
+
 export interface AuthResponse {
   access_token: string
   user: {
@@ -9,6 +12,14 @@ export interface AuthResponse {
     avatar_emoji: string
     subscription_status: string
     has_completed_onboarding: boolean
+    /** Whether the account is a minor (K-12) or standard (adult) account. */
+    account_type: AccountType
+    /** ISO 8601 date of birth, present for minor accounts. */
+    date_of_birth?: string
+    /** Guardian email required for minor accounts. */
+    guardian_email?: string
+    /** ISO 8601 timestamp of guardian consent, null until consent granted. */
+    guardian_consent_at: string | null
   }
 }
 

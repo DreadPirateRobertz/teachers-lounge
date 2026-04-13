@@ -127,6 +127,9 @@ func main() {
 		r.Get("/gaming/shop/catalog", h.GetShopCatalog)
 		r.Post("/gaming/shop/buy", h.BuyPowerUp)
 
+		// Boss progression map — per-user defeated/current/locked trail
+		r.Get("/gaming/boss/progression", h.GetBossProgression)
+
 		// Achievement / loot routes
 		r.Get("/gaming/achievements/{userId}", h.GetAchievements)
 

@@ -12,10 +12,12 @@ import (
 	"github.com/teacherslounge/user-service/internal/store"
 )
 
+// TeachersHandler handles teacher-specific endpoints (profile, classes, students, materials).
 type TeachersHandler struct {
 	store store.Storer
 }
 
+// NewTeachersHandler creates a TeachersHandler backed by the given store.
 func NewTeachersHandler(s store.Storer) *TeachersHandler {
 	return &TeachersHandler{store: s}
 }

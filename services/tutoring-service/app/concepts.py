@@ -1,4 +1,5 @@
 """Concept dependency graph endpoints — JWT-protected."""
+
 from datetime import datetime, timezone
 from uuid import UUID
 

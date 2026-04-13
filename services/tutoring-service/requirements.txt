@@ -1,3 +1,4 @@
+# tl-logging installed via Dockerfile COPY + pip install step (see ci.yml docker-build)
 fastapi==0.115.6
 uvicorn[standard]==0.42.0
 httpx==0.28.1
@@ -8,9 +9,9 @@ pydantic-settings==2.7.0
 openai==1.60.0
 python-dotenv==1.2.2
 python-jose[cryptography]==3.3.0
-prometheus_client==0.21.1
-opentelemetry-sdk==1.29.0
-opentelemetry-instrumentation-fastapi==0.50b0
-opentelemetry-exporter-otlp-proto-grpc==1.29.0
+prometheus_client==0.24.1
+opentelemetry-sdk==1.40.0
+opentelemetry-instrumentation-fastapi==0.61b0
+opentelemetry-exporter-otlp-proto-grpc==1.40.0
 redis[hiredis]==5.2.1
 python-json-logger==3.2.1

@@ -31,6 +31,7 @@ Response:
     Transfer-Encoding: chunked
     (streamed token-by-token)
 """
+
 import logging
 from typing import Literal
 
@@ -48,10 +49,7 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["chat-simple"])
 
-FALLBACK_TEXT = (
-    "I'm having a moment of technical difficulty. "
-    "Please try again in a moment. 🔧"
-)
+FALLBACK_TEXT = "I'm having a moment of technical difficulty. Please try again in a moment. 🔧"
 
 
 class ChatMessage(BaseModel):
@@ -81,6 +79,7 @@ async def simple_chat(
         messages = [{"role": "system", "content": PROFESSOR_NOVA_SYSTEM_PROMPT}] + messages
 
     async def stream_generator():
+        """Yield SSE text chunks from the AI gateway, falling back on error."""
         try:
             stream = await client.chat.completions.create(
                 model=settings.tutor_primary_model,

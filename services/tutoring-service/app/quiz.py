@@ -9,6 +9,7 @@ ordering, case-insensitive atom symbols).  When ``rdkit`` is available a
 proper canonical SMILES comparison is performed; otherwise a stripped
 case-insensitive string match is used as fallback.
 """
+
 import logging
 import re
 
@@ -30,6 +31,7 @@ def _probe_rdkit() -> bool:
         return _rdkit_available
     try:
         from rdkit import Chem  # noqa: F401
+
         _rdkit_available = True
     except ImportError:
         logger.debug("rdkit not installed — using string-match SMILES comparison")
@@ -50,6 +52,7 @@ def _normalize_smiles(smiles: str) -> str:
     smiles = smiles.strip()
     if _probe_rdkit():
         from rdkit import Chem
+
         mol = Chem.MolFromSmiles(smiles)
         if mol is None:
             return smiles.lower()

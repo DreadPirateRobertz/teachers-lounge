@@ -13,7 +13,6 @@ import (
 	"github.com/teacherslounge/user-service/internal/models"
 )
 
-
 type Claims struct {
 	jwt.RegisteredClaims
 	UserID      string `json:"uid"`
@@ -22,12 +21,14 @@ type Claims struct {
 	SubStatus   string `json:"sub_status,omitempty"`
 }
 
+// JWTManager issues and validates HS256 access tokens for user-service.
 type JWTManager struct {
 	secret          []byte
 	accessDuration  time.Duration
 	refreshDuration time.Duration
 }
 
+// NewJWTManager creates a JWTManager signing with the given HMAC secret and token durations.
 func NewJWTManager(secret string, accessDur, refreshDur time.Duration) *JWTManager {
 	return &JWTManager{
 		secret:          []byte(secret),

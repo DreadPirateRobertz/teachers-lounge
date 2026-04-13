@@ -18,15 +18,15 @@ const TUTORING_SERVICE_URL = process.env.TUTORING_SERVICE_URL || 'http://tutorin
  * - media-src blob:: TTS audio via Web Audio API
  * - worker-src blob:: Three.js OffscreenCanvas workers
  */
-const CSP = buildCsp()
-
+// HSTS and upgrade-insecure-requests are handled by the reverse proxy
+// (nginx/caddy) in production. Next.js standalone bakes headers() at
+// build time, so runtime env vars cannot toggle them.
 const SECURITY_HEADERS = [
-  { key: 'Content-Security-Policy', value: CSP },
+  { key: 'Content-Security-Policy', value: buildCsp() },
   { key: 'X-Frame-Options', value: 'DENY' },
   { key: 'X-Content-Type-Options', value: 'nosniff' },
   { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
   { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=()' },
-  { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
 ]
 
 const config: NextConfig = {

@@ -4,6 +4,7 @@ These tests act as a living contract for the lint gate: if the config file
 is removed, renamed, or stripped of required sections the tests fail
 immediately rather than silently regressing to a weaker ruleset.
 """
+
 import subprocess
 import sys
 from pathlib import Path
@@ -54,9 +55,7 @@ class TestRuffTomlPresent:
     def test_ruff_toml_sets_max_complexity(self):
         """ruff.toml must define a max-complexity threshold."""
         config_text = (SERVICE_ROOT / "ruff.toml").read_text()
-        assert "max-complexity" in config_text, (
-            "ruff.toml must set [lint.mccabe] max-complexity"
-        )
+        assert "max-complexity" in config_text, "ruff.toml must set [lint.mccabe] max-complexity"
 
 
 class TestRuffPassesClean:
@@ -74,6 +73,4 @@ class TestRuffPassesClean:
             capture_output=True,
             text=True,
         )
-        assert result.returncode == 0, (
-            f"ruff found violations:\n{result.stdout}\n{result.stderr}"
-        )
+        assert result.returncode == 0, f"ruff found violations:\n{result.stdout}\n{result.stderr}"

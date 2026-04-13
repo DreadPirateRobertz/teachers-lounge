@@ -13,6 +13,7 @@ Functions under test:
   - resolve_misconception
   - get_due_review_prompt
 """
+
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
@@ -42,6 +43,7 @@ NOW = datetime(2026, 4, 5, 12, 0, 0, tzinfo=timezone.utc)
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 def _make_profile(
     user_id: UUID | None = None,
@@ -96,6 +98,7 @@ def _make_mastery_row(
 
 # ── get_or_create_learning_profile ───────────────────────────────────────────
 
+
 class TestGetOrCreateLearningProfile:
     @pytest.mark.asyncio
     async def test_returns_existing_profile(self):
@@ -149,6 +152,7 @@ class TestGetOrCreateLearningProfile:
 
 
 # ── update_learning_profile_dials ─────────────────────────────────────────────
+
 
 class TestUpdateLearningProfileDials:
     @pytest.mark.asyncio
@@ -211,6 +215,7 @@ class TestUpdateLearningProfileDials:
 
 # ── get_dials ─────────────────────────────────────────────────────────────────
 
+
 class TestGetDials:
     @pytest.mark.asyncio
     async def test_returns_dict_with_four_dimensions(self):
@@ -247,6 +252,7 @@ class TestGetDials:
 
 # ── log_explanation_preference ────────────────────────────────────────────────
 
+
 class TestLogExplanationPreference:
     @pytest.mark.asyncio
     async def test_adds_row_without_commit(self):
@@ -258,9 +264,7 @@ class TestLogExplanationPreference:
         added = []
         db.add.side_effect = added.append
 
-        result = await log_explanation_preference(
-            db, USER_ID, CONCEPT_ID, "visual", helpful=True
-        )
+        result = await log_explanation_preference(db, USER_ID, CONCEPT_ID, "visual", helpful=True)
 
         db.add.assert_called_once()
         db.commit.assert_not_awaited()
@@ -280,14 +284,13 @@ class TestLogExplanationPreference:
         added = []
         db.add.side_effect = added.append
 
-        await log_explanation_preference(
-            db, USER_ID, CONCEPT_ID, "derivation", helpful=False
-        )
+        await log_explanation_preference(db, USER_ID, CONCEPT_ID, "derivation", helpful=False)
 
         assert added[0].helpful is False
 
 
 # ── get_explanation_preferences ───────────────────────────────────────────────
+
 
 class TestGetExplanationPreferences:
     @pytest.mark.asyncio
@@ -322,6 +325,7 @@ class TestGetExplanationPreferences:
 
 
 # ── log_misconception ─────────────────────────────────────────────────────────
+
 
 class TestLogMisconception:
     def _build_db_no_existing(self) -> AsyncMock:
@@ -386,6 +390,7 @@ class TestLogMisconception:
 
 # ── get_active_misconceptions ─────────────────────────────────────────────────
 
+
 class TestGetActiveMisconceptions:
     @pytest.mark.asyncio
     async def test_returns_list_with_recency_weight(self):
@@ -406,7 +411,9 @@ class TestGetActiveMisconceptions:
     async def test_recent_misconception_has_higher_weight_than_old(self):
         """A misconception from today has higher recency_weight than one from 30 days ago."""
         db = AsyncMock()
-        recent = _make_misconception(recorded_at=NOW - timedelta(days=1), description="recent error")
+        recent = _make_misconception(
+            recorded_at=NOW - timedelta(days=1), description="recent error"
+        )
         old = _make_misconception(recorded_at=NOW - timedelta(days=30), description="old error")
         result = MagicMock()
         result.scalars.return_value.all.return_value = [recent, old]
@@ -453,6 +460,7 @@ class TestGetActiveMisconceptions:
 
 # ── resolve_misconception ─────────────────────────────────────────────────────
 
+
 class TestResolveMisconception:
     @pytest.mark.asyncio
     async def test_sets_resolved_true_without_commit(self):
@@ -487,6 +495,7 @@ class TestResolveMisconception:
 
 
 # ── get_due_review_prompt ─────────────────────────────────────────────────────
+
 
 class TestGetDueReviewPrompt:
     @pytest.mark.asyncio
@@ -619,12 +628,73 @@ class TestUpdateDialsUnknownKeyIgnored:
         db.execute = AsyncMock(return_value=result)
 
         # Pass a valid key plus a bogus key
-        await update_learning_profile_dials(
-            db, USER_ID, {"visual_verbal": -0.5, "__class__": 9.9}
-        )
+        await update_learning_profile_dials(db, USER_ID, {"visual_verbal": -0.5, "__class__": 9.9})
 
         # Valid key was applied
         assert profile.visual_verbal == -0.5
         # Bogus key did not create an attribute on the profile mock
         # (hasattr would be True on MagicMock but the value should not be 9.9)
         assert getattr(profile, "__class__", None) is not float
+
+
+# ── log_concept_interaction ───────────────────────────────────────────────────
+
+class TestLogConceptInteraction:
+    """Tests for log_concept_interaction (Phase 2 SKM engagement log)."""
+
+    @pytest.mark.asyncio
+    async def test_creates_mastery_row_when_absent(self):
+        """When no StudentConceptMastery row exists, one is created with mastery_score=0."""
+        from app.knowledge_model import log_concept_interaction
+
+        db = AsyncMock()
+        db.flush = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None  # no existing row
+        db.execute = AsyncMock(return_value=result)
+
+        await log_concept_interaction(db, USER_ID, CONCEPT_ID)
+
+        db.add.assert_called_once()
+        added = db.add.call_args[0][0]
+        assert added.user_id == USER_ID
+        assert added.concept_id == CONCEPT_ID
+        assert added.mastery_score == 0.0
+        assert added.last_reviewed_at is not None
+        db.flush.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_updates_last_reviewed_at_on_existing_row(self):
+        """When a mastery row exists, last_reviewed_at is refreshed without adding a new row."""
+        from app.knowledge_model import log_concept_interaction
+        from app.orm import StudentConceptMastery
+
+        db = AsyncMock()
+        existing = MagicMock(spec=StudentConceptMastery)
+        existing.last_reviewed_at = NOW - timedelta(days=10)
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = existing
+        db.execute = AsyncMock(return_value=result)
+
+        await log_concept_interaction(db, USER_ID, CONCEPT_ID)
+
+        db.add.assert_not_called()
+        # last_reviewed_at should be refreshed to a more recent value
+        assert existing.last_reviewed_at > NOW - timedelta(days=10)
+
+    @pytest.mark.asyncio
+    async def test_does_not_modify_mastery_score_on_existing_row(self):
+        """log_concept_interaction never changes mastery_score — that is the SRS system's job."""
+        from app.knowledge_model import log_concept_interaction
+        from app.orm import StudentConceptMastery
+
+        db = AsyncMock()
+        existing = MagicMock(spec=StudentConceptMastery)
+        existing.mastery_score = 0.65
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = existing
+        db.execute = AsyncMock(return_value=result)
+
+        await log_concept_interaction(db, USER_ID, CONCEPT_ID)
+
+        assert existing.mastery_score == 0.65

@@ -9,6 +9,7 @@ Endpoints used:
   GET  /users/{user_id}/profile       → learning_profile.felder_silverman_dials
   PATCH /users/{user_id}/preferences  → { "felder_silverman_dials": {...} }
 """
+
 import logging
 from uuid import UUID
 
@@ -16,7 +17,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-_TIMEOUT = httpx.Timeout(2.0)   # 2 s — non-fatal if exceeded
+_TIMEOUT = httpx.Timeout(2.0)  # 2 s — non-fatal if exceeded
 
 
 class UserServiceClient:
@@ -62,17 +63,13 @@ class UserServiceClient:
                 return {}
             resp.raise_for_status()
             data = resp.json()
-            dials = (
-                data.get("learning_profile", {}).get("felder_silverman_dials") or {}
-            )
+            dials = data.get("learning_profile", {}).get("felder_silverman_dials") or {}
             return {k: float(v) for k, v in dials.items()}
         except Exception as exc:  # noqa: BLE001
             logger.warning("get_felder_silverman_dials failed for %s: %s", user_id, exc)
             return {}
 
-    async def patch_felder_silverman_dials(
-        self, user_id: UUID, dials: dict[str, float]
-    ) -> bool:
+    async def patch_felder_silverman_dials(self, user_id: UUID, dials: dict[str, float]) -> bool:
         """Persist updated Felder-Silverman dials to the User Service.
 
         Sends a PATCH request with the full updated dials dict.  Returns False

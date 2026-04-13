@@ -8,6 +8,7 @@ Actions logged:
   READ_INTERACTIONS  — student fetches their own conversation history
   READ_QUIZ_RESULTS  — (placeholder; quiz results are in user-service)
 """
+
 import logging
 from typing import Optional
 from uuid import UUID

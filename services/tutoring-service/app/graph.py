@@ -1,4 +1,5 @@
 """Concept dependency graph — prerequisite mapping, gap detection, remediation paths."""
+
 from collections import defaultdict, deque
 from uuid import UUID
 
@@ -7,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from .orm import Concept, StudentConceptMastery
 
-MASTERY_THRESHOLD = 0.7   # below this a prerequisite is considered a "gap"
+MASTERY_THRESHOLD = 0.7  # below this a prerequisite is considered a "gap"
 ADEQUATE_THRESHOLD = 0.6  # lower bar used for prerequisite chain adequacy check
 
 
@@ -132,15 +133,17 @@ def get_prerequisite_chain(
         if not concept:
             continue
         score = mastery[prereq_id].mastery_score if prereq_id in mastery else 0.0
-        chain.append({
-            "concept_id": prereq_id,
-            "concept_name": concept.name,
-            "path": concept.path,
-            "difficulty": getattr(concept, "difficulty", 0.5),
-            "mastery_score": score,
-            "mastery_adequate": score >= threshold,
-            "depth": depth,
-        })
+        chain.append(
+            {
+                "concept_id": prereq_id,
+                "concept_name": concept.name,
+                "path": concept.path,
+                "difficulty": getattr(concept, "difficulty", 0.5),
+                "mastery_score": score,
+                "mastery_adequate": score >= threshold,
+                "depth": depth,
+            }
+        )
 
     return chain
 
@@ -173,15 +176,18 @@ def detect_gaps(
             if concept:
                 # required_by: direct dependents that are also in the prereq chain or the target
                 required_by = [
-                    d for d in direct_dependents[prereq_id]
+                    d
+                    for d in direct_dependents[prereq_id]
                     if d == target_concept_id or d in set(all_prereqs)
                 ]
-                gaps.append({
-                    "concept_id": prereq_id,
-                    "concept_name": concept.name,
-                    "mastery_score": score,
-                    "required_by": required_by,
-                })
+                gaps.append(
+                    {
+                        "concept_id": prereq_id,
+                        "concept_name": concept.name,
+                        "mastery_score": score,
+                        "required_by": required_by,
+                    }
+                )
 
     return gaps
 
@@ -216,13 +222,15 @@ def _build_remediation_steps(
             reason = f"Direct prerequisite of target (mastery: {score:.0%})"
         else:
             reason = f"Transitive prerequisite (mastery: {score:.0%})"
-        steps.append({
-            "order": i + 1,
-            "concept_id": cid,
-            "concept_name": concept.name,
-            "mastery_score": score,
-            "reason": reason,
-        })
+        steps.append(
+            {
+                "order": i + 1,
+                "concept_id": cid,
+                "concept_name": concept.name,
+                "mastery_score": score,
+                "reason": reason,
+            }
+        )
     return steps
 
 

@@ -1,6 +1,7 @@
 """
 Shared test fixtures for the tutoring service.
 """
+
 from unittest.mock import MagicMock
 
 import pytest
@@ -33,6 +34,7 @@ def patch_settings(monkeypatch):
         def test_something(patch_settings):
             patch_settings(jwt_secret="test-secret")
     """
+
     def _patch(**kwargs):
         for key, value in kwargs.items():
             monkeypatch.setattr(settings, key, value)
@@ -49,6 +51,7 @@ def override_get_db():
     app.dependency_overrides[get_db] directly — their override takes precedence.
     This fixture handles teardown (clears the override) for all tests.
     """
+
     async def _null_db():
         yield MagicMock()
 

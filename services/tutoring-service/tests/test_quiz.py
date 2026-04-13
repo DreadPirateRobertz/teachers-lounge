@@ -1,4 +1,5 @@
 """Tests for POST /v1/quiz/answer (Phase 6 molecule builder + multiple-choice)."""
+
 import pytest
 from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
@@ -15,10 +16,12 @@ async def _post_answer(payload: dict) -> dict:
 class TestQuizAnswerSmiles:
     async def test_correct_smiles_returns_correct(self):
         """Matching SMILES strings (case/whitespace normalised) return correct=True."""
-        resp = await _post_answer({
-            "smiles_answer": "c1ccccc1",
-            "expected_smiles": "c1ccccc1",
-        })
+        resp = await _post_answer(
+            {
+                "smiles_answer": "c1ccccc1",
+                "expected_smiles": "c1ccccc1",
+            }
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["correct"] is True
@@ -27,10 +30,12 @@ class TestQuizAnswerSmiles:
 
     async def test_wrong_smiles_returns_incorrect(self):
         """Non-matching SMILES returns correct=False."""
-        resp = await _post_answer({
-            "smiles_answer": "CCO",
-            "expected_smiles": "c1ccccc1",
-        })
+        resp = await _post_answer(
+            {
+                "smiles_answer": "CCO",
+                "expected_smiles": "c1ccccc1",
+            }
+        )
         assert resp.status_code == 200
         body = resp.json()
         assert body["correct"] is False
@@ -44,10 +49,12 @@ class TestQuizAnswerSmiles:
 
     async def test_smiles_normalisation_strips_whitespace(self):
         """Leading/trailing whitespace in SMILES is normalised before comparison."""
-        resp = await _post_answer({
-            "smiles_answer": "  c1ccccc1  ",
-            "expected_smiles": "c1ccccc1",
-        })
+        resp = await _post_answer(
+            {
+                "smiles_answer": "  c1ccccc1  ",
+                "expected_smiles": "c1ccccc1",
+            }
+        )
         assert resp.status_code == 200
         assert resp.json()["correct"] is True
 
@@ -76,10 +83,12 @@ class TestQuizAnswerValidation:
 
     async def test_both_fields_smiles_takes_precedence(self):
         """When both fields are set, SMILES evaluation takes precedence."""
-        resp = await _post_answer({
-            "chosen_key": "A",
-            "smiles_answer": "c1ccccc1",
-            "expected_smiles": "c1ccccc1",
-        })
+        resp = await _post_answer(
+            {
+                "chosen_key": "A",
+                "smiles_answer": "c1ccccc1",
+                "expected_smiles": "c1ccccc1",
+            }
+        )
         assert resp.status_code == 200
         assert resp.json()["answer_type"] == "smiles"

@@ -3,6 +3,7 @@
 Verifies that configure_logging() produces JSON output with the required
 fields: timestamp, level, service, trace_id, message.
 """
+
 import json
 import logging
 import uuid
@@ -21,7 +22,9 @@ class TestConfigureLogging:
         root = logging.getLogger()
         root.handlers.clear()
 
-    def _capture_log(self, service_name: str, level: str = "DEBUG") -> tuple[logging.Logger, StringIO]:
+    def _capture_log(
+        self, service_name: str, level: str = "DEBUG"
+    ) -> tuple[logging.Logger, StringIO]:
         """Configure logging and return a logger + StringIO stream pair.
 
         Args:
@@ -113,6 +116,7 @@ class TestTraceID:
         """get_trace_id() returns a non-empty default when no trace ID is set."""
         # Clear any previously set trace ID by setting to empty
         from app.logging_config import _trace_id_ctx
+
         token = _trace_id_ctx.set("")
         try:
             tid = get_trace_id()
@@ -128,6 +132,7 @@ class TestTraceID:
             assert get_trace_id() == tid
         finally:
             from app.logging_config import _trace_id_ctx
+
             _trace_id_ctx.reset(token)
 
     def test_trace_id_appears_in_log_output(self):
@@ -142,11 +147,13 @@ class TestTraceID:
             assert record["trace_id"] == tid
         finally:
             from app.logging_config import _trace_id_ctx
+
             _trace_id_ctx.reset(token)
 
     def test_default_trace_id_in_log_when_not_set(self):
         """When no trace_id is set, log record still has a non-empty trace_id."""
         from app.logging_config import _trace_id_ctx
+
         stream = StringIO()
         configure_logging(service_name="tutoring-service", log_level="DEBUG", stream=stream)
         token = _trace_id_ctx.set("")

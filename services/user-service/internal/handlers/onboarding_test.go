@@ -20,6 +20,16 @@ func newOnboardingJWT() *auth.JWTManager {
 	return auth.NewJWTManager(testJWTSecret, 15*time.Minute, 24*time.Hour)
 }
 
+// issueToken issues an access token for the given user via IssueAccessToken.
+func issueToken(t *testing.T, jwtMgr *auth.JWTManager, u *models.User) string {
+	t.Helper()
+	tok, err := jwtMgr.IssueAccessToken(u, "trialing")
+	if err != nil {
+		t.Fatalf("IssueAccessToken: %v", err)
+	}
+	return tok
+}
+
 // buildOnboardingRouter wires PATCH /users/{id}/onboarding with auth middleware.
 func buildOnboardingRouter(t *testing.T, ms *mockStore, userID uuid.UUID) (http.Handler, string) {
 	t.Helper()
@@ -28,10 +38,12 @@ func buildOnboardingRouter(t *testing.T, ms *mockStore, userID uuid.UUID) (http.
 	mc := newMockCache()
 	usersH := handlers.NewUsersHandler(ms, mc)
 
-	accessToken, _, err := jwtMgr.Issue(userID.String(), "test@example.com", "trialing")
-	if err != nil {
-		t.Fatalf("issue token: %v", err)
+	user := &models.User{
+		ID:          userID,
+		Email:       "test@example.com",
+		AccountType: models.AccountTypeStandard,
 	}
+	tok := issueToken(t, jwtMgr, user)
 
 	r := chi.NewRouter()
 	r.Route("/users/{id}", func(r chi.Router) {
@@ -42,7 +54,7 @@ func buildOnboardingRouter(t *testing.T, ms *mockStore, userID uuid.UUID) (http.
 		r.Patch("/onboarding", usersH.CompleteOnboarding)
 	})
 
-	return r, accessToken
+	return r, tok
 }
 
 // ============================================================
@@ -55,8 +67,9 @@ func TestCompleteOnboarding_Success(t *testing.T) {
 	ms := newMockStore()
 	userID := uuid.New()
 	ms.byID[userID] = &models.User{
-		ID:    userID,
-		Email: "wizard@example.com",
+		ID:          userID,
+		Email:       "wizard@example.com",
+		AccountType: models.AccountTypeStandard,
 	}
 	ms.users["wizard@example.com"] = ms.byID[userID]
 
@@ -89,6 +102,7 @@ func TestCompleteOnboarding_Idempotent(t *testing.T) {
 	ms.byID[userID] = &models.User{
 		ID:                     userID,
 		Email:                  "wizard@example.com",
+		AccountType:            models.AccountTypeStandard,
 		HasCompletedOnboarding: true,
 	}
 	ms.users["wizard@example.com"] = ms.byID[userID]
@@ -112,7 +126,7 @@ func TestCompleteOnboarding_RequiresSelf(t *testing.T) {
 	ms := newMockStore()
 	ownerID := uuid.New()
 	otherID := uuid.New()
-	ms.byID[ownerID] = &models.User{ID: ownerID, Email: "owner@example.com"}
+	ms.byID[ownerID] = &models.User{ID: ownerID, Email: "owner@example.com", AccountType: models.AccountTypeStandard}
 	ms.users["owner@example.com"] = ms.byID[ownerID]
 
 	// Token belongs to ownerID but request targets otherID.
@@ -134,7 +148,7 @@ func TestCompleteOnboarding_RequiresSelf(t *testing.T) {
 func TestCompleteOnboarding_NoAuth(t *testing.T) {
 	ms := newMockStore()
 	userID := uuid.New()
-	ms.byID[userID] = &models.User{ID: userID, Email: "x@example.com"}
+	ms.byID[userID] = &models.User{ID: userID, Email: "x@example.com", AccountType: models.AccountTypeStandard}
 	ms.users["x@example.com"] = ms.byID[userID]
 
 	router, _ := buildOnboardingRouter(t, ms, userID)

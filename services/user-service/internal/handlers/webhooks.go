@@ -7,10 +7,12 @@ import (
 	"github.com/teacherslounge/user-service/internal/billing"
 )
 
+// WebhookHandler handles inbound Stripe webhook events at POST /webhooks/stripe.
 type WebhookHandler struct {
 	billing *billing.Client
 }
 
+// NewWebhookHandler creates a WebhookHandler using the given Stripe billing client.
 func NewWebhookHandler(b *billing.Client) *WebhookHandler {
 	return &WebhookHandler{billing: b}
 }
