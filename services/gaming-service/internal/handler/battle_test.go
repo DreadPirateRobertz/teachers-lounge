@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/teacherslounge/gaming-service/internal/handler"
 	"github.com/teacherslounge/gaming-service/internal/middleware"
 	"github.com/teacherslounge/gaming-service/internal/model"
@@ -322,4 +324,406 @@ func (b *battleStore) GetChapterMastery(_ context.Context, _ string, _ []string)
 }
 func (b *battleStore) GetChapterMasteryBatch(_ context.Context, _ string, _ map[string][]string) (map[string]float64, error) {
 	return map[string]float64{}, nil
+}
+
+// ── StartBattle tests ─────────────────────────────────────────────────────────
+
+func TestStartBattle_HappyPath(t *testing.T) {
+	s := &battleStore{}
+	h := newBattleHandler(s, taunt.StaticGenerator{})
+	body, _ := json.Marshal(model.StartBattleRequest{UserID: "u1", BossID: "algebra_dragon"})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/boss/start", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+
+	h.StartBattle(rr, req)
+
+	if rr.Code != http.StatusCreated {
+		t.Fatalf("expected 201, got %d: %s", rr.Code, rr.Body)
+	}
+	var resp model.StartBattleResponse
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
+	if resp.Session.BossID != "algebra_dragon" {
+		t.Errorf("expected bossID algebra_dragon, got %q", resp.Session.BossID)
+	}
+	if resp.Session.Phase != model.PhaseActive {
+		t.Errorf("expected active phase, got %q", resp.Session.Phase)
+	}
+}
+
+func TestStartBattle_InvalidBody(t *testing.T) {
+	h := newBattleHandler(&battleStore{}, taunt.StaticGenerator{})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/boss/start", bytes.NewBufferString("{bad"))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.StartBattle(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestStartBattle_ForbiddenMismatch(t *testing.T) {
+	h := newBattleHandler(&battleStore{}, taunt.StaticGenerator{})
+	body, _ := json.Marshal(model.StartBattleRequest{UserID: "other", BossID: "algebra_dragon"})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/boss/start", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.StartBattle(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", rr.Code)
+	}
+}
+
+func TestStartBattle_UnknownBossID(t *testing.T) {
+	h := newBattleHandler(&battleStore{}, taunt.StaticGenerator{})
+	body, _ := json.Marshal(model.StartBattleRequest{UserID: "u1", BossID: "nonexistent_boss"})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/boss/start", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.StartBattle(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+// ── GetBattleSession tests ────────────────────────────────────────────────────
+
+func TestGetBattleSession_HappyPath(t *testing.T) {
+	s := &battleStore{session: activeSession()}
+	h := newBattleHandler(s, taunt.StaticGenerator{})
+	req := httptest.NewRequest(http.MethodGet, "/gaming/boss/session/sess-1", nil)
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("sessionId", "sess-1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rr := httptest.NewRecorder()
+
+	h.GetBattleSession(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body)
+	}
+	var session model.BattleSession
+	_ = json.NewDecoder(rr.Body).Decode(&session)
+	if session.SessionID != "sess-1" {
+		t.Errorf("expected sessionID=sess-1, got %q", session.SessionID)
+	}
+}
+
+func TestGetBattleSession_NotFound(t *testing.T) {
+	s := &battleStore{session: nil}
+	h := newBattleHandler(s, taunt.StaticGenerator{})
+	req := httptest.NewRequest(http.MethodGet, "/gaming/boss/session/missing", nil)
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("sessionId", "missing")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rr := httptest.NewRecorder()
+	h.GetBattleSession(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rr.Code)
+	}
+}
+
+func TestGetBattleSession_ForbiddenCrossUser(t *testing.T) {
+	sess := activeSession()
+	sess.UserID = "other-user"
+	s := &battleStore{session: sess}
+	h := newBattleHandler(s, taunt.StaticGenerator{})
+	req := httptest.NewRequest(http.MethodGet, "/gaming/boss/session/sess-1", nil)
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("sessionId", "sess-1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rr := httptest.NewRecorder()
+	h.GetBattleSession(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", rr.Code)
+	}
+}
+
+// ── ActivatePowerUp tests ─────────────────────────────────────────────────────
+
+func TestActivatePowerUp_HappyPathHeal(t *testing.T) {
+	sess := activeSession()
+	sess.PlayerHP = 50 // below max so heal is meaningful
+	s := &battleStore{session: sess}
+	h := newBattleHandler(s, taunt.StaticGenerator{})
+	body, _ := json.Marshal(model.PowerUpRequest{SessionID: "sess-1", PowerUp: model.PowerUpHeal})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/boss/powerup", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+
+	h.ActivatePowerUp(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body)
+	}
+	var resp model.PowerUpResponse
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
+	if !resp.Applied {
+		t.Error("expected applied=true")
+	}
+}
+
+func TestActivatePowerUp_InvalidBody(t *testing.T) {
+	h := newBattleHandler(&battleStore{session: activeSession()}, taunt.StaticGenerator{})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/boss/powerup", bytes.NewBufferString("{bad"))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.ActivatePowerUp(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestActivatePowerUp_SessionNotFound(t *testing.T) {
+	h := newBattleHandler(&battleStore{session: nil}, taunt.StaticGenerator{})
+	body, _ := json.Marshal(model.PowerUpRequest{SessionID: "x", PowerUp: model.PowerUpHeal})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/boss/powerup", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.ActivatePowerUp(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rr.Code)
+	}
+}
+
+func TestActivatePowerUp_ForbiddenCrossUser(t *testing.T) {
+	sess := activeSession()
+	sess.UserID = "other"
+	h := newBattleHandler(&battleStore{session: sess}, taunt.StaticGenerator{})
+	body, _ := json.Marshal(model.PowerUpRequest{SessionID: "sess-1", PowerUp: model.PowerUpHeal})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/boss/powerup", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.ActivatePowerUp(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", rr.Code)
+	}
+}
+
+func TestActivatePowerUp_UnknownPowerUpType(t *testing.T) {
+	h := newBattleHandler(&battleStore{session: activeSession()}, taunt.StaticGenerator{})
+	body, _ := json.Marshal(model.PowerUpRequest{SessionID: "sess-1", PowerUp: "super_weapon"})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/boss/powerup", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.ActivatePowerUp(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestActivatePowerUp_SessionNotActive(t *testing.T) {
+	sess := activeSession()
+	sess.Phase = model.PhaseVictory
+	h := newBattleHandler(&battleStore{session: sess}, taunt.StaticGenerator{})
+	body, _ := json.Marshal(model.PowerUpRequest{SessionID: "sess-1", PowerUp: model.PowerUpHeal})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/boss/powerup", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.ActivatePowerUp(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Errorf("expected 409, got %d", rr.Code)
+	}
+}
+
+// ── ForfeitBattle tests ───────────────────────────────────────────────────────
+
+func TestForfeitBattle_HappyPath(t *testing.T) {
+	s := &battleStore{session: activeSession()}
+	h := newBattleHandler(s, taunt.StaticGenerator{})
+	body, _ := json.Marshal(map[string]string{"session_id": "sess-1"})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/boss/forfeit", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+
+	h.ForfeitBattle(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body)
+	}
+	var result model.BattleResult
+	_ = json.NewDecoder(rr.Body).Decode(&result)
+	if result.Won {
+		t.Error("expected won=false on forfeit")
+	}
+}
+
+func TestForfeitBattle_InvalidBody(t *testing.T) {
+	h := newBattleHandler(&battleStore{session: activeSession()}, taunt.StaticGenerator{})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/boss/forfeit", bytes.NewBufferString("{bad"))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.ForfeitBattle(rr, req)
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("expected 400, got %d", rr.Code)
+	}
+}
+
+func TestForfeitBattle_SessionNotFound(t *testing.T) {
+	h := newBattleHandler(&battleStore{session: nil}, taunt.StaticGenerator{})
+	body, _ := json.Marshal(map[string]string{"session_id": "missing"})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/boss/forfeit", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.ForfeitBattle(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rr.Code)
+	}
+}
+
+func TestForfeitBattle_ForbiddenCrossUser(t *testing.T) {
+	sess := activeSession()
+	sess.UserID = "other"
+	h := newBattleHandler(&battleStore{session: sess}, taunt.StaticGenerator{})
+	body, _ := json.Marshal(map[string]string{"session_id": "sess-1"})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/boss/forfeit", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.ForfeitBattle(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", rr.Code)
+	}
+}
+
+func TestForfeitBattle_SessionNotActive(t *testing.T) {
+	sess := activeSession()
+	sess.Phase = model.PhaseVictory
+	h := newBattleHandler(&battleStore{session: sess}, taunt.StaticGenerator{})
+	body, _ := json.Marshal(map[string]string{"session_id": "sess-1"})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/boss/forfeit", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.ForfeitBattle(rr, req)
+	if rr.Code != http.StatusConflict {
+		t.Errorf("expected 409, got %d", rr.Code)
+	}
+}
+
+// ── Attack victory / defeat paths (exercises finishBattle) ───────────────────
+
+// TestAttack_VictoryPath exercises finishBattle on boss defeat.
+func TestAttack_VictoryPath(t *testing.T) {
+	sess := activeSession()
+	sess.BossHP = 1 // one correct answer kills the boss
+	s := &battleStore{session: sess}
+	h := newBattleHandler(s, taunt.StaticGenerator{})
+
+	rr := httptest.NewRecorder()
+	h.Attack(rr, attackRequest("sess-1", true, 500))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body)
+	}
+	var resp model.AttackResponse
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
+	if resp.Phase != model.PhaseVictory {
+		t.Errorf("expected phase=victory, got %q", resp.Phase)
+	}
+	if resp.Result == nil {
+		t.Error("expected BattleResult in response on victory")
+	}
+}
+
+// TestAttack_DefeatPath exercises finishBattle on player death.
+func TestAttack_DefeatPath(t *testing.T) {
+	sess := activeSession()
+	sess.PlayerHP = 1
+	sess.BossAttack = 999 // boss one-shots the player on any turn
+	s := &battleStore{session: sess}
+	h := newBattleHandler(s, taunt.StaticGenerator{})
+
+	// Wrong answer: player doesn't deal damage, boss attacks.
+	rr := httptest.NewRecorder()
+	h.Attack(rr, attackRequest("sess-1", false, 0))
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body)
+	}
+	var resp model.AttackResponse
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
+	if resp.Phase != model.PhaseDefeat {
+		t.Errorf("expected phase=defeat, got %q", resp.Phase)
+	}
+}
+
+// TestAttack_SessionNotActive verifies 409 when battle phase is not active.
+func TestAttack_SessionNotActive(t *testing.T) {
+	sess := activeSession()
+	sess.Phase = model.PhaseVictory
+	s := &battleStore{session: sess}
+	h := newBattleHandler(s, taunt.StaticGenerator{})
+	rr := httptest.NewRecorder()
+	h.Attack(rr, attackRequest("sess-1", true, 10))
+	if rr.Code != http.StatusConflict {
+		t.Errorf("expected 409, got %d", rr.Code)
+	}
+}
+
+// saveBattleErrorStore overrides SaveBattleSession to return an error on first active save.
+type saveBattleErrorStore struct {
+	battleStore
+}
+
+func (s *saveBattleErrorStore) SaveBattleSession(_ context.Context, _ *model.BattleSession) error {
+	return errors.New("redis write failed")
+}
+
+// TestAttack_SaveSessionError verifies 500 when the mid-battle session save fails.
+func TestAttack_SaveSessionError(t *testing.T) {
+	sess := activeSession()
+	s := &saveBattleErrorStore{battleStore{session: sess}}
+	h := newBattleHandler(s, taunt.StaticGenerator{})
+	// Wrong answer: session survives, triggers SaveBattleSession.
+	rr := httptest.NewRecorder()
+	h.Attack(rr, attackRequest("sess-1", false, 0))
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rr.Code)
+	}
+}
+
+// getBattleErrorStore returns an error from GetBattleSession.
+type getBattleErrorStore struct {
+	battleStore
+}
+
+func (s *getBattleErrorStore) GetBattleSession(_ context.Context, _ string) (*model.BattleSession, error) {
+	return nil, errors.New("redis unavailable")
+}
+
+// TestGetBattleSession_StoreError verifies 500 when GetBattleSession returns an error.
+func TestGetBattleSession_StoreError(t *testing.T) {
+	s := &getBattleErrorStore{}
+	h := newBattleHandler(s, taunt.StaticGenerator{})
+	req := httptest.NewRequest(http.MethodGet, "/gaming/boss/session/sess-1", nil)
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("sessionId", "sess-1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	rr := httptest.NewRecorder()
+	h.GetBattleSession(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rr.Code)
+	}
+}
+
+// TestActivatePowerUp_DoubleDamageBuffAdded verifies a duration-based powerup is appended.
+func TestActivatePowerUp_DoubleDamageBuffAdded(t *testing.T) {
+	s := &battleStore{session: activeSession()}
+	h := newBattleHandler(s, taunt.StaticGenerator{})
+	body, _ := json.Marshal(model.PowerUpRequest{SessionID: "sess-1", PowerUp: model.PowerUpDoubleDamage})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/boss/powerup", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.ActivatePowerUp(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body)
+	}
+	var resp model.PowerUpResponse
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
+	if len(resp.ActivePowers) == 0 {
+		t.Error("expected at least one active power after activating double_damage")
+	}
 }

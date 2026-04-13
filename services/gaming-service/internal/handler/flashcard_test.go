@@ -578,3 +578,188 @@ func TestExportAnki_Unauthorized(t *testing.T) {
 		t.Errorf("expected 403, got %d", rr.Code)
 	}
 }
+
+// ── DueFlashcards error path ──────────────────────────────────────────────────
+
+// TestDueFlashcards_Unauthorized verifies 403 when no user in context.
+func TestDueFlashcards_Unauthorized(t *testing.T) {
+	h := newFlashcardHandler(&flashcardStore{})
+	req := httptest.NewRequest(http.MethodGet, "/gaming/flashcards/due", nil)
+	rr := httptest.NewRecorder()
+	h.DueFlashcards(rr, req)
+	if rr.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", rr.Code)
+	}
+}
+
+// ── ListFlashcards error path ─────────────────────────────────────────────────
+
+// TestListFlashcards_EmptyList verifies 200 with zero totals when no cards exist.
+func TestListFlashcards_EmptyList(t *testing.T) {
+	h := newFlashcardHandler(&flashcardStore{cards: map[string]*model.Flashcard{}})
+	req := httptest.NewRequest(http.MethodGet, "/gaming/flashcards", nil)
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.ListFlashcards(rr, req)
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	var resp model.ListFlashcardsResponse
+	_ = json.NewDecoder(rr.Body).Decode(&resp)
+	if resp.Total != 0 {
+		t.Errorf("expected 0 total, got %d", resp.Total)
+	}
+}
+
+// ── ReviewFlashcard error path ────────────────────────────────────────────────
+
+// TestReviewFlashcard_CardNotFound verifies the store error surfaces as expected.
+func TestReviewFlashcard_CardNotFound(t *testing.T) {
+	s := &flashcardStore{cards: map[string]*model.Flashcard{}}
+	h := newFlashcardHandler(s)
+	body, _ := json.Marshal(model.ReviewFlashcardRequest{Quality: 3})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/missing/review", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("cardId", "missing")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.ReviewFlashcard(rr, req)
+	// Store returns "not found" error → handler returns 500 (internal store error path)
+	if rr.Code == http.StatusOK {
+		t.Error("expected non-200 response for missing card")
+	}
+}
+
+// TestGenerateFlashcards_StoreCreateError verifies 500 when CreateFlashcard fails.
+func TestGenerateFlashcards_StoreCreateError(t *testing.T) {
+	s := &flashcardStore{
+		sessions:  map[string]*model.QuizSession{"sess-1": completedSession("sess-1", "u1", []string{"q1"})},
+		questions: map[string]*model.Question{"q1": makeQuestion("q1", "1+1?", "B")},
+		cards:     map[string]*model.Flashcard{},
+		createErr: errors.New("db write failed"),
+	}
+	h := newFlashcardHandler(s)
+	body, _ := json.Marshal(model.GenerateFlashcardsRequest{SessionID: "sess-1"})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/generate", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.GenerateFlashcards(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rr.Code)
+	}
+}
+
+// TestGenerateFlashcards_SessionStoreError verifies 404 when GetQuizSession fails.
+func TestGenerateFlashcards_SessionStoreError(t *testing.T) {
+	s := &flashcardStore{
+		sessions: map[string]*model.QuizSession{}, // session not found → store returns error
+	}
+	h := newFlashcardHandler(s)
+	body, _ := json.Marshal(model.GenerateFlashcardsRequest{SessionID: "missing-sess"})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/generate", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.GenerateFlashcards(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404, got %d", rr.Code)
+	}
+}
+
+// TestListFlashcards_StoreError verifies 500 when ListFlashcards store call fails.
+// The noopStore is not used here — we need a store that returns an error from ListFlashcards.
+type listErrorStore struct{ noopStore }
+
+func (listErrorStore) ListFlashcards(_ context.Context, _ string) ([]*model.Flashcard, error) {
+	return nil, errors.New("db error")
+}
+
+func TestListFlashcards_StoreError(t *testing.T) {
+	h := newFlashcardHandler(listErrorStore{})
+	req := httptest.NewRequest(http.MethodGet, "/gaming/flashcards", nil)
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.ListFlashcards(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rr.Code)
+	}
+}
+
+// TestDueFlashcards_StoreError verifies 500 when DueFlashcards store call fails.
+type dueErrorStore struct{ noopStore }
+
+func (dueErrorStore) DueFlashcards(_ context.Context, _ string) ([]*model.Flashcard, error) {
+	return nil, errors.New("db error")
+}
+
+func TestDueFlashcards_StoreError(t *testing.T) {
+	h := newFlashcardHandler(dueErrorStore{})
+	req := httptest.NewRequest(http.MethodGet, "/gaming/flashcards/due", nil)
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.DueFlashcards(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rr.Code)
+	}
+}
+
+// TestReviewFlashcard_CardNilReturns404 verifies 404 when GetFlashcard returns (nil, nil).
+// noopStore returns (nil, nil) for GetFlashcard, triggering the nil card path.
+func TestReviewFlashcard_CardNilReturns404(t *testing.T) {
+	h := newFlashcardHandler(noopStore{})
+	body, _ := json.Marshal(model.ReviewFlashcardRequest{Quality: 3})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/c1/review", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("cardId", "c1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.ReviewFlashcard(rr, req)
+	if rr.Code != http.StatusNotFound {
+		t.Errorf("expected 404 for nil card, got %d", rr.Code)
+	}
+}
+
+// TestReviewFlashcard_ReviewStoreError verifies 500 when ReviewFlashcard store call fails.
+func TestReviewFlashcard_ReviewStoreError(t *testing.T) {
+	card := makeCard("c1", "u1")
+	s := &flashcardStore{
+		cards: map[string]*model.Flashcard{"c1": card},
+		reviewFn: func(_, _ string, _ int) (*model.Flashcard, error) {
+			return nil, errors.New("review write failed")
+		},
+	}
+	h := newFlashcardHandler(s)
+	body, _ := json.Marshal(model.ReviewFlashcardRequest{Quality: 3})
+	req := httptest.NewRequest(http.MethodPost, "/gaming/flashcards/c1/review", bytes.NewBuffer(body))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("cardId", "c1")
+	req = req.WithContext(context.WithValue(req.Context(), chi.RouteCtxKey, rctx))
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.ReviewFlashcard(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rr.Code)
+	}
+}
+
+// TestExportAnki_StoreError verifies 500 when AllFlashcardsForExport fails.
+type exportErrorStore struct{ noopStore }
+
+func (exportErrorStore) AllFlashcardsForExport(_ context.Context, _ string) ([]*model.Flashcard, error) {
+	return nil, errors.New("db error")
+}
+
+func TestExportAnki_StoreError(t *testing.T) {
+	h := newFlashcardHandler(exportErrorStore{})
+	req := httptest.NewRequest(http.MethodGet, "/gaming/flashcards/export/anki", nil)
+	req = req.WithContext(middleware.WithUserID(req.Context(), "u1"))
+	rr := httptest.NewRecorder()
+	h.ExportAnki(rr, req)
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("expected 500, got %d", rr.Code)
+	}
+}
