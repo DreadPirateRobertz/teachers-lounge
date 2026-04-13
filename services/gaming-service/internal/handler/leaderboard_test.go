@@ -23,7 +23,6 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/teacherslounge/gaming-service/internal/handler"
-	"github.com/teacherslounge/gaming-service/internal/middleware"
 	"github.com/teacherslounge/gaming-service/internal/model"
 	"github.com/teacherslounge/gaming-service/internal/taunt"
 )
@@ -116,10 +115,6 @@ func (s *leaderboardStore) LeaderboardGetFriends(_ context.Context, _ string, fr
 
 func newLeaderboardHandler(s *leaderboardStore) *handler.Handler {
 	return handler.New(s, taunt.StaticGenerator{}, zap.NewNop())
-}
-
-func withUser(r *http.Request, userID string) *http.Request {
-	return r.WithContext(middleware.WithUserID(r.Context(), userID))
 }
 
 // withCourseParam injects a chi URL param (courseId) into the request so
