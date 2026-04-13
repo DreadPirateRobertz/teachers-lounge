@@ -13,6 +13,12 @@ Dials live in [-1.0, 1.0]:
 
 Detection is purely regex-based — no LLM call.  Signals are applied to dials
 via exponential moving average (EMA) so a single message cannot dominate.
+
+Assessment-based classification is also provided via classify_style(), which
+converts explicit A/B questionnaire answers into dimension scores.  Answers are
+grouped in blocks of 4, one block per dimension in the order listed above.
+Within each block, 'A' votes for the first pole (-1.0 direction) and 'B' votes
+for the second pole (+1.0 direction).
 """
 
 import re
@@ -26,6 +32,9 @@ THRESHOLD: float = 0.2  # |dial| must exceed this to emit style guidance
 DIMENSIONS = ("active_reflective", "sensing_intuitive", "visual_verbal", "sequential_global")
 
 DEFAULT_DIALS: dict[str, float] = {d: 0.0 for d in DIMENSIONS}
+
+# Number of A/B questions per dimension in the standard assessment.
+QUESTIONS_PER_DIMENSION: int = 4
 
 
 # ── signal ───────────────────────────────────────────────────────────────────
@@ -41,6 +50,27 @@ class StyleSignal(NamedTuple):
 
     dimension: str
     direction: float
+
+
+class LearningStyle(NamedTuple):
+    """Felder-Silverman learning style scores derived from an A/B assessment.
+
+    Each attribute holds a score in [-1.0, 1.0] where:
+      -1.0 → strong first-pole preference
+       0.0 → neutral / balanced
+      +1.0 → strong second-pole preference
+
+    Attributes:
+        active_reflective: Negative = active (do/try); positive = reflective (think/why).
+        sensing_intuitive: Negative = sensing (concrete); positive = intuitive (abstract).
+        visual_verbal: Negative = visual (diagrams); positive = verbal (words).
+        sequential_global: Negative = sequential (step-by-step); positive = global (big-picture).
+    """
+
+    active_reflective: float
+    sensing_intuitive: float
+    visual_verbal: float
+    sequential_global: float
 
 
 # ── regex pattern table ───────────────────────────────────────────────────────
@@ -122,6 +152,56 @@ _PATTERNS: list[tuple[re.Pattern, str, float]] = [
 
 
 # ── public API ────────────────────────────────────────────────────────────────
+
+
+def classify_style(answers: list[str]) -> LearningStyle:
+    """Classify learning style from A/B assessment answers.
+
+    Answers are grouped in blocks of QUESTIONS_PER_DIMENSION (default 4), one
+    block per Felder-Silverman dimension in the canonical order:
+      active_reflective → sensing_intuitive → visual_verbal → sequential_global
+
+    Within each block, 'A' votes toward the first pole (-1.0) and 'B' votes
+    toward the second pole (+1.0).  The dimension score is the mean vote:
+      score = (count_B - count_A) / QUESTIONS_PER_DIMENSION
+
+    Args:
+        answers: List of answer keys, each 'A' or 'B' (case-insensitive).
+            Length must be exactly QUESTIONS_PER_DIMENSION * 4.
+
+    Returns:
+        LearningStyle with each dimension score in [-1.0, 1.0].
+
+    Raises:
+        ValueError: If answers is empty, contains invalid keys, or has a length
+            that is not a multiple of 4 or does not match the expected total.
+    """
+    expected = QUESTIONS_PER_DIMENSION * len(DIMENSIONS)
+    if not answers:
+        raise ValueError("answers must not be empty")
+    normalised = [a.upper() for a in answers]
+    invalid = [a for a in normalised if a not in ("A", "B")]
+    if invalid:
+        raise ValueError(f"invalid answer keys (must be 'A' or 'B'): {invalid}")
+    if len(normalised) != expected:
+        raise ValueError(
+            f"expected {expected} answers ({QUESTIONS_PER_DIMENSION} per dimension × "
+            f"{len(DIMENSIONS)} dimensions), got {len(normalised)}"
+        )
+
+    scores: list[float] = []
+    for i in range(len(DIMENSIONS)):
+        block = normalised[i * QUESTIONS_PER_DIMENSION : (i + 1) * QUESTIONS_PER_DIMENSION]
+        count_b = block.count("B")
+        count_a = block.count("A")
+        scores.append((count_b - count_a) / QUESTIONS_PER_DIMENSION)
+
+    return LearningStyle(
+        active_reflective=scores[0],
+        sensing_intuitive=scores[1],
+        visual_verbal=scores[2],
+        sequential_global=scores[3],
+    )
 
 
 def detect_signals(message: str) -> list[StyleSignal]:
