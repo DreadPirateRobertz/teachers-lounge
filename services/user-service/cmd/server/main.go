@@ -54,7 +54,11 @@ func main() {
 		slog.Error("connecting to redis", "err", err)
 		os.Exit(1)
 	}
-	defer redisClient.Close()
+	defer func() {
+		if err := redisClient.Close(); err != nil {
+			slog.Error("closing redis client", "err", err)
+		}
+	}()
 
 	// ── Service layer ────────────────────────────────────────
 	jwtManager := auth.NewJWTManager(cfg.JWTSecret, cfg.AccessTokenDuration, cfg.RefreshTokenDuration)

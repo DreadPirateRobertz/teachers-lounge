@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"log/slog"
 	"net/http"
 	"time"
 
@@ -209,7 +210,11 @@ func (h *AuthHandler) Refresh(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusConflict, "concurrent refresh in progress — retry in a moment")
 		return
 	}
-	defer func() { _ = h.cache.ReleaseRefreshLock(r.Context(), lockKey) }()
+	defer func() {
+		if err := h.cache.ReleaseRefreshLock(r.Context(), lockKey); err != nil {
+			slog.Error("releasing refresh lock", "err", err, "key", lockKey)
+		}
+	}()
 
 	token, err := h.store.GetRefreshToken(r.Context(), tokenHash)
 	if err != nil {
