@@ -1,8 +1,7 @@
 """Conversation history — CRUD helpers for sessions and interactions."""
-
 from uuid import UUID, uuid4
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .orm import Interaction, Session
@@ -44,26 +43,41 @@ async def get_session(db: AsyncSession, session_id: UUID) -> Session | None:
     return result.scalar_one_or_none()
 
 
+async def count_history(db: AsyncSession, session_id: UUID) -> int:
+    """Count the total number of messages in a tutoring session.
+
+    Args:
+        db: Async SQLAlchemy session.
+        session_id: UUID of the tutoring session.
+
+    Returns:
+        Total message count (student + tutor turns combined).
+    """
+    result = await db.execute(
+        select(func.count()).where(Interaction.session_id == session_id)
+    )
+    return result.scalar_one()
+
+
 async def get_history(
     db: AsyncSession,
     session_id: UUID,
     limit: int = 20,
 ) -> list[Interaction]:
-    """Load the most recent interaction history for a session.
+    """Load the most recent *limit* messages for a session (sliding window).
 
-    Fetches the newest ``limit`` messages via a descending index scan and
-    reverses them so the caller receives interactions in ascending
-    (oldest-first) order — the format expected by the chat message builder.
+    Fetches the last ``limit`` interactions in descending order then reverses
+    them so callers receive chronological (oldest-first) order.  Uses the
+    composite index on ``(session_id, created_at DESC)`` for efficient lookups
+    without a full-table sort.
 
     Args:
         db: Async SQLAlchemy session.
         session_id: UUID of the tutoring session.
         limit: Maximum messages to return. Defaults to 20 (10 exchanges).
-            Uses the composite index on (session_id, created_at DESC) for
-            efficient pagination without a full-table sort.
 
     Returns:
-        Up to ``limit`` most-recent interactions ordered oldest-first.
+        Up to ``limit`` Interactions ordered oldest-first (ascending created_at).
     """
     result = await db.execute(
         select(Interaction)
@@ -71,9 +85,39 @@ async def get_history(
         .order_by(Interaction.created_at.desc())
         .limit(limit)
     )
-    rows = list(result.scalars().all())
-    rows.reverse()  # return oldest-first for message-list construction
-    return rows
+    interactions = list(result.scalars().all())
+    interactions.reverse()
+    return interactions
+
+
+async def get_history_slice(
+    db: AsyncSession,
+    session_id: UUID,
+    offset: int,
+    limit: int,
+) -> list[Interaction]:
+    """Load a chronological slice of a session's message history.
+
+    Used by the context summarisation pipeline to retrieve older messages
+    that fall outside the active sliding window.
+
+    Args:
+        db: Async SQLAlchemy session.
+        session_id: UUID of the tutoring session.
+        offset: Number of oldest messages to skip.
+        limit: Maximum messages to return after the offset.
+
+    Returns:
+        Interactions ordered oldest-first (ascending created_at).
+    """
+    result = await db.execute(
+        select(Interaction)
+        .where(Interaction.session_id == session_id)
+        .order_by(Interaction.created_at)
+        .offset(offset)
+        .limit(limit)
+    )
+    return list(result.scalars().all())
 
 
 async def append_message(
