@@ -317,3 +317,6 @@ func (b *battleStore) BuyPowerUp(_ context.Context, _ string, _ model.PowerUpTyp
 func (b *battleStore) GetDefeatedBossIDs(_ context.Context, _ string) ([]string, error) {
 	return nil, nil
 }
+func (b *battleStore) GetChapterMastery(_ context.Context, _ string, _ []string) (float64, error) {
+	return 0.0, nil
+}

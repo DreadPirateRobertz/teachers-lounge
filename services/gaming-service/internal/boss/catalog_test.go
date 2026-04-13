@@ -180,6 +180,46 @@ func TestAllBossesHaveVisualConfig(t *testing.T) {
 	}
 }
 
+func TestAllBossesHaveChapterConceptPaths(t *testing.T) {
+	for _, def := range boss.Catalog {
+		if len(def.ChapterConceptPaths) == 0 {
+			t.Errorf("boss %s missing ChapterConceptPaths — mastery gate needs at least one ltree lquery", def.ID)
+		}
+		for _, p := range def.ChapterConceptPaths {
+			if p == "" {
+				t.Errorf("boss %s has empty ChapterConceptPaths entry", def.ID)
+			}
+		}
+	}
+}
+
+func TestCatalog_ExactlyOneFirstBoss(t *testing.T) {
+	firsts := 0
+	var firstID string
+	for _, def := range boss.Catalog {
+		if def.IsFirstBoss {
+			firsts++
+			firstID = def.ID
+		}
+	}
+	if firsts != 1 {
+		t.Errorf("expected exactly 1 boss with IsFirstBoss=true, got %d", firsts)
+	}
+	// The onboarding boss must be tier 1 — spec requires the first available
+	// boss to sit at the bottom of the progression trail.
+	if first := boss.ByID(firstID); first != nil && first.Tier != 1 {
+		t.Errorf("IsFirstBoss should be tier 1, got tier %d on %s", first.Tier, firstID)
+	}
+}
+
+func TestMasteryUnlockThreshold_Is60Percent(t *testing.T) {
+	// Spec: "Completing a mastery threshold (60%+ on a chapter's concepts)
+	// unlocks the chapter boss." Guard against silent drift.
+	if boss.MasteryUnlockThreshold != 0.60 {
+		t.Errorf("MasteryUnlockThreshold = %.2f, want 0.60", boss.MasteryUnlockThreshold)
+	}
+}
+
 func TestAllBossGeometriesAreUnique(t *testing.T) {
 	seen := map[string]string{}
 	for _, def := range boss.Catalog {

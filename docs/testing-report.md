@@ -1,7 +1,7 @@
 # TeachersLounge — Testing Report
 
 > **Living document.** Updated by Petra (PM) after each PR batch or sprint.
-> Last updated: 2026-04-12
+> Last updated: 2026-04-13
 
 ---
 
@@ -9,15 +9,15 @@
 
 | Service | Tests | Coverage | CI Status | Last updated |
 |---------|-------|----------|-----------|--------------|
-| frontend (Next.js) | 709 | ≥80% patch | ✅ Green | 2026-04-12 |
-| tutoring-service (Python) | passing | ≥80% patch | ✅ Green | 2026-04-12 |
-| ingestion-service (Python) | passing | ≥80% patch | ✅ Green | 2026-04-12 |
-| search-service (Python) | passing | ≥80% patch | ✅ Green | 2026-04-12 |
-| analytics-service (Python) | passing | ≥80% patch | ✅ Green | 2026-04-12 |
+| frontend (Next.js) | 735+ | ≥80% patch | ❌ #219 failing (shen fixing) | 2026-04-13 |
+| tutoring-service (Python) | passing | ≥80% patch | ✅ Green | 2026-04-13 |
+| ingestion-service (Python) | passing | ≥80% patch | 🔄 tl-3r5 polecat adding PDF pipeline tests | 2026-04-13 |
+| search-service (Python) | passing | 🔄 to 90% | 🔄 tl-he3 polecat running coverage audit | 2026-04-13 |
+| analytics-service (Python) | passing | 🔄 to 90% | 🔄 tl-nsg polecat running full pytest suite | 2026-04-13 |
 | eval-service (Python) | passing | ≥80% patch | ✅ Green | 2026-04-12 |
 | user-service (Go) | passing | ≥80% patch | ✅ Green | 2026-04-12 |
-| gaming-service (Go) | passing | ≥80% patch | ✅ Green | 2026-04-12 |
-| notification-service (Go) | passing | ≥80% patch | ✅ Green | 2026-04-12 |
+| gaming-service (Go) | passing | ~85% | ✅ Green (store tests added PR #218) | 2026-04-13 |
+| notification-service (Go) | passing | ≥80% patch | ✅ Green (tl-6li shipped) | 2026-04-13 |
 
 ---
 
@@ -83,9 +83,19 @@ Legacy code grandfathered at 80%.
 
 | PR | Branch | Tests | Blocker |
 |----|--------|-------|---------|
-| [#167](../../pull/167) | feat/tl-d1u-onboarding-polish | ✅ 709 passing | None — ready to merge |
-| [#206](../../pull/206) | feat/tl-8gw-csp-hardening | ✅ Tests pass | ❌ Prettier format check — run `npm run format` in `frontend/` |
-| [#145](../../pull/145) | feat/hq-cv-eebuu-material-upload-ui | ✅ Tests pass | ❌ Prettier format check — run `npm run format` in `frontend/` |
+| [#219](../../pull/219) | feat/tl-dye-boss-battle-frontend | ❌ `frontend` failing | Shen alerted — fix in progress |
+
+### Recently Merged This Session (2026-04-13)
+
+| PR | Bead | Description | Result |
+|----|------|-------------|--------|
+| #218 | tl-7wv | Boss progression mastery-gate (Go) | ✅ Merged — store tests added after review |
+| #216 | chore | CONTRIBUTING.md + TDD spec + 5-agent mandate | ✅ Merged |
+| #215 | tl-94n | Qdrant snapshot alerting + restore runbook | ✅ Merged |
+| #214 | tl-8be | Qdrant HNSW benchmark | ✅ Merged |
+| #213 | tl-8co | Context window mgmt — CodeQL fix required before merge | ✅ Merged |
+| #211 | tl-7ot | Boss battle backend (gaming-service) | ✅ Merged |
+| #210 | tl-c47 | Playwright E2E — 7 user journeys | ✅ Merged |
 
 ---
 
@@ -144,11 +154,18 @@ These are manual smoke checks run against the docker stack. Automate with k6 (tl
 
 ## Test Debt
 
-| Area | Gap | Bead |
-|------|-----|------|
-| Integration / end-to-end tests | No automated E2E (Playwright/k6) yet | tl-3j2 |
-| Smoke tests against docker stack | Manual only | tl-3j2 |
-| Docstring coverage audit | Not yet audited against standard | tl-hf9 |
+| Area | Gap | Bead | Status |
+|------|-----|------|--------|
+| Integration / end-to-end tests | Playwright E2E | tl-c47 | ✅ Shipped PR #210 |
+| k6 load tests | Search + ingestion load | tl-3j2 | ✅ Shipped PR #208 |
+| Frontend Jest coverage | 1 test file for 50+ components | tl-fwg | 🔄 Polecat running |
+| Search service coverage | Below 90% target | tl-he3 | 🔄 Polecat running |
+| Analytics service test suite | No pytest for student.py routes | tl-nsg | 🔄 Polecat running |
+| PDF ingestion tests | New Celery task needs tests | tl-3r5 | 🔄 Polecat running |
+| JWT audience validation | tutoring-service missing test | hq-cv-gjapg | ⚠️ Alai ESCALATED — unresponsive |
+| N+1 batch mastery query | gaming-service per-boss DB calls | follow-on | 🔄 Carn working |
+| Adaptive dashboard tests | New component | tl-l63 | 🔄 Polecat running |
+| Learning style detection tests | New tutoring feature | tl-udx | 🔄 Polecat running |
 
 ---
 

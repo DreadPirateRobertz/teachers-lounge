@@ -15,6 +15,7 @@ from qdrant_client.models import (
 )
 
 from app.config import settings
+from app.metrics import observe_query
 from app.models import ChunkResult, DiagramResult
 
 logger = logging.getLogger(__name__)
@@ -119,14 +120,15 @@ async def dense_search(
         span.set_attribute("course_id", str(course_id))
         span.set_attribute("limit", limit)
 
-        hits = await client.search(
-            collection_name=settings.curriculum_collection,
-            query_vector=("dense", query_vector),
-            query_filter=query_filter,
-            limit=limit,
-            with_payload=True,
-            with_vectors=False,
-        )
+        async with observe_query("semantic"):
+            hits = await client.search(
+                collection_name=settings.curriculum_collection,
+                query_vector=("dense", query_vector),
+                query_filter=query_filter,
+                limit=limit,
+                with_payload=True,
+                with_vectors=False,
+            )
 
     results = []
     for hit in hits:
@@ -223,17 +225,18 @@ async def sparse_search(
         span.set_attribute("course_id", str(course_id))
         span.set_attribute("limit", limit)
         try:
-            hits = await client.search(
-                collection_name=settings.curriculum_collection,
-                query_vector=NamedSparseVector(
-                    name="sparse",
-                    vector=SparseVector(indices=indices, values=values),
-                ),
-                query_filter=query_filter,
-                limit=limit,
-                with_payload=True,
-                with_vectors=False,
-            )
+            async with observe_query("keyword"):
+                hits = await client.search(
+                    collection_name=settings.curriculum_collection,
+                    query_vector=NamedSparseVector(
+                        name="sparse",
+                        vector=SparseVector(indices=indices, values=values),
+                    ),
+                    query_filter=query_filter,
+                    limit=limit,
+                    with_payload=True,
+                    with_vectors=False,
+                )
         except Exception as exc:
             # Collection may not have sparse vectors indexed yet (pre-ingestion).
             logger.debug("sparse_search skipped (no sparse index?): %s", exc)
@@ -292,14 +295,15 @@ async def diagram_search(
         span.set_attribute("course_id", str(course_id))
         span.set_attribute("limit", limit)
         try:
-            hits = await client.search(
-                collection_name=settings.diagrams_collection,
-                query_vector=query_vector,
-                query_filter=query_filter,
-                limit=limit,
-                with_payload=True,
-                with_vectors=False,
-            )
+            async with observe_query("semantic"):
+                hits = await client.search(
+                    collection_name=settings.diagrams_collection,
+                    query_vector=query_vector,
+                    query_filter=query_filter,
+                    limit=limit,
+                    with_payload=True,
+                    with_vectors=False,
+                )
         except Exception as exc:
             logger.debug("diagram_search unavailable (collection missing?): %s", exc)
             return []

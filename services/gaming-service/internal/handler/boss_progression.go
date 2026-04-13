@@ -27,6 +27,13 @@ type BossProgressionNode struct {
 	// State describes whether this boss is defeated, currently available, or locked.
 	// Values: "defeated" | "current" | "locked"
 	State string `json:"state"`
+	// ChapterMastery is the user's average mastery score [0.0, 1.0] across this
+	// boss's chapter concepts. Drives the "X% to unlock" progress bar on the
+	// trail UI. 0.0 for users with no mastery recorded for the chapter.
+	ChapterMastery float64 `json:"chapter_mastery"`
+	// MasteryThreshold is the score at which the boss unlocks. Copied from the
+	// package constant so the client doesn't have to hard-code it.
+	MasteryThreshold float64 `json:"mastery_threshold"`
 }
 
 // BossProgressionResponse is the full response for GET /gaming/boss/progression.
@@ -41,14 +48,17 @@ type BossProgressionResponse struct {
 //
 // Returns the full boss trail for the authenticated user. Each node reports
 // whether the boss is defeated, currently available to fight, or still locked
-// behind undefeated prerequisites.
+// behind a mastery threshold.
 //
-// Lock logic (boss tiers 1–6):
-//   - Tier 1 is always available (current or defeated).
-//   - Tier N is "current" when tier N-1 is defeated and tier N is not yet beaten.
-//   - Tier N is "locked" when any required predecessor is not yet defeated.
-//   - The final boss (tier 6) is unlocked only after all tier 1–5 bosses are defeated.
-//   - If all bosses are defeated every node has state "defeated".
+// Unlock logic (per boss):
+//   - "defeated" if the user has a victory recorded for this boss.
+//   - "current" if the user has not defeated this boss AND either the boss is
+//     flagged IsFirstBoss (onboarding) OR the user's average mastery across
+//     the chapter's concepts ≥ boss.MasteryUnlockThreshold (60%).
+//   - "locked" otherwise.
+//
+// Each node also exposes the current chapter mastery score so the frontend
+// can render a "X% to unlock" progress bar on locked nodes.
 func (h *Handler) GetBossProgression(w http.ResponseWriter, r *http.Request) {
 	callerID := middleware.UserIDFromContext(r.Context())
 	if callerID == "" {
@@ -79,23 +89,28 @@ func (h *Handler) GetBossProgression(w http.ResponseWriter, r *http.Request) {
 	})
 
 	nodes := make([]BossProgressionNode, 0, len(sorted))
-	allPriorDefeated := true // tracks whether all bosses before current index are defeated
-
 	for _, def := range sorted {
-		state := bossNodeState(def, defeated, allPriorDefeated)
-		if !defeated[def.ID] {
-			// Once we hit an undefeated boss, everything after is locked.
-			allPriorDefeated = false
+		mastery, err := h.store.GetChapterMastery(r.Context(), callerID, def.ChapterConceptPaths)
+		if err != nil {
+			h.logger.Error("get boss progression: query chapter mastery",
+				zap.String("user_id", callerID),
+				zap.String("boss_id", def.ID),
+				zap.Error(err),
+			)
+			writeError(w, http.StatusInternalServerError, "internal error")
+			return
 		}
 
 		nodes = append(nodes, BossProgressionNode{
-			BossID:       def.ID,
-			Name:         def.Name,
-			Topic:        def.Topic,
-			Tier:         def.Tier,
-			VictoryXP:    def.VictoryXP,
-			PrimaryColor: def.Visual.PrimaryColor,
-			State:        state,
+			BossID:           def.ID,
+			Name:             def.Name,
+			Topic:            def.Topic,
+			Tier:             def.Tier,
+			VictoryXP:        def.VictoryXP,
+			PrimaryColor:     def.Visual.PrimaryColor,
+			State:            bossNodeState(def, defeated, mastery),
+			ChapterMastery:   mastery,
+			MasteryThreshold: boss.MasteryUnlockThreshold,
 		})
 	}
 
@@ -108,13 +123,18 @@ func (h *Handler) GetBossProgression(w http.ResponseWriter, r *http.Request) {
 // bossNodeState computes the progression state for a single boss node.
 //
 // A boss is "defeated" if the user has a victory in their history.
-// A boss is "current" if all prior bosses are defeated but this one is not.
-// A boss is "locked" if any required predecessor is not yet defeated.
-func bossNodeState(def *boss.Def, defeated map[string]bool, allPriorDefeated bool) string {
+// A boss is "current" if the user has not defeated it AND either the boss is
+// the onboarding boss (IsFirstBoss) OR the user's chapter mastery has reached
+// the unlock threshold (boss.MasteryUnlockThreshold).
+// Otherwise it is "locked".
+func bossNodeState(def *boss.Def, defeated map[string]bool, chapterMastery float64) string {
 	if defeated[def.ID] {
 		return "defeated"
 	}
-	if allPriorDefeated {
+	if def.IsFirstBoss {
+		return "current"
+	}
+	if chapterMastery >= boss.MasteryUnlockThreshold {
 		return "current"
 	}
 	return "locked"

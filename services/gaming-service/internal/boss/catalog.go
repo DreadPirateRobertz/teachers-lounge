@@ -2,15 +2,31 @@ package boss
 
 // Def defines a boss encounter that guards a topic.
 type Def struct {
-	ID          string // machine-friendly ID, e.g. "the_atom"
-	Name        string // display name, e.g. "THE ATOM"
-	Topic       string // maps to question_bank.topic
-	Tier        int    // 1–6; drives boss HP scaling and victory XP
-	MaxRounds   int    // number of questions (rounds) in the fight
-	Taunt       string // shown to the student on a wrong answer
-	VictoryXP   int    // bonus XP awarded on defeating this boss
-	Visual      VisualConfig
+	ID        string // machine-friendly ID, e.g. "the_atom"
+	Name      string // display name, e.g. "THE ATOM"
+	Topic     string // maps to question_bank.topic
+	Tier      int    // 1–6; drives boss HP scaling and victory XP
+	MaxRounds int    // number of questions (rounds) in the fight
+	Taunt     string // shown to the student on a wrong answer
+	VictoryXP int    // bonus XP awarded on defeating this boss
+	Visual    VisualConfig
+
+	// ChapterConceptPaths are ltree lquery patterns (e.g. "chemistry.bonding.*")
+	// that select every concept belonging to this boss's chapter. The user's
+	// mastery on those concepts gates the boss: mastery ≥ MasteryUnlockThreshold
+	// promotes the node from "locked" to "current".
+	ChapterConceptPaths []string
+
+	// IsFirstBoss marks the onboarding boss that is always unlocked even when
+	// the user has zero recorded mastery. Exactly one boss should set this true.
+	IsFirstBoss bool
 }
+
+// MasteryUnlockThreshold is the average concept-mastery score at which a
+// chapter's boss transitions from "locked" to "current". Matches the
+// spec: "Completing a mastery threshold (60%+ on a chapter's concepts)
+// unlocks the chapter boss."
+const MasteryUnlockThreshold = 0.60
 
 // VisualConfig holds all client-side rendering metadata for a boss.
 // The frontend Three.js scene reads this to build procedural geometry
@@ -34,13 +50,15 @@ type VisualConfig struct {
 // The final boss (tier 6) is unlocked only after all chapter bosses are defeated.
 var Catalog = []*Def{
 	{
-		ID:        "the_atom",
-		Name:      "THE ATOM",
-		Topic:     "general_chemistry",
-		Tier:      1,
-		MaxRounds: 5,
-		Taunt:     "Your electrons are all over the place! Back to basics.",
-		VictoryXP: 150,
+		ID:                  "the_atom",
+		Name:                "THE ATOM",
+		Topic:               "general_chemistry",
+		Tier:                1,
+		MaxRounds:           5,
+		Taunt:               "Your electrons are all over the place! Back to basics.",
+		VictoryXP:           150,
+		ChapterConceptPaths: []string{"chemistry.general.*"},
+		IsFirstBoss:         true,
 		Visual: VisualConfig{
 			PrimaryColor:      "#00aaff",
 			SecondaryColor:    "#00ff88",
@@ -57,13 +75,14 @@ var Catalog = []*Def{
 		},
 	},
 	{
-		ID:        "the_bonder",
-		Name:      "THE BONDER",
-		Topic:     "molecular_bonding",
-		Tier:      2,
-		MaxRounds: 6,
-		Taunt:     "Weak bonds break — just like that answer!",
-		VictoryXP: 200,
+		ID:                  "the_bonder",
+		Name:                "THE BONDER",
+		Topic:               "molecular_bonding",
+		Tier:                2,
+		MaxRounds:           6,
+		Taunt:               "Weak bonds break — just like that answer!",
+		VictoryXP:           200,
+		ChapterConceptPaths: []string{"chemistry.bonding.*"},
 		Visual: VisualConfig{
 			PrimaryColor:      "#00ff88",
 			SecondaryColor:    "#ffdc00",
@@ -80,13 +99,14 @@ var Catalog = []*Def{
 		},
 	},
 	{
-		ID:        "name_lord",
-		Name:      "NAME LORD",
-		Topic:     "nomenclature",
-		Tier:      3,
-		MaxRounds: 6,
-		Taunt:     "You dare mislabel compounds in MY presence?!",
-		VictoryXP: 250,
+		ID:                  "name_lord",
+		Name:                "NAME LORD",
+		Topic:               "nomenclature",
+		Tier:                3,
+		MaxRounds:           6,
+		Taunt:               "You dare mislabel compounds in MY presence?!",
+		VictoryXP:           250,
+		ChapterConceptPaths: []string{"chemistry.organic.nomenclature.*"},
 		Visual: VisualConfig{
 			PrimaryColor:      "#ff00aa",
 			SecondaryColor:    "#ffdc00",
@@ -103,13 +123,14 @@ var Catalog = []*Def{
 		},
 	},
 	{
-		ID:        "the_stereochemist",
-		Name:      "THE STEREOCHEMIST",
-		Topic:     "stereochemistry",
-		Tier:      4,
-		MaxRounds: 7,
-		Taunt:     "Mirror, mirror — and your knowledge is shattered!",
-		VictoryXP: 300,
+		ID:                  "the_stereochemist",
+		Name:                "THE STEREOCHEMIST",
+		Topic:               "stereochemistry",
+		Tier:                4,
+		MaxRounds:           7,
+		Taunt:               "Mirror, mirror — and your knowledge is shattered!",
+		VictoryXP:           300,
+		ChapterConceptPaths: []string{"chemistry.organic.stereochemistry.*"},
 		Visual: VisualConfig{
 			PrimaryColor:      "#cc44ff",
 			SecondaryColor:    "#00aaff",
@@ -126,13 +147,14 @@ var Catalog = []*Def{
 		},
 	},
 	{
-		ID:        "the_reactor",
-		Name:      "THE REACTOR",
-		Topic:     "organic_reactions",
-		Tier:      5,
-		MaxRounds: 7,
-		Taunt:     "Your reaction mechanism is a catastrophic failure!",
-		VictoryXP: 400,
+		ID:                  "the_reactor",
+		Name:                "THE REACTOR",
+		Topic:               "organic_reactions",
+		Tier:                5,
+		MaxRounds:           7,
+		Taunt:               "Your reaction mechanism is a catastrophic failure!",
+		VictoryXP:           400,
+		ChapterConceptPaths: []string{"chemistry.organic.reactions.*"},
 		Visual: VisualConfig{
 			PrimaryColor:      "#ff6600",
 			SecondaryColor:    "#ffdc00",
@@ -149,13 +171,14 @@ var Catalog = []*Def{
 		},
 	},
 	{
-		ID:        "final_boss",
-		Name:      "FINAL BOSS",
-		Topic:     "course_final",
-		Tier:      6,
-		MaxRounds: 10,
-		Taunt:     "All my predecessors warned me. You are nothing.",
-		VictoryXP: 1000,
+		ID:                  "final_boss",
+		Name:                "FINAL BOSS",
+		Topic:               "course_final",
+		Tier:                6,
+		MaxRounds:           10,
+		Taunt:               "All my predecessors warned me. You are nothing.",
+		VictoryXP:           1000,
+		ChapterConceptPaths: []string{"chemistry.*"},
 		Visual: VisualConfig{
 			PrimaryColor:      "#ff00aa",
 			SecondaryColor:    "#00aaff",
