@@ -1,15 +1,91 @@
 """Tests for the weekly RAGAS evaluation module.
 
 Covers:
+  - _fetch_rag_interactions: DB result mapping, empty result
   - _build_dataset: correct column mapping from interaction dicts
   - run_ragas_evaluation: no interactions short-circuit, evaluation failure
     graceful return, successful run with BigQuery write and alert logging
 """
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.ragas_eval import _build_dataset, run_ragas_evaluation
+from app.ragas_eval import _build_dataset, _fetch_rag_interactions, run_ragas_evaluation
+
+
+# ---------------------------------------------------------------------------
+# _fetch_rag_interactions
+# ---------------------------------------------------------------------------
+
+class TestFetchRagInteractions:
+    """Unit tests for the DB-fetching layer of RAGAS evaluation."""
+
+    def _mock_session(self, fetchall_result):
+        """Return a mock get_session context manager.
+
+        Args:
+            fetchall_result: Rows returned by result.fetchall().
+
+        Returns:
+            Async context manager function.
+        """
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = fetchall_result
+        mock_db = AsyncMock()
+        mock_db.execute.return_value = mock_result
+
+        @asynccontextmanager
+        async def _ctx():
+            yield mock_db
+
+        return _ctx
+
+    @pytest.mark.asyncio
+    async def test_returns_interaction_dicts_with_ragas_fields(self):
+        """Maps DB rows to dicts with question, answer, contexts, ground_truth."""
+        row = MagicMock()
+        row.session_id = "sess-1"
+        row.question_id = "qid-1"
+        row.question = "What is diffusion?"
+        row.answer = "Diffusion is the spread of particles."
+
+        ctx = self._mock_session([row])
+        with patch("app.ragas_eval.get_session", ctx):
+            result = await _fetch_rag_interactions(10)
+
+        assert len(result) == 1
+        assert result[0]["question"] == "What is diffusion?"
+        assert result[0]["answer"] == "Diffusion is the spread of particles."
+        # contexts uses the answer as proxy
+        assert result[0]["contexts"] == ["Diffusion is the spread of particles."]
+        assert result[0]["ground_truth"] == "Diffusion is the spread of particles."
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_list_when_no_rows(self):
+        """Returns empty list when no RAG sessions found in the cutoff window."""
+        ctx = self._mock_session([])
+        with patch("app.ragas_eval.get_session", ctx):
+            result = await _fetch_rag_interactions(5)
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_session_and_interaction_ids_are_stringified(self):
+        """session_id and interaction_id are converted to str."""
+        import uuid
+        row = MagicMock()
+        row.session_id = uuid.UUID("00000000-0000-0000-0000-000000000001")
+        row.question_id = uuid.UUID("00000000-0000-0000-0000-000000000002")
+        row.question = "q"
+        row.answer = "a"
+
+        ctx = self._mock_session([row])
+        with patch("app.ragas_eval.get_session", ctx):
+            result = await _fetch_rag_interactions(1)
+
+        assert isinstance(result[0]["session_id"], str)
+        assert isinstance(result[0]["interaction_id"], str)
 
 
 # ---------------------------------------------------------------------------

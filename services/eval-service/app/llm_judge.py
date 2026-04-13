@@ -14,8 +14,7 @@ import logging
 from datetime import datetime, timedelta, timezone
 
 import anthropic
-from sqlalchemy import select, text
-from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy import text
 
 from .config import settings
 from .database import get_session

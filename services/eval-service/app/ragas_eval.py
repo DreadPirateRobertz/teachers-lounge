@@ -18,9 +18,7 @@ in Postgres). For a production deployment, enriching with chunk payloads
 from BigQuery interaction logs would improve accuracy.
 """
 import logging
-import random
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
 
 from datasets import Dataset
 from ragas import evaluate
@@ -30,7 +28,7 @@ from ragas.metrics.collections import (
     context_recall,
     faithfulness,
 )
-from sqlalchemy import select, text
+from sqlalchemy import text
 
 from .bigquery import write_ragas_scores
 from .config import settings

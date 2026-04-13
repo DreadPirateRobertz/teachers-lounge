@@ -1,16 +1,120 @@
 """Tests for the learning effectiveness metric module.
 
 Covers:
+  - _fetch_quiz_effectiveness: empty result, normal computation, zero pre_rate skip
   - run_learning_effectiveness: no topics short-circuit, successful path,
     below-threshold flag logging
 """
 import logging
-from unittest.mock import AsyncMock, patch
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.learning_effectiveness import run_learning_effectiveness
+from app.learning_effectiveness import _fetch_quiz_effectiveness, run_learning_effectiveness
 
+
+# ---------------------------------------------------------------------------
+# _fetch_quiz_effectiveness
+# ---------------------------------------------------------------------------
+
+class TestFetchQuizEffectiveness:
+    """Unit tests for the DB-fetching layer of learning effectiveness."""
+
+    def _mock_session(self, fetchall_result):
+        """Return a mock get_session context manager yielding a mock DB.
+
+        Args:
+            fetchall_result: List of row objects to return from result.fetchall().
+
+        Returns:
+            An async context manager function compatible with get_session usage.
+        """
+        mock_result = MagicMock()
+        mock_result.fetchall.return_value = fetchall_result
+        mock_db = AsyncMock()
+        mock_db.execute.return_value = mock_result
+
+        @asynccontextmanager
+        async def _ctx():
+            yield mock_db
+
+        return _ctx
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_when_no_rows(self):
+        """Returns empty list when DB returns no qualifying rows."""
+        ctx = self._mock_session([])
+        with patch("app.learning_effectiveness.get_session", ctx):
+            result = await _fetch_quiz_effectiveness()
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_computes_effectiveness_score(self):
+        """Computes effectiveness = (post_rate - pre_rate) / pre_rate correctly."""
+        row = MagicMock()
+        row.topic = "Chiral Centers"
+        row.pre_correct = 10
+        row.pre_total = 20
+        row.post_correct = 18
+        row.post_total = 20
+
+        ctx = self._mock_session([row])
+        with patch("app.learning_effectiveness.get_session", ctx):
+            result = await _fetch_quiz_effectiveness()
+
+        assert len(result) == 1
+        assert result[0]["topic"] == "Chiral Centers"
+        assert result[0]["pre_rate"] == pytest.approx(0.5)
+        assert result[0]["post_rate"] == pytest.approx(0.9)
+        # effectiveness = (0.9 - 0.5) / 0.5 = 0.8
+        assert result[0]["effectiveness_score"] == pytest.approx(0.8)
+        assert result[0]["sample_size"] == 20
+
+    @pytest.mark.asyncio
+    async def test_skips_rows_with_zero_pre_rate(self):
+        """Rows where pre_rate == 0 are excluded (no divide-by-zero in score)."""
+        row = MagicMock()
+        row.topic = "Brand New Topic"
+        row.pre_correct = 0
+        row.pre_total = 10
+        row.post_correct = 8
+        row.post_total = 10
+
+        ctx = self._mock_session([row])
+        with patch("app.learning_effectiveness.get_session", ctx):
+            result = await _fetch_quiz_effectiveness()
+
+        assert result == []
+
+    @pytest.mark.asyncio
+    async def test_filters_zero_pre_rate_but_keeps_valid(self):
+        """Only rows with non-zero pre_rate are included in output."""
+        row_valid = MagicMock()
+        row_valid.topic = "Algebra"
+        row_valid.pre_correct = 5
+        row_valid.pre_total = 10
+        row_valid.post_correct = 9
+        row_valid.post_total = 10
+
+        row_zero = MagicMock()
+        row_zero.topic = "Zero"
+        row_zero.pre_correct = 0
+        row_zero.pre_total = 10
+        row_zero.post_correct = 5
+        row_zero.post_total = 10
+
+        ctx = self._mock_session([row_valid, row_zero])
+        with patch("app.learning_effectiveness.get_session", ctx):
+            result = await _fetch_quiz_effectiveness()
+
+        assert len(result) == 1
+        assert result[0]["topic"] == "Algebra"
+
+
+# ---------------------------------------------------------------------------
+# run_learning_effectiveness
+# ---------------------------------------------------------------------------
 
 class TestRunLearningEffectiveness:
     @pytest.mark.asyncio

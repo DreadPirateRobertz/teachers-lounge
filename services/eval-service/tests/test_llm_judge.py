@@ -1,16 +1,135 @@
 """Tests for the nightly LLM judge module.
 
 Covers:
+  - _sample_interactions: DB result mapping, empty result
+  - _persist_judge_result: execute+commit called, composite score calculation
   - _call_judge: happy path JSON parsing, malformed JSON graceful return
   - run_llm_judge: missing API key short-circuit, no interactions short-circuit,
     successful judge write path
 """
 import json
+from contextlib import asynccontextmanager
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from app.llm_judge import _call_judge, run_llm_judge
+from app.llm_judge import _call_judge, _persist_judge_result, _sample_interactions, run_llm_judge
+
+
+# ---------------------------------------------------------------------------
+# _sample_interactions
+# ---------------------------------------------------------------------------
+
+def _make_session_ctx(fetchall_result):
+    """Build an async context manager that yields a mock DB session.
+
+    Args:
+        fetchall_result: List of row objects returned by result.fetchall().
+
+    Returns:
+        An async context manager function.
+    """
+    mock_result = MagicMock()
+    mock_result.fetchall.return_value = fetchall_result
+    mock_db = AsyncMock()
+    mock_db.execute.return_value = mock_result
+
+    @asynccontextmanager
+    async def _ctx():
+        yield mock_db
+
+    return _ctx
+
+
+class TestSampleInteractions:
+    """Unit tests for the _sample_interactions DB query helper."""
+
+    @pytest.mark.asyncio
+    async def test_returns_interaction_dicts(self):
+        """Maps DB rows to dicts with interaction_id, question, answer."""
+        row = MagicMock()
+        row.interaction_id = "abc-123"
+        row.question = "What is osmosis?"
+        row.answer = "Water moves through membranes."
+
+        ctx = _make_session_ctx([row])
+        with patch("app.llm_judge.get_session", ctx):
+            result = await _sample_interactions(5)
+
+        assert len(result) == 1
+        assert result[0]["interaction_id"] == "abc-123"
+        assert result[0]["question"] == "What is osmosis?"
+        assert result[0]["answer"] == "Water moves through membranes."
+
+    @pytest.mark.asyncio
+    async def test_returns_empty_when_no_rows(self):
+        """Returns empty list when no unjudged interactions exist."""
+        ctx = _make_session_ctx([])
+        with patch("app.llm_judge.get_session", ctx):
+            result = await _sample_interactions(10)
+
+        assert result == []
+
+
+# ---------------------------------------------------------------------------
+# _persist_judge_result
+# ---------------------------------------------------------------------------
+
+class TestPersistJudgeResult:
+    """Unit tests for the _persist_judge_result DB write helper."""
+
+    @pytest.mark.asyncio
+    async def test_executes_insert_and_commits(self):
+        """Calls db.execute and db.commit for a valid scores dict."""
+        mock_db = AsyncMock()
+
+        @asynccontextmanager
+        async def mock_session():
+            yield mock_db
+
+        scores = {"directness": 4, "pace": 3, "grounding": 5, "reasoning": "Good."}
+        with patch("app.llm_judge.get_session", mock_session):
+            await _persist_judge_result("test-uuid", scores)
+
+        mock_db.execute.assert_awaited_once()
+        mock_db.commit.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_computes_composite_as_rounded_average(self):
+        """Composite score is round((directness + pace + grounding) / 3)."""
+        mock_db = AsyncMock()
+        captured: dict = {}
+
+        async def capture_execute(sql, params):
+            captured.update(params)
+
+        mock_db.execute.side_effect = capture_execute
+
+        @asynccontextmanager
+        async def mock_session():
+            yield mock_db
+
+        # round((3 + 4 + 5) / 3) = round(4.0) = 4
+        scores = {"directness": 3, "pace": 4, "grounding": 5, "reasoning": "Test."}
+        with patch("app.llm_judge.get_session", mock_session):
+            await _persist_judge_result("test-uuid", scores)
+
+        assert captured["judge_score"] == 4
+
+    @pytest.mark.asyncio
+    async def test_handles_missing_score_keys(self):
+        """Missing score keys default to 0 without raising."""
+        mock_db = AsyncMock()
+
+        @asynccontextmanager
+        async def mock_session():
+            yield mock_db
+
+        with patch("app.llm_judge.get_session", mock_session):
+            # Should not raise even with empty scores
+            await _persist_judge_result("test-uuid", {})
+
+        mock_db.commit.assert_awaited_once()
 
 
 # ---------------------------------------------------------------------------
