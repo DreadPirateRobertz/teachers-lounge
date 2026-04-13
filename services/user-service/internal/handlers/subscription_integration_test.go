@@ -236,8 +236,8 @@ func TestSubscriptionFlow_Integration(t *testing.T) {
 	}
 }
 
-// TestGetSubscription_NotFound_Integration verifies 404 for a user with no subscription.
-func TestGetSubscription_NotFound_Integration(t *testing.T) {
+// TestGetSubscription_NotFound verifies 404 for a user with no subscription.
+func TestGetSubscription_NotFound(t *testing.T) {
 	s := newIntegrationStore(t)
 	jwt := auth.NewJWTManager(integrationJWTSecret, 15*time.Minute, 30*24*time.Hour)
 	ts := httptest.NewServer(newIntegrationRouter(t, s, jwt))
@@ -260,8 +260,8 @@ func TestGetSubscription_NotFound_Integration(t *testing.T) {
 	}
 }
 
-// TestCancelSubscription_NotActive_Integration verifies 422 when subscription is not active.
-func TestCancelSubscription_NotActive_Integration(t *testing.T) {
+// TestCancelSubscription_NotActive verifies 422 when subscription is not active.
+func TestCancelSubscription_NotActive(t *testing.T) {
 	s := newIntegrationStore(t)
 	jwt := auth.NewJWTManager(integrationJWTSecret, 15*time.Minute, 30*24*time.Hour)
 	ts := httptest.NewServer(newIntegrationRouter(t, s, jwt))
