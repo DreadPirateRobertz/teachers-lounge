@@ -691,8 +691,8 @@ func TestAddStudent_ByStudentID(t *testing.T) {
 func TestAddStudent_ByEmail(t *testing.T) {
 	s := &errStore{mockStore: newMockStore()}
 	// Add a student to the mockStore by email
-	s.mockStore.users["student@school.edu"] = &models.User{ID: validStudentID, Email: "student@school.edu"}
-	s.mockStore.byID[validStudentID] = s.mockStore.users["student@school.edu"]
+	s.users["student@school.edu"] = &models.User{ID: validStudentID, Email: "student@school.edu"}
+	s.byID[validStudentID] = s.users["student@school.edu"]
 	h := newTeachersHandler(s)
 	email := "student@school.edu"
 	r := teacherReq(http.MethodPost,
@@ -1035,7 +1035,7 @@ func newSubsHandler(s store.Storer, bm billing.SubscriptionManager) *handlers.Su
 func subsStore(withSub bool, subErr error) *errStore {
 	s := &errStore{mockStore: newMockStore()}
 	if withSub {
-		s.mockStore.subs[validTeacherID] = &models.Subscription{
+		s.subs[validTeacherID] = &models.Subscription{
 			ID:     uuid.New(),
 			UserID: validTeacherID,
 			Plan:   models.PlanTrial,

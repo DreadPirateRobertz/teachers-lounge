@@ -171,7 +171,7 @@ func TestIssueAccessToken_ExpiryIsInFuture(t *testing.T) {
 	if err != nil {
 		t.Fatalf("ValidateAccessToken: %v", err)
 	}
-	if !claims.ExpiresAt.Time.After(time.Now()) {
+	if !claims.ExpiresAt.After(time.Now()) {
 		t.Errorf("token expiry %v is not in the future", claims.ExpiresAt.Time)
 	}
 }
