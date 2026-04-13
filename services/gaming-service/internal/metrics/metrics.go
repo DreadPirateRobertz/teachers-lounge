@@ -39,7 +39,7 @@ var (
 			Help:    "HTTP request duration in seconds.",
 			Buckets: prometheus.DefBuckets,
 		},
-		[]string{"method", "path", "status"},
+		[]string{"method", "route", "status_code"},
 	)
 
 	// HTTPRequestsTotal counts all HTTP requests.
@@ -48,6 +48,25 @@ var (
 			Name: "http_requests_total",
 			Help: "Total number of HTTP requests.",
 		},
-		[]string{"method", "path", "status"},
+		[]string{"method", "route", "status_code"},
+	)
+
+	// BattleSessionsActive tracks the current number of in-progress boss battles.
+	// Incremented on POST /gaming/boss/start, decremented when a battle ends
+	// (victory, defeat, or forfeit).
+	BattleSessionsActive = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "battle_sessions_active",
+			Help: "Number of boss battle sessions currently in progress.",
+		},
+	)
+
+	// BossDefeatsTotal counts successful boss defeats, labeled by boss_id.
+	BossDefeatsTotal = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "boss_defeats_total",
+			Help: "Total number of boss defeats, labeled by boss_id.",
+		},
+		[]string{"boss_id"},
 	)
 )

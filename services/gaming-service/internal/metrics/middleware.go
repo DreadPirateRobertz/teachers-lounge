@@ -26,11 +26,11 @@ func HTTPMiddleware(next http.Handler) http.Handler {
 		wrapped := &responseWriter{ResponseWriter: w, status: http.StatusOK}
 		next.ServeHTTP(wrapped, r)
 
-		status := strconv.Itoa(wrapped.status)
+		statusCode := strconv.Itoa(wrapped.status)
 		duration := time.Since(start).Seconds()
-		path := r.URL.Path
+		route := r.URL.Path
 
-		HTTPRequestDuration.WithLabelValues(r.Method, path, status).Observe(duration)
-		HTTPRequestsTotal.WithLabelValues(r.Method, path, status).Inc()
+		HTTPRequestDuration.WithLabelValues(r.Method, route, statusCode).Observe(duration)
+		HTTPRequestsTotal.WithLabelValues(r.Method, route, statusCode).Inc()
 	})
 }

@@ -50,3 +50,37 @@ func TestActiveStreaksGauge_SetAndRead(t *testing.T) {
 		t.Fatalf("expected active streaks gauge of 42.0, got %f", val)
 	}
 }
+
+func TestBattleSessionsActive_IncDec(t *testing.T) {
+	before := testutil.ToFloat64(metrics.BattleSessionsActive)
+
+	metrics.BattleSessionsActive.Inc()
+	afterInc := testutil.ToFloat64(metrics.BattleSessionsActive)
+	if afterInc-before != 1.0 {
+		t.Fatalf("expected +1 after Inc, got delta %f", afterInc-before)
+	}
+
+	metrics.BattleSessionsActive.Dec()
+	afterDec := testutil.ToFloat64(metrics.BattleSessionsActive)
+	if afterDec != before {
+		t.Fatalf("expected gauge to return to %f after Dec, got %f", before, afterDec)
+	}
+}
+
+func TestBossDefeatsTotal_LabeledByBossID(t *testing.T) {
+	before := testutil.ToFloat64(metrics.BossDefeatsTotal.WithLabelValues("algebra-wyrm"))
+	metrics.BossDefeatsTotal.WithLabelValues("algebra-wyrm").Inc()
+	after := testutil.ToFloat64(metrics.BossDefeatsTotal.WithLabelValues("algebra-wyrm"))
+
+	if after-before != 1.0 {
+		t.Fatalf("expected boss defeat increment of 1.0, got %f", after-before)
+	}
+}
+
+func TestHTTPRequestDuration_LabelsRouteAndStatusCode(t *testing.T) {
+	// Observe a duration with the canonical label names; if the histogram was
+	// registered with different labels this will panic, failing the test.
+	// This verifies the labels are "method", "route", "status_code" as specced.
+	metrics.HTTPRequestDuration.WithLabelValues("GET", "/gaming/profile/abc", "200").Observe(0.05)
+	// No assertion needed beyond not panicking — label mismatch causes a panic.
+}

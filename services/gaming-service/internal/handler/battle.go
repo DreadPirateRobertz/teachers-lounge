@@ -12,6 +12,7 @@ import (
 
 	"github.com/teacherslounge/gaming-service/internal/battle"
 	"github.com/teacherslounge/gaming-service/internal/loot"
+	"github.com/teacherslounge/gaming-service/internal/metrics"
 	"github.com/teacherslounge/gaming-service/internal/middleware"
 	"github.com/teacherslounge/gaming-service/internal/model"
 	"github.com/teacherslounge/gaming-service/internal/xp"
@@ -62,6 +63,8 @@ func (h *Handler) StartBattle(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
+
+	metrics.BattleSessionsActive.Inc()
 
 	writeJSON(w, http.StatusCreated, model.StartBattleResponse{Session: *session})
 }
@@ -325,6 +328,14 @@ func (h *Handler) fetchOrGenerateTaunt(ctx context.Context, session *model.Battl
 // full LootDrop to the returned BattleResult for the UI to consume.
 func (h *Handler) finishBattle(r *http.Request, session *model.BattleSession, won bool) *model.BattleResult {
 	ctx := r.Context()
+
+	// A battle session is ending — decrement the active gauge regardless of outcome.
+	metrics.BattleSessionsActive.Dec()
+
+	// Count boss defeats by boss_id.
+	if won {
+		metrics.BossDefeatsTotal.WithLabelValues(string(session.BossID)).Inc()
+	}
 
 	var xpEarned int64
 	var drop *loot.Drop
