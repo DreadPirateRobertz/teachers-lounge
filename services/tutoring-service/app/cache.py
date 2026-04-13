@@ -12,6 +12,7 @@ from typing import Any
 from uuid import UUID
 
 import redis.asyncio as aioredis
+from prometheus_client import Counter
 
 from .config import settings
 
@@ -38,6 +39,19 @@ _SESSION_HISTORY_PREFIX = "tutoring:session_history:"
 _USER_SESSIONS_PREFIX = "tutoring:user_sessions:"
 # Keep the last 5 session IDs per user in a Redis list
 _MAX_CACHED_SESSIONS_PER_USER = 5
+
+# ── Cache hit/miss counters (Prometheus) ─────────────────────────────────────
+
+_cache_hits = Counter(
+    "tl_cache_hits_total",
+    "Total Redis cache hits, labelled by key namespace.",
+    labelnames=["namespace"],
+)
+_cache_misses = Counter(
+    "tl_cache_misses_total",
+    "Total Redis cache misses (including errors), labelled by key namespace.",
+    labelnames=["namespace"],
+)
 
 
 async def init_cache() -> None:
@@ -106,9 +120,12 @@ async def get_cached_history(session_id: UUID) -> list[dict[str, Any]] | None:
     try:
         raw = await _redis.get(_history_key(session_id))
         if raw is None:
+            _cache_misses.labels(namespace="session_history").inc()
             return None
+        _cache_hits.labels(namespace="session_history").inc()
         return json.loads(raw)
     except Exception as exc:  # noqa: BLE001
+        _cache_misses.labels(namespace="session_history").inc()
         log.debug("cache get_history miss/error for %s: %s", _log_safe(session_id), exc)
         return None
 
