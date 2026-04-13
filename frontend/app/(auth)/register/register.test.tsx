@@ -57,12 +57,14 @@ beforeEach(() => {
 })
 
 /** Fill all required fields with valid values and submit the form. */
-function fillAndSubmit(overrides: {
-  displayName?: string
-  email?: string
-  password?: string
-  confirm?: string
-} = {}) {
+function fillAndSubmit(
+  overrides: {
+    displayName?: string
+    email?: string
+    password?: string
+    confirm?: string
+  } = {},
+) {
   const {
     displayName = 'ChemWizard',
     email = 'wizard@test.com',

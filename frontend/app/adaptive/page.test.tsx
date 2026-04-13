@@ -105,9 +105,7 @@ describe('AdaptiveDashboardPage — unauthenticated', () => {
   it('shows error when no auth cookie is present', async () => {
     clearAuthCookie()
     render(<AdaptiveDashboardPage />)
-    await waitFor(() =>
-      expect(screen.getByTestId('adaptive-error')).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByTestId('adaptive-error')).toBeInTheDocument())
   })
 })
 
@@ -144,30 +142,22 @@ describe('AdaptiveDashboardPage — authenticated', () => {
 
   it('shows the mastery heatmap after data loads', async () => {
     render(<AdaptiveDashboardPage />)
-    await waitFor(() =>
-      expect(screen.getByTestId('mastery-heatmap')).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByTestId('mastery-heatmap')).toBeInTheDocument())
   })
 
   it('shows the upcoming reviews panel after data loads', async () => {
     render(<AdaptiveDashboardPage />)
-    await waitFor(() =>
-      expect(screen.getByTestId('upcoming-reviews')).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByTestId('upcoming-reviews')).toBeInTheDocument())
   })
 
   it('shows the weak concept alerts panel after data loads', async () => {
     render(<AdaptiveDashboardPage />)
-    await waitFor(() =>
-      expect(screen.getByTestId('weak-concept-alerts')).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByTestId('weak-concept-alerts')).toBeInTheDocument())
   })
 
   it('shows the learning style indicator after data loads', async () => {
     render(<AdaptiveDashboardPage />)
-    await waitFor(() =>
-      expect(screen.getByTestId('learning-style-indicator')).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByTestId('learning-style-indicator')).toBeInTheDocument())
   })
 
   it('displays weak concept in alert panel', async () => {
@@ -218,9 +208,7 @@ describe('AdaptiveDashboardPage — fetch error', () => {
 
   it('shows error message when fetch fails', async () => {
     render(<AdaptiveDashboardPage />)
-    await waitFor(() =>
-      expect(screen.getByTestId('adaptive-error')).toBeInTheDocument(),
-    )
+    await waitFor(() => expect(screen.getByTestId('adaptive-error')).toBeInTheDocument())
   })
 })
 

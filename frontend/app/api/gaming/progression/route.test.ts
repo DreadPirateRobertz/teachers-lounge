@@ -107,9 +107,7 @@ describe('GET /api/gaming/progression — gaming-service proxy', () => {
   })
 
   it('returns upstream error status when gaming-service fails', async () => {
-    global.fetch = jest.fn().mockResolvedValue(
-      new Response('service unavailable', { status: 503 }),
-    )
+    global.fetch = jest.fn().mockResolvedValue(new Response('service unavailable', { status: 503 }))
 
     const { GET: getProxy } = await import('./route')
     const req = new NextRequest('http://localhost/api/gaming/progression')

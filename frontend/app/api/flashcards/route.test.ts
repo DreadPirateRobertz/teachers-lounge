@@ -70,9 +70,9 @@ describe('GET /api/flashcards', () => {
   })
 
   it('forwards upstream status code on error', async () => {
-    global.fetch = jest.fn().mockResolvedValue(
-      new Response(JSON.stringify({ detail: 'not found' }), { status: 404 }),
-    )
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ detail: 'not found' }), { status: 404 }))
 
     const { GET } = await import('./route')
     const resp = await GET(makeGetRequest())
@@ -84,9 +84,7 @@ describe('GET /api/flashcards', () => {
     let capturedHeaders: Record<string, string> = {}
     global.fetch = jest.fn().mockImplementation((_url: string, opts: RequestInit) => {
       capturedHeaders = opts.headers as Record<string, string>
-      return Promise.resolve(
-        new Response(JSON.stringify({ cards: [] }), { status: 200 }),
-      )
+      return Promise.resolve(new Response(JSON.stringify({ cards: [] }), { status: 200 }))
     })
 
     const { GET } = await import('./route')
@@ -99,9 +97,7 @@ describe('GET /api/flashcards', () => {
     let capturedHeaders: Record<string, string> = {}
     global.fetch = jest.fn().mockImplementation((_url: string, opts: RequestInit) => {
       capturedHeaders = opts.headers as Record<string, string>
-      return Promise.resolve(
-        new Response(JSON.stringify({ cards: [] }), { status: 200 }),
-      )
+      return Promise.resolve(new Response(JSON.stringify({ cards: [] }), { status: 200 }))
     })
 
     const { GET } = await import('./route')
@@ -117,9 +113,7 @@ describe('GET /api/flashcards', () => {
     let capturedHeaders: Record<string, string> = {}
     global.fetch = jest.fn().mockImplementation((_url: string, opts: RequestInit) => {
       capturedHeaders = opts.headers as Record<string, string>
-      return Promise.resolve(
-        new Response(JSON.stringify({ cards: [] }), { status: 200 }),
-      )
+      return Promise.resolve(new Response(JSON.stringify({ cards: [] }), { status: 200 }))
     })
 
     const { GET } = await import('./route')
@@ -154,9 +148,9 @@ describe('POST /api/flashcards', () => {
   })
 
   it('forwards upstream status code on POST error', async () => {
-    global.fetch = jest.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: 'bad request' }), { status: 400 }),
-    )
+    global.fetch = jest
+      .fn()
+      .mockResolvedValue(new Response(JSON.stringify({ error: 'bad request' }), { status: 400 }))
 
     const { POST } = await import('./route')
     const resp = await POST(makePostRequest())
@@ -168,9 +162,7 @@ describe('POST /api/flashcards', () => {
     let capturedHeaders: Record<string, string> = {}
     global.fetch = jest.fn().mockImplementation((_url: string, opts: RequestInit) => {
       capturedHeaders = opts.headers as Record<string, string>
-      return Promise.resolve(
-        new Response(JSON.stringify({ cards: [] }), { status: 200 }),
-      )
+      return Promise.resolve(new Response(JSON.stringify({ cards: [] }), { status: 200 }))
     })
 
     const { POST } = await import('./route')
@@ -183,9 +175,7 @@ describe('POST /api/flashcards', () => {
     let capturedHeaders: Record<string, string> = {}
     global.fetch = jest.fn().mockImplementation((_url: string, opts: RequestInit) => {
       capturedHeaders = opts.headers as Record<string, string>
-      return Promise.resolve(
-        new Response(JSON.stringify({ cards: [] }), { status: 200 }),
-      )
+      return Promise.resolve(new Response(JSON.stringify({ cards: [] }), { status: 200 }))
     })
 
     const { POST } = await import('./route')
