@@ -118,6 +118,19 @@ export default function CharacterSidebar() {
         </div>
       </div>
 
+      {/* Gem Shop link */}
+      <div className="px-3 py-2 border-b border-border-dim">
+        <Link
+          href="/shop"
+          className="flex items-center justify-between text-[10px] text-text-dim hover:text-neon-gold transition-colors group"
+        >
+          <span className="font-bold uppercase tracking-wider">Gem Shop</span>
+          <span className="text-neon-gold group-hover:text-glow-gold transition-colors">
+            💎 Open →
+          </span>
+        </Link>
+      </div>
+
       {/* Achievements */}
       <div className="px-3 py-2 border-b border-border-dim">
         <div className="text-[10px] font-bold text-text-dim uppercase tracking-wider mb-2">

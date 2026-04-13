@@ -42,7 +42,7 @@ describe('BottomNav', () => {
     render(<BottomNav />)
     expect(screen.getByRole('link', { name: /chat/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /battle/i })).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: /materials/i })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /shop/i })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: /profile/i })).toBeInTheDocument()
   })
 
@@ -60,11 +60,11 @@ describe('BottomNav', () => {
     expect(battleLink).toHaveAttribute('aria-current', 'page')
   })
 
-  it('marks materials tab active on /materials route', () => {
-    mockUsePathname.mockReturnValue('/materials')
+  it('marks shop tab active on /shop route', () => {
+    mockUsePathname.mockReturnValue('/shop')
     render(<BottomNav />)
-    const materialsLink = screen.getByRole('link', { name: /materials/i })
-    expect(materialsLink).toHaveAttribute('aria-current', 'page')
+    const shopLink = screen.getByRole('link', { name: /shop/i })
+    expect(shopLink).toHaveAttribute('aria-current', 'page')
   })
 
   it('marks profile tab active on /profile route', () => {

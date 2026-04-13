@@ -24,7 +24,7 @@ interface Tab {
 const TABS: Tab[] = [
   { href: '/', label: 'Chat', icon: '💬', match: '/' },
   { href: '/boss', label: 'Battle', icon: '⚔️', match: '/boss' },
-  { href: '/materials', label: 'Materials', icon: '📚', match: '/materials' },
+  { href: '/shop', label: 'Shop', icon: '💎', match: '/shop' },
   { href: '/profile', label: 'Profile', icon: '👤', match: '/profile' },
 ]
 
