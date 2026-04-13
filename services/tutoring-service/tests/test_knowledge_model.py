@@ -628,3 +628,66 @@ class TestUpdateDialsUnknownKeyIgnored:
         # Bogus key did not create an attribute on the profile mock
         # (hasattr would be True on MagicMock but the value should not be 9.9)
         assert getattr(profile, "__class__", None) is not float
+
+
+# ── log_concept_interaction ───────────────────────────────────────────────────
+
+class TestLogConceptInteraction:
+    """Tests for log_concept_interaction (Phase 2 SKM engagement log)."""
+
+    @pytest.mark.asyncio
+    async def test_creates_mastery_row_when_absent(self):
+        """When no StudentConceptMastery row exists, one is created with mastery_score=0."""
+        from app.knowledge_model import log_concept_interaction
+
+        db = AsyncMock()
+        db.flush = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = None  # no existing row
+        db.execute = AsyncMock(return_value=result)
+
+        await log_concept_interaction(db, USER_ID, CONCEPT_ID)
+
+        db.add.assert_called_once()
+        added = db.add.call_args[0][0]
+        assert added.user_id == USER_ID
+        assert added.concept_id == CONCEPT_ID
+        assert added.mastery_score == 0.0
+        assert added.last_reviewed_at is not None
+        db.flush.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_updates_last_reviewed_at_on_existing_row(self):
+        """When a mastery row exists, last_reviewed_at is refreshed without adding a new row."""
+        from app.knowledge_model import log_concept_interaction
+        from app.orm import StudentConceptMastery
+
+        db = AsyncMock()
+        existing = MagicMock(spec=StudentConceptMastery)
+        existing.last_reviewed_at = NOW - timedelta(days=10)
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = existing
+        db.execute = AsyncMock(return_value=result)
+
+        await log_concept_interaction(db, USER_ID, CONCEPT_ID)
+
+        db.add.assert_not_called()
+        # last_reviewed_at should be refreshed to a more recent value
+        assert existing.last_reviewed_at > NOW - timedelta(days=10)
+
+    @pytest.mark.asyncio
+    async def test_does_not_modify_mastery_score_on_existing_row(self):
+        """log_concept_interaction never changes mastery_score — that is the SRS system's job."""
+        from app.knowledge_model import log_concept_interaction
+        from app.orm import StudentConceptMastery
+
+        db = AsyncMock()
+        existing = MagicMock(spec=StudentConceptMastery)
+        existing.mastery_score = 0.65
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = existing
+        db.execute = AsyncMock(return_value=result)
+
+        await log_concept_interaction(db, USER_ID, CONCEPT_ID)
+
+        assert existing.mastery_score == 0.65

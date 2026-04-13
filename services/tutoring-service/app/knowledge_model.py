@@ -21,6 +21,9 @@ batched atomically.
 
   Proactive SRS:
     get_due_review_prompt           — generate a nudge string when reviews are due
+
+  SKM interaction log (Phase 2 — tl-dkm):
+    log_concept_interaction         — record tutoring engagement with a concept (no commit)
 """
 from __future__ import annotations
 
@@ -398,3 +401,47 @@ async def get_due_review_prompt(
         f"{'s' if len(due_rows) > 1 else ''} due for review "
         f"({concepts_str}). Visit the review queue when you're ready."
     )
+
+
+# ── SKM interaction log ───────────────────────────────────────────────────────
+
+async def log_concept_interaction(
+    db: AsyncSession,
+    user_id: UUID,
+    concept_id: UUID,
+) -> None:
+    """Record that a student engaged with a concept during a tutoring session.
+
+    Phase 2 (tl-dkm) implementation: lightweight engagement log.  Creates the
+    StudentConceptMastery row if it does not yet exist, and refreshes
+    ``last_reviewed_at`` to mark recent engagement.  Does NOT modify
+    ``mastery_score`` — mastery updates are managed by the SRS system in Phase 5.
+
+    Flushes (but does not commit) when a new row is created so it is visible
+    within the current transaction.  Does NOT commit — caller owns the boundary.
+
+    Args:
+        db:         Async SQLAlchemy session.
+        user_id:    UUID of the student.
+        concept_id: UUID of the concept that appeared in the tutoring question.
+    """
+    result = await db.execute(
+        select(StudentConceptMastery).where(
+            StudentConceptMastery.user_id == user_id,
+            StudentConceptMastery.concept_id == concept_id,
+        )
+    )
+    row = result.scalar_one_or_none()
+    now = datetime.now(timezone.utc)
+
+    if row is None:
+        row = StudentConceptMastery(
+            user_id=user_id,
+            concept_id=concept_id,
+            mastery_score=0.0,
+            last_reviewed_at=now,
+        )
+        db.add(row)
+        await db.flush()
+    else:
+        row.last_reviewed_at = now
