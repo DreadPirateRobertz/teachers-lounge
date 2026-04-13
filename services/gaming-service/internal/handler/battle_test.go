@@ -75,6 +75,12 @@ func (b *battleStore) GetProfile(_ context.Context, _ string) (*model.Profile, e
 func (b *battleStore) StreakCheckin(_ context.Context, _ string) (int, int, bool, error) {
 	return 0, 0, false, nil
 }
+func (b *battleStore) CreateStreakFreeze(_ context.Context, _ string, _ int) (int, time.Time, error) {
+	return 0, time.Time{}, nil
+}
+func (b *battleStore) IsStreakFrozen(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
 func (b *battleStore) LeaderboardUpdate(_ context.Context, _ string, _ int64) error { return nil }
 func (b *battleStore) LeaderboardUpdateCourse(_ context.Context, _, _ string, _ int64) error {
 	return nil

@@ -44,6 +44,21 @@ type StreakCheckinResponse struct {
 	Reset         bool `json:"reset"`
 }
 
+// StreakFreezeCost is the gem cost the gaming-service charges for a 24-hour
+// streak freeze. Exported so the shop UI / tests can reference it without
+// hard-coding the literal.
+const StreakFreezeCost = 50
+
+// StreakFreezeResponse is the response body for POST /gaming/streak/freeze.
+type StreakFreezeResponse struct {
+	// GemsLeft is the caller's gem balance after the 50-gem charge.
+	GemsLeft int `json:"gems_left"`
+	// ExpiresAt is the UTC RFC3339 timestamp at which the freeze ends.
+	// While streak_frozen_until > NOW(), StreakCheckin will not reset
+	// current_streak due to a missed-day gap.
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
 // Leaderboard period constants for GET /gaming/leaderboard?period=
 const (
 	PeriodAllTime = "all_time"

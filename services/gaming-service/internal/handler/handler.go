@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"go.uber.org/zap"
@@ -20,6 +21,8 @@ type Storer interface {
 	UpsertXP(ctx context.Context, userID string, newXP int64, newLevel int) error
 	GetProfile(ctx context.Context, userID string) (*model.Profile, error)
 	StreakCheckin(ctx context.Context, userID string) (current, longest int, reset bool, err error)
+	CreateStreakFreeze(ctx context.Context, userID string, gemCost int) (gemsLeft int, expiresAt time.Time, err error)
+	IsStreakFrozen(ctx context.Context, userID string) (bool, error)
 	LeaderboardUpdate(ctx context.Context, userID string, xpVal int64) error
 	LeaderboardUpdateCourse(ctx context.Context, userID, courseID string, xp int64) error
 	LeaderboardTop10(ctx context.Context, userID string) ([]model.LeaderboardEntry, *model.LeaderboardEntry, error)

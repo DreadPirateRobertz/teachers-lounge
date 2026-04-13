@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -40,6 +41,12 @@ func (s *quoteStorer) GetProfile(ctx context.Context, u string) (*model.Profile,
 }
 func (s *quoteStorer) StreakCheckin(ctx context.Context, u string) (int, int, bool, error) {
 	return 0, 0, false, nil
+}
+func (s *quoteStorer) CreateStreakFreeze(_ context.Context, _ string, _ int) (int, time.Time, error) {
+	return 0, time.Time{}, nil
+}
+func (s *quoteStorer) IsStreakFrozen(_ context.Context, _ string) (bool, error) {
+	return false, nil
 }
 func (s *quoteStorer) LeaderboardUpdate(ctx context.Context, u string, x int64) error { return nil }
 func (s *quoteStorer) LeaderboardUpdateCourse(ctx context.Context, u, c string, x int64) error {

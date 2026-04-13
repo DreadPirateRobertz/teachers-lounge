@@ -135,6 +135,10 @@ func (noopStore) GetProfile(_ context.Context, _ string) (*model.Profile, error)
 func (noopStore) StreakCheckin(_ context.Context, _ string) (int, int, bool, error) {
 	return 0, 0, false, nil
 }
+func (noopStore) CreateStreakFreeze(_ context.Context, _ string, _ int) (int, time.Time, error) {
+	return 0, time.Time{}, nil
+}
+func (noopStore) IsStreakFrozen(_ context.Context, _ string) (bool, error) { return false, nil }
 func (noopStore) LeaderboardUpdate(_ context.Context, _ string, _ int64) error { return nil }
 func (noopStore) LeaderboardUpdateCourse(_ context.Context, _, _ string, _ int64) error {
 	return nil
