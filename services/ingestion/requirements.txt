@@ -1,9 +1,6 @@
 # Python 3.13: ensure pkg_resources is available (required by some legacy deps)
 setuptools>=70.0.0
 
-# Shared structured logging package (canonical source: services/tl-logging/)
-../tl-logging
-
 fastapi==0.115.0
 uvicorn[standard]==0.30.6
 pydantic==2.9.2
