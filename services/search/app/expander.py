@@ -106,6 +106,7 @@ async def expand_query(query: str, context_turns: list[str] | None) -> str:
             model=settings.tutor_fast_model,
             messages=prompt,
             max_tokens=settings.query_expansion_max_tokens,
+            timeout=settings.query_expansion_timeout_seconds,
             stream=False,
         )
         expanded = (response.choices[0].message.content or "").strip()

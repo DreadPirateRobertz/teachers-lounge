@@ -61,8 +61,10 @@ async def search(
 
     When ``q`` is a short follow-up (< ``query_expansion_short_threshold``
     tokens) and ``context_turns`` is non-empty, the query is first rewritten
-    into a standalone form via the AI gateway. Expansion failures silently
-    fall back to the raw query (tl-afb).
+    into a standalone form via the AI gateway. Expansion failures fall back
+    to the raw query, emit a WARNING log, and increment
+    ``search_query_expansion_total{outcome="fallback_error"|"fallback_blank"}``
+    (tl-afb).
     """
     effective_q = await expand_query(q, context_turns)
     fetch_limit = max(limit, settings.sparse_rerank_limit)

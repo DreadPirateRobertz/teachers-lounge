@@ -134,6 +134,25 @@ class TestExpandQuery:
         assert any("falling back" in rec.message for rec in caplog.records)
 
     @pytest.mark.asyncio
+    async def test_none_choices_falls_back_via_error_path(self) -> None:
+        """A malformed response with ``choices=None`` must not crash the endpoint.
+
+        Subscripting ``None`` raises ``TypeError`` inside the try block, which
+        must be swallowed by the same graceful-failure guard that handles
+        network errors — pinning the behaviour so a future refactor does not
+        accidentally narrow the ``except`` clause.
+        """
+        before = _outcome("fallback_error")
+        fake = MagicMock()
+        fake.chat.completions.create = AsyncMock(
+            return_value=SimpleNamespace(choices=None)
+        )
+        with patch.object(expander, "_get_client", return_value=fake):
+            out = await expand_query("why?", context_turns=["tutor: gas laws"])
+        assert out == "why?"
+        assert _outcome("fallback_error") == before + 1
+
+    @pytest.mark.asyncio
     async def test_blank_expansion_falls_back_to_raw_query(self) -> None:
         """Whitespace-only gateway output must fall back, not propagate."""
         before = _outcome("fallback_blank")
