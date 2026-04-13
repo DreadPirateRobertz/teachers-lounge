@@ -13,6 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     && rm -rf /var/lib/apt/lists/*
 
+# tl-logging is copied here by CI before docker build (see ci.yml docker-build job)
+COPY tl-logging/ ./tl-logging/
 COPY requirements.txt .
 
 # Pre-install modern onnx wheel so transitive deps (effdet via

@@ -1,0 +1,14 @@
+[build-system]
+requires = ["setuptools>=70"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "tl-logging"
+version = "0.1.0"
+description = "Shared structured JSON logging for TeachersLounge Python services."
+requires-python = ">=3.11"
+dependencies = ["python-json-logger>=3.2"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["tl_logging*"]
