@@ -10,6 +10,9 @@ import (
 // streakRiskWindowQuery selects users with a live streak whose last study
 // session landed in the reminder window (last_study_date between NOW-maxAge
 // and NOW-minAge) and who do not currently hold an active streak freeze.
+// Users who already received a reminder within the window (last_streak_reminder_at
+// within the past minAgeHours) are excluded to prevent duplicate notifications
+// when the cron fires multiple times per day.
 //
 // The 20h/24h window intentionally excludes users who already lost their
 // streak (last_study_date older than 24h): the reminder is pre-lapse only.
@@ -20,11 +23,14 @@ const streakRiskWindowQuery = `
 	  AND last_study_date IS NOT NULL
 	  AND last_study_date <= NOW() - make_interval(hours => $1)
 	  AND last_study_date >  NOW() - make_interval(hours => $2)
-	  AND (streak_frozen_until IS NULL OR streak_frozen_until <= NOW())`
+	  AND (streak_frozen_until IS NULL OR streak_frozen_until <= NOW())
+	  AND (last_streak_reminder_at IS NULL
+	       OR last_streak_reminder_at < NOW() - make_interval(hours => $1))`
 
 // GetUsersAtRiskOfStreakLoss returns users whose active streaks are in the
-// reminder window (≥minAgeHours, <maxAgeHours since last_study_date) and
-// whose freeze is not currently active.
+// reminder window (≥minAgeHours, <maxAgeHours since last_study_date),
+// whose freeze is not currently active, and who have not already been sent
+// a reminder within the current window (guarded by last_streak_reminder_at).
 //
 // The query reads gaming-service's gaming_profiles table, which shares the
 // same Postgres cluster as notification-service. Callers typically pass
@@ -45,4 +51,20 @@ func (s *Store) GetUsersAtRiskOfStreakLoss(ctx context.Context, minAgeHours, max
 		out = append(out, u)
 	}
 	return out, rows.Err()
+}
+
+// UpdateLastStreakReminderAt stamps gaming_profiles.last_streak_reminder_at
+// to NOW() for the given user. Called after successfully fanning out push
+// reminders so subsequent cron runs within the same window are skipped.
+// A missing row is silently ignored — the cron should not fail if the user's
+// profile disappeared between the SELECT and the UPDATE.
+func (s *Store) UpdateLastStreakReminderAt(ctx context.Context, userID string) error {
+	const q = `
+		UPDATE gaming_profiles
+		SET last_streak_reminder_at = NOW()
+		WHERE user_id = $1`
+	if _, err := s.db.Exec(ctx, q, userID); err != nil {
+		return fmt.Errorf("store: update last_streak_reminder_at: %w", err)
+	}
+	return nil
 }
