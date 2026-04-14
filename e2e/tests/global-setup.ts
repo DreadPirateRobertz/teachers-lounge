@@ -30,17 +30,17 @@ setup('register test user', async ({ page }) => {
     JSON.stringify({ email, password, displayName }),
   )
 
-  await page.goto('/register')
-  await expect(page).toHaveURL('/register')
+  // Register via the API directly — dodges dev-mode CSP that blocks the
+  // client-side submit handler in `next dev`. The response sets `tl_token`
+  // as an httpOnly cookie which we then inject into the browser context.
+  const apiResp = await page.request.post('/api/user/auth/register', {
+    data: { email, password, display_name: displayName },
+  })
+  expect(apiResp.ok(), await apiResp.text()).toBeTruthy()
 
-  await page.fill('#display-name', displayName)
-  await page.fill('#email', email)
-  await page.fill('#password', password)
-  await page.fill('#confirm', password)
-  await page.click('button[type="submit"]')
-
-  // After register the token cookie is set; middleware redirects away from
-  // /subscribe (a public path) to / for authenticated users.
+  // Visit the app so the cookie (set on the request context) is scoped to
+  // this origin in the storage state snapshot.
+  await page.goto('/')
   await expect(page).toHaveURL('/', { timeout: 15_000 })
 
   // Persist auth state for downstream tests
