@@ -26,13 +26,15 @@ import (
 
 // fakeStreakStore is an in-memory StreakReminderStore for handler tests.
 type fakeStreakStore struct {
-	atRisk     []model.UserAtRisk
-	atRiskErr  error
-	gotMinAge  int
-	gotMaxAge  int
-	tokens     map[string][]string
-	tokensErr  map[string]error
-	tokensCall int
+	atRisk        []model.UserAtRisk
+	atRiskErr     error
+	gotMinAge     int
+	gotMaxAge     int
+	tokens        map[string][]string
+	tokensErr     map[string]error
+	tokensCall    int
+	deletedTokens []string // tokens purged via DeletePushToken
+	stampedUsers  []string // users stamped via UpdateLastStreakReminderAt
 }
 
 func (f *fakeStreakStore) GetUsersAtRiskOfStreakLoss(_ context.Context, minAgeHours, maxAgeHours int) ([]model.UserAtRisk, error) {
@@ -47,6 +49,18 @@ func (f *fakeStreakStore) GetPushTokens(_ context.Context, userID string) ([]str
 		return nil, err
 	}
 	return f.tokens[userID], nil
+}
+
+// DeletePushToken records the token as deleted; no actual storage mutation.
+func (f *fakeStreakStore) DeletePushToken(_ context.Context, _, token string) error {
+	f.deletedTokens = append(f.deletedTokens, token)
+	return nil
+}
+
+// UpdateLastStreakReminderAt records which users had their timestamp stamped.
+func (f *fakeStreakStore) UpdateLastStreakReminderAt(_ context.Context, userID string) error {
+	f.stampedUsers = append(f.stampedUsers, userID)
+	return nil
 }
 
 // capturePusher records every Send invocation. failOn returns an error when
@@ -240,6 +254,65 @@ func TestStreakReminder_TokenLookupErrorIsSkippedNotFatal(t *testing.T) {
 	}
 	if got.Sent != 1 {
 		t.Errorf("Sent = %d, want 1 (ok-user only)", got.Sent)
+	}
+}
+
+// TestStreakReminder_StampsLastReminderAtAfterSend verifies that after at least
+// one push token is successfully dispatched, last_streak_reminder_at is stamped
+// so subsequent cron runs within the window skip this user.
+func TestStreakReminder_StampsLastReminderAtAfterSend(t *testing.T) {
+	store := &fakeStreakStore{
+		atRisk: []model.UserAtRisk{
+			{UserID: "u1", CurrentStreak: 5},
+			{UserID: "u2", CurrentStreak: 3},
+		},
+		tokens: map[string][]string{
+			"u1": {"tok-u1"},
+			// u2 has no tokens — stamp should NOT be written
+		},
+	}
+	h := handlers.NewStreakReminderHandler(store, &capturePusher{}, zap.NewNop())
+
+	rr, req := newStreakRequest()
+	h.Serve(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if len(store.stampedUsers) != 1 || store.stampedUsers[0] != "u1" {
+		t.Errorf("expected only u1 stamped, got stampedUsers=%v", store.stampedUsers)
+	}
+}
+
+// TestStreakReminder_StaleTokenPurgedOnInvalidRegistration verifies that when
+// FCM returns an InvalidRegistration error the dead token is deleted from
+// storage so it is not retried on subsequent cron runs.
+func TestStreakReminder_StaleTokenPurgedOnInvalidRegistration(t *testing.T) {
+	store := &fakeStreakStore{
+		atRisk: []model.UserAtRisk{{UserID: "u1", CurrentStreak: 4}},
+		tokens: map[string][]string{
+			"u1": {"stale-token", "good-token"},
+		},
+	}
+	pusher := &capturePusher{
+		failOn: map[string]error{
+			"stale-token": errors.New("fcm: delivery failed: InvalidRegistration"),
+		},
+	}
+	h := handlers.NewStreakReminderHandler(store, pusher, zap.NewNop())
+
+	rr, req := newStreakRequest()
+	h.Serve(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if len(store.deletedTokens) != 1 || store.deletedTokens[0] != "stale-token" {
+		t.Errorf("expected stale-token to be purged, got deletedTokens=%v", store.deletedTokens)
+	}
+	got := decodeStreakResponse(t, rr)
+	if got.Sent != 1 || got.Failed != 1 {
+		t.Errorf("counts = %+v, want {Sent:1 Failed:1}", got)
 	}
 }
 
