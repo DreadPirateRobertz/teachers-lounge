@@ -52,26 +52,26 @@ func (t *txWithQueryRow) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row
 // ── txDB ──────────────────────────────────────────────────────────────────────
 
 type txDB struct {
-	tx     pgx.Tx
-	txErr  error
-	intRow pgx.Row
+	tx        pgx.Tx
+	txErr     error
+	battleRow pgx.Row
 }
 
 func (d *txDB) Begin(_ context.Context) (pgx.Tx, error) { return d.tx, d.txErr }
-func (d *txDB) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row { return d.intRow }
+func (d *txDB) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row { return d.battleRow }
 func (d *txDB) Query(_ context.Context, _ string, _ ...any) (pgx.Rows, error) { return nil, nil }
 func (d *txDB) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, nil
 }
 
-// ── intRow ────────────────────────────────────────────────────────────────────
+// ── battleIntRow ──────────────────────────────────────────────────────────────
 
-type intRow struct {
+type battleIntRow struct {
 	value int
 	err   error
 }
 
-func (r *intRow) Scan(dest ...any) error {
+func (r *battleIntRow) Scan(dest ...any) error {
 	if r.err != nil {
 		return r.err
 	}
@@ -240,7 +240,7 @@ func TestRecordBattleResult_CommitError_Propagated(t *testing.T) {
 // ── DeductGems ────────────────────────────────────────────────────────────────
 
 func TestDeductGems_HappyPath(t *testing.T) {
-	s := newBattleStore(t, &txDB{intRow: &intRow{value: 90}})
+	s := newBattleStore(t, &txDB{battleRow: &battleIntRow{value: 90}})
 	remaining, err := s.DeductGems(context.Background(), "user-abc", 10)
 	if err != nil {
 		t.Fatalf("DeductGems: %v", err)
@@ -251,7 +251,7 @@ func TestDeductGems_HappyPath(t *testing.T) {
 }
 
 func TestDeductGems_InsufficientGems_ReturnsError(t *testing.T) {
-	s := newBattleStore(t, &txDB{intRow: &intRow{err: errors.New("no rows")}})
+	s := newBattleStore(t, &txDB{battleRow: &battleIntRow{err: errors.New("no rows")}})
 	if _, err := s.DeductGems(context.Background(), "user-abc", 999); err == nil {
 		t.Fatal("expected error, got nil")
 	}

@@ -262,7 +262,7 @@ func TestGetHintIndex_MissingKey_ReturnsZero(t *testing.T) {
 
 // TestIncrHintIndex_HappyPath verifies gem deduction and counter increment.
 func TestIncrHintIndex_HappyPath(t *testing.T) {
-	db := &rowQueueDB{rows: []pgx.Row{&intRow{value: 4}}}
+	db := &rowQueueDB{rows: []pgx.Row{&battleIntRow{value: 4}}}
 	s := newMasteryStore(t, db)
 	idx, gems, err := s.IncrHintIndex(context.Background(), "sess-1", "q-1", "user-1")
 	if err != nil {

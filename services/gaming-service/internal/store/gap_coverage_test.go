@@ -108,7 +108,7 @@ func TestDeleteBattleSession_RedisError_Propagated(t *testing.T) {
 // TestStreakCheckin_ResetPath_GapExceedsWindow verifies that when the stored
 // last_ts is more than 24 hours ago, the streak resets to 1 with reset=true.
 func TestStreakCheckin_ResetPath_GapExceedsWindow(t *testing.T) {
-	s, mr := newStoreWithRedis(t, &rowQueueDB{rows: []pgx.Row{&intRow{value: 1}}})
+	s, mr := newStoreWithRedis(t, &rowQueueDB{rows: []pgx.Row{&battleIntRow{value: 1}}})
 
 	// Seed Redis with a last_ts that is 26 hours in the past.
 	oldTS := time.Now().Add(-26 * time.Hour).Unix()
