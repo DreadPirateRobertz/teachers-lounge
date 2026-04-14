@@ -25,9 +25,11 @@ func sanitizeForLog(s string) string {
 	return s
 }
 
-// wsUpgrader is reused for every WS upgrade. The default CheckOrigin accepts
-// any origin — the real protection is JWT validation in the query string
-// since browsers can't set arbitrary Origin headers from untrusted JS.
+// wsUpgrader is reused for every WS upgrade. CheckOrigin allows all origins:
+// WebSocket connections do not carry ambient credentials (no cookies used),
+// so CSRF does not apply. Authentication is enforced by the JWT in the
+// query string; an allowlist of expected origins can be added for additional
+// hardening.
 var wsUpgrader = websocket.Upgrader{
 	ReadBufferSize:  1024,
 	WriteBufferSize: 1024,
@@ -150,6 +152,9 @@ func (h *Handler) runBattleWS(ctx context.Context, conn *websocket.Conn, battleI
 		defer close(done)
 		for {
 			if _, _, err := conn.NextReader(); err != nil {
+				if !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
+					h.logger.Warn("ws: read error", zap.String("battle_id", battleID), zap.Error(err))
+				}
 				return
 			}
 		}
@@ -170,11 +175,13 @@ func (h *Handler) runBattleWS(ctx context.Context, conn *websocket.Conn, battleI
 			}
 			_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
 			if err := conn.WriteJSON(evt); err != nil {
+				h.logger.Warn("ws: write event", zap.String("battle_id", battleID), zap.String("event_type", evt.Type), zap.Error(err))
 				return
 			}
 		case <-ping.C:
 			_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
 			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
+				h.logger.Warn("ws: ping failed", zap.String("battle_id", battleID), zap.Error(err))
 				return
 			}
 		}
