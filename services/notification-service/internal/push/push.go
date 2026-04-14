@@ -8,10 +8,19 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"strings"
 	"time"
 
 	"go.uber.org/zap"
 )
+
+// sanitizeForLog strips CR/LF from user-controlled strings before they flow
+// into log entries, preventing log-forging (CWE-117).
+func sanitizeForLog(s string) string {
+	s = strings.ReplaceAll(s, "\n", "")
+	s = strings.ReplaceAll(s, "\r", "")
+	return s
+}
 
 const defaultFCMEndpoint = "https://fcm.googleapis.com/fcm/send"
 
@@ -124,7 +133,7 @@ func (p LogPusher) Send(_ context.Context, token, title, _ string, _ map[string]
 	}
 	log.Warn("LogPusher.Send: FCM not configured — notification discarded (noop)",
 		zap.String("token_prefix", tokenPrefix(token)),
-		zap.String("title", title),
+		zap.String("title", sanitizeForLog(title)),
 	)
 	return nil
 }
