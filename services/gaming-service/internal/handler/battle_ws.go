@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -14,6 +15,14 @@ import (
 	"github.com/teacherslounge/gaming-service/internal/middleware"
 	"github.com/teacherslounge/gaming-service/internal/wsbattle"
 )
+
+// sanitizeForLog strips CR/LF from user-controlled strings before they flow
+// into log entries, preventing log-forging (CWE-117).
+func sanitizeForLog(s string) string {
+	s = strings.ReplaceAll(s, "\n", "")
+	s = strings.ReplaceAll(s, "\r", "")
+	return s
+}
 
 // wsUpgrader is reused for every WS upgrade. The default CheckOrigin accepts
 // any origin — the real protection is JWT validation in the query string
@@ -70,7 +79,11 @@ func (h *Handler) BattleWS(jwtSecret string) http.HandlerFunc {
 
 		session, err := h.store.GetBattleSession(r.Context(), battleID)
 		if err != nil {
-			h.logger.Error("ws: load battle session", zap.Error(err))
+			// battleID is user-controlled and may be surfaced via err — sanitize
+			// before logging to prevent log forgery (CWE-117).
+			h.logger.Error("ws: load battle session",
+				zap.String("battle_id", sanitizeForLog(battleID)),
+				zap.String("err", sanitizeForLog(err.Error())))
 			http.Error(w, `{"error":"internal error"}`, http.StatusInternalServerError)
 			return
 		}
