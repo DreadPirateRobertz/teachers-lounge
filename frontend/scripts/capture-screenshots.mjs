@@ -4,10 +4,11 @@
  */
 import { chromium } from 'playwright'
 import { mkdir } from 'node:fs/promises'
-import { writeFileSync } from 'node:fs'
+import { fileURLToPath } from 'node:url'
+import { dirname, resolve } from 'node:path'
 
 const BASE = 'http://localhost:3000'
-const OUT = '/tmp/tl-dye-wt/docs/screenshots'
+const OUT = process.env.SCREENSHOT_OUT ?? resolve(dirname(fileURLToPath(import.meta.url)), '../../docs/screenshots')
 
 const CREDS = { email: 'demo@example.com', password: 'DemoPass123!', display_name: 'Demo User' }
 
