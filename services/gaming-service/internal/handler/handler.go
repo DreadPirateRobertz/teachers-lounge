@@ -78,20 +78,25 @@ type Storer interface {
 	ReviewFlashcard(ctx context.Context, cardID, userID string, quality int) (*model.Flashcard, error)
 	FlashcardsForSession(ctx context.Context, sessionID string) ([]*model.Flashcard, error)
 	AllFlashcardsForExport(ctx context.Context, userID string) ([]*model.Flashcard, error)
+
+	// WebSocket battle-state methods
+	GetBattle(ctx context.Context, battleID string) (*model.BattleSession, error)
+	UpdateBattleState(ctx context.Context, session *model.BattleSession) error
 }
 
-// Handler holds the store, taunt generator, and logger.
+// Handler holds the store, taunt generator, logger, and WebSocket hub.
 type Handler struct {
 	store   Storer
 	taunter taunt.Generator
 	logger  *zap.Logger
+	hub     *Hub
 }
 
 // New creates a Handler.
 // taunter is used by Attack to produce contextual boss taunts on wrong answers;
 // pass a taunt.StaticGenerator when the AI gateway is not configured.
 func New(store Storer, taunter taunt.Generator, logger *zap.Logger) *Handler {
-	return &Handler{store: store, taunter: taunter, logger: logger}
+	return &Handler{store: store, taunter: taunter, logger: logger, hub: newHub()}
 }
 
 // GainXP handles POST /gaming/xp

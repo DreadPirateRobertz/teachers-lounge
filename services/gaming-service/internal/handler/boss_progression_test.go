@@ -351,3 +351,11 @@ func TestGetBossProgression_MasteryQueryError_Returns500(t *testing.T) {
 
 // Compile-time check: progressionStore must satisfy model.Profile usage.
 var _ *model.Profile = nil
+
+// WebSocket battle-state methods (required by Storer interface)
+func (s *progressionStore) GetBattle(_ context.Context, _ string) (*model.BattleSession, error) {
+	return nil, nil
+}
+func (s *progressionStore) UpdateBattleState(_ context.Context, _ *model.BattleSession) error {
+	return nil
+}

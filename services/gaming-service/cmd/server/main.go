@@ -116,6 +116,7 @@ func main() {
 		// Boss battle routes
 		r.With(middleware.RateLimit(rl, ratelimit.BucketBossStart, logger)).Post("/gaming/boss/start", h.StartBattle)
 		r.Get("/gaming/boss/session/{sessionId}", h.GetBattleSession)
+		r.Get("/gaming/battle/{battle_id}/ws", h.BattleWebSocket)
 		r.With(middleware.RateLimit(rl, ratelimit.BucketBossAttack, logger)).Post("/gaming/boss/attack", h.Attack)
 		r.Post("/gaming/boss/powerup", h.ActivatePowerUp)
 		r.Post("/gaming/boss/forfeit", h.ForfeitBattle)

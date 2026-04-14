@@ -245,6 +245,10 @@ func (noopStore) GetChapterMastery(_ context.Context, _ string, _ []string) (flo
 func (noopStore) GetChapterMasteryBatch(_ context.Context, _ string, _ map[string][]string) (map[string]float64, error) {
 	return map[string]float64{}, nil
 }
+func (noopStore) GetBattle(_ context.Context, _ string) (*model.BattleSession, error) {
+	return nil, nil
+}
+func (noopStore) UpdateBattleState(_ context.Context, _ *model.BattleSession) error { return nil }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 

@@ -122,3 +122,49 @@ type BattleResult struct {
 	// LootDrop is populated on victory and drives the loot reveal UI.
 	LootDrop   *LootDrop   `json:"loot_drop,omitempty"`
 }
+
+// ── WebSocket battle events ──────────────────────────────────────────────────
+
+// BattleEventType identifies the kind of real-time battle event.
+type BattleEventType string
+
+const (
+	// EventJoin is sent to a newly connected client with the current session state.
+	EventJoin BattleEventType = "join"
+	// EventDamage carries per-turn damage values after each attack.
+	EventDamage BattleEventType = "damage"
+	// EventPhaseTransition is sent when the battle phase changes.
+	EventPhaseTransition BattleEventType = "phase_transition"
+	// EventLootRoll is sent on boss defeat with the full loot drop.
+	EventLootRoll BattleEventType = "loot_roll"
+	// EventDisconnect is sent when the server closes a connection.
+	EventDisconnect BattleEventType = "disconnect"
+)
+
+// BattleEvent is the top-level envelope for all WebSocket battle messages.
+type BattleEvent struct {
+	Type    BattleEventType `json:"type"`
+	Payload any             `json:"payload"`
+}
+
+// DamageEvent carries per-turn combat values broadcast after each attack.
+type DamageEvent struct {
+	PlayerDamageDealt int         `json:"player_damage_dealt"`
+	BossDamageDealt   int         `json:"boss_damage_dealt"`
+	BossHP            int         `json:"boss_hp"`
+	PlayerHP          int         `json:"player_hp"`
+	Phase             BattlePhase `json:"phase"`
+	Turn              int         `json:"turn"`
+}
+
+// PhaseTransitionEvent is broadcast when the battle moves to a new phase.
+type PhaseTransitionEvent struct {
+	Phase BattlePhase `json:"phase"`
+	Turn  int         `json:"turn"`
+}
+
+// LootRollEvent is broadcast on boss defeat and carries the full reward.
+type LootRollEvent struct {
+	LootDrop *LootDrop `json:"loot_drop"`
+	XPEarned int64     `json:"xp_earned"`
+}

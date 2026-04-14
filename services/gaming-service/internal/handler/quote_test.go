@@ -290,3 +290,11 @@ func (s *quoteStorer) FlashcardsForSession(_ context.Context, _ string) ([]*mode
 func (s *quoteStorer) AllFlashcardsForExport(_ context.Context, _ string) ([]*model.Flashcard, error) {
 	return nil, nil
 }
+
+// WebSocket battle-state methods
+func (s *quoteStorer) GetBattle(_ context.Context, _ string) (*model.BattleSession, error) {
+	return nil, nil
+}
+func (s *quoteStorer) UpdateBattleState(_ context.Context, _ *model.BattleSession) error {
+	return nil
+}

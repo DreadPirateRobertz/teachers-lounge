@@ -226,3 +226,11 @@ func TestBuyPowerUp_AllValidTypes(t *testing.T) {
 		})
 	}
 }
+
+// WebSocket battle-state methods (required by Storer interface)
+func (s *shopStore) GetBattle(_ context.Context, _ string) (*model.BattleSession, error) {
+	return nil, nil
+}
+func (s *shopStore) UpdateBattleState(_ context.Context, _ *model.BattleSession) error {
+	return nil
+}

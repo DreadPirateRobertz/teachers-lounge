@@ -182,6 +182,19 @@ func (h *Handler) Attack(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// Broadcast damage event to all WebSocket clients watching this battle.
+	h.hub.broadcast(req.SessionID, model.BattleEvent{
+		Type: model.EventDamage,
+		Payload: model.DamageEvent{
+			PlayerDamageDealt: playerDmg,
+			BossDamageDealt:   bossDmg,
+			BossHP:            session.BossHP,
+			PlayerHP:          session.PlayerHP,
+			Phase:             resp.Phase,
+			Turn:              session.Turn,
+		},
+	})
+
 	writeJSON(w, http.StatusOK, resp)
 }
 
@@ -413,7 +426,22 @@ func (h *Handler) finishBattle(r *http.Request, session *model.BattleSession, wo
 		}
 
 		result.LootDrop = lootDrop
+
+		// Broadcast loot roll event to all WebSocket clients watching this battle.
+		h.hub.broadcast(session.SessionID, model.BattleEvent{
+			Type: model.EventLootRoll,
+			Payload: model.LootRollEvent{
+				LootDrop: lootDrop,
+				XPEarned: xpEarned,
+			},
+		})
 	}
+
+	// Broadcast phase transition (victory or defeat) to WebSocket clients.
+	h.hub.broadcast(session.SessionID, model.BattleEvent{
+		Type:    model.EventPhaseTransition,
+		Payload: model.PhaseTransitionEvent{Phase: session.Phase, Turn: session.Turn},
+	})
 
 	// Clean up Redis session.
 	if err := h.store.DeleteBattleSession(ctx, session.SessionID); err != nil {
