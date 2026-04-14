@@ -226,9 +226,11 @@ func (h *UsersHandler) GetFullExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Returning 404 for stale tokens whose user has been deleted prevents
-	// the handler from emitting a half-populated export with a nil User field.
-	if _, err := h.store.GetUserByID(r.Context(), userID); err != nil {
+	// Verify the user exists before creating an export job. Returns 404 for
+	// stale tokens whose user has been deleted — prevents a half-populated
+	// export with a nil User field.
+	user, err := h.store.GetUserByID(r.Context(), userID)
+	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "user not found")
 			return
@@ -238,7 +240,7 @@ func (h *UsersHandler) GetFullExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Create a job row so BuildUserExport has an export_jobs id to write
-	// back into — keeps the audit trail uniform with the async path.
+	// back into. The job is tied to the user ID checked above.
 	jobID, err := h.store.CreateExportJob(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create export job")
@@ -247,9 +249,18 @@ func (h *UsersHandler) GetFullExport(w http.ResponseWriter, r *http.Request) {
 
 	export, err := h.store.BuildUserExport(r.Context(), jobID, userID)
 	if err != nil {
+		// A concurrent deletion between GetUserByID and BuildUserExport
+		// surfaces here as ErrNotFound — return 404 rather than 500.
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
 		writeError(w, http.StatusInternalServerError, "failed to build export")
 		return
 	}
+	// Pin the export's User field to the pre-verified record, closing the
+	// TOCTOU window between GetUserByID and BuildUserExport's internal fetch.
+	export.User = user
 
 	// GDPR audit-must-succeed: if we cannot record the disclosure, we must
 	// not disclose. Other audit sites in this service use best-effort (_ =)
