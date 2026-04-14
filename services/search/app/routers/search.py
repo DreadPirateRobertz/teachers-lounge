@@ -99,7 +99,7 @@ async def _run_search(
     """Run embedding, dense search, and sparse search concurrently.
 
     Args:
-        q: Raw query string.
+        q: Effective query string — raw or AI-gateway-expanded by the caller.
         course_id: Course scope for Qdrant filter.
         limit: Number of candidates to fetch per signal.
         chapter: Optional chapter filter forwarded to both searches.
