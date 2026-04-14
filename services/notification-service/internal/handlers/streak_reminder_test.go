@@ -34,7 +34,9 @@ type fakeStreakStore struct {
 	tokensErr     map[string]error
 	tokensCall    int
 	deletedTokens []string // tokens purged via DeletePushToken
+	deleteErr     error    // error returned by DeletePushToken, if non-nil
 	stampedUsers  []string // users stamped via UpdateLastStreakReminderAt
+	stampErr      error    // error returned by UpdateLastStreakReminderAt, if non-nil
 }
 
 func (f *fakeStreakStore) GetUsersAtRiskOfStreakLoss(_ context.Context, minAgeHours, maxAgeHours int) ([]model.UserAtRisk, error) {
@@ -51,16 +53,17 @@ func (f *fakeStreakStore) GetPushTokens(_ context.Context, userID string) ([]str
 	return f.tokens[userID], nil
 }
 
-// DeletePushToken records the token as deleted; no actual storage mutation.
+// DeletePushToken records the token as deleted and returns deleteErr if set.
 func (f *fakeStreakStore) DeletePushToken(_ context.Context, _, token string) error {
 	f.deletedTokens = append(f.deletedTokens, token)
-	return nil
+	return f.deleteErr
 }
 
-// UpdateLastStreakReminderAt records which users had their timestamp stamped.
+// UpdateLastStreakReminderAt records which users had their timestamp stamped
+// and returns stampErr if set.
 func (f *fakeStreakStore) UpdateLastStreakReminderAt(_ context.Context, userID string) error {
 	f.stampedUsers = append(f.stampedUsers, userID)
-	return nil
+	return f.stampErr
 }
 
 // capturePusher records every Send invocation. failOn returns an error when
@@ -337,5 +340,95 @@ func TestStreakReminder_UserWithNoTokens_NoPush(t *testing.T) {
 	}
 	if len(pusher.calls) != 0 {
 		t.Errorf("expected zero FCM calls, got %d", len(pusher.calls))
+	}
+}
+
+// TestStreakReminder_StampErrorIsLoggedNotFatal verifies that a failure from
+// UpdateLastStreakReminderAt is logged as a warning but does not abort the
+// fan-out — the handler must still attempt FCM sends for that user.
+func TestStreakReminder_StampErrorIsLoggedNotFatal(t *testing.T) {
+	store := &fakeStreakStore{
+		atRisk: []model.UserAtRisk{{UserID: "u1", CurrentStreak: 3}},
+		tokens: map[string][]string{"u1": {"tok-u1"}},
+		stampErr: errors.New("db: stamp failed"),
+	}
+	pusher := &capturePusher{}
+	h := handlers.NewStreakReminderHandler(store, pusher, zap.NewNop())
+
+	rr, req := newStreakRequest()
+	h.Serve(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 despite stamp error, got %d", rr.Code)
+	}
+	got := decodeStreakResponse(t, rr)
+	if got.Sent != 1 {
+		t.Errorf("Sent = %d, want 1 (send must proceed even if stamp fails)", got.Sent)
+	}
+	if len(pusher.calls) != 1 {
+		t.Errorf("expected 1 FCM call, got %d", len(pusher.calls))
+	}
+}
+
+// TestStreakReminder_DeleteTokenErrorIsLoggedNotFatal verifies that a failure
+// from DeletePushToken (after an InvalidRegistration FCM error) is logged as a
+// warning but does not abort processing of remaining users.
+func TestStreakReminder_DeleteTokenErrorIsLoggedNotFatal(t *testing.T) {
+	store := &fakeStreakStore{
+		atRisk: []model.UserAtRisk{{UserID: "u1", CurrentStreak: 2}},
+		tokens: map[string][]string{"u1": {"stale-token"}},
+		deleteErr: errors.New("db: delete failed"),
+	}
+	pusher := &capturePusher{
+		failOn: map[string]error{
+			"stale-token": errors.New("fcm: delivery failed: InvalidRegistration"),
+		},
+	}
+	h := handlers.NewStreakReminderHandler(store, pusher, zap.NewNop())
+
+	rr, req := newStreakRequest()
+	h.Serve(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200 despite delete error, got %d", rr.Code)
+	}
+	got := decodeStreakResponse(t, rr)
+	// The FCM send failed (Failed=1) but the handler survived the delete error.
+	if got.Failed != 1 {
+		t.Errorf("Failed = %d, want 1", got.Failed)
+	}
+	// DeletePushToken was still called (the error happened inside it).
+	if len(store.deletedTokens) != 1 || store.deletedTokens[0] != "stale-token" {
+		t.Errorf("expected stale-token in deletedTokens, got %v", store.deletedTokens)
+	}
+}
+
+// TestStreakReminder_NotRegisteredTokenPurged verifies that the NotRegistered
+// FCM error code (in addition to InvalidRegistration) also triggers token
+// deletion, exercising the second entry in staleFCMErrors.
+func TestStreakReminder_NotRegisteredTokenPurged(t *testing.T) {
+	store := &fakeStreakStore{
+		atRisk: []model.UserAtRisk{{UserID: "u1", CurrentStreak: 6}},
+		tokens: map[string][]string{"u1": {"not-registered-token", "good-token"}},
+	}
+	pusher := &capturePusher{
+		failOn: map[string]error{
+			"not-registered-token": errors.New("fcm: delivery failed: NotRegistered"),
+		},
+	}
+	h := handlers.NewStreakReminderHandler(store, pusher, zap.NewNop())
+
+	rr, req := newStreakRequest()
+	h.Serve(rr, req)
+
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d", rr.Code)
+	}
+	if len(store.deletedTokens) != 1 || store.deletedTokens[0] != "not-registered-token" {
+		t.Errorf("expected not-registered-token purged, got deletedTokens=%v", store.deletedTokens)
+	}
+	got := decodeStreakResponse(t, rr)
+	if got.Sent != 1 || got.Failed != 1 {
+		t.Errorf("counts = %+v, want {Sent:1 Failed:1}", got)
 	}
 }

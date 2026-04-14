@@ -349,3 +349,88 @@ func TestStreakRisk_NullLastStudyDate_Excluded(t *testing.T) {
 		t.Errorf("user with NULL last_study_date should NOT appear in at-risk set")
 	}
 }
+
+// TestUpdateLastStreakReminderAt_Integration verifies that stamping
+// last_streak_reminder_at excludes the user from subsequent at-risk queries
+// within the same reminder window.
+func TestUpdateLastStreakReminderAt_Integration(t *testing.T) {
+	db := openTestDB(t)
+	s := store.New(db)
+	ctx := context.Background()
+	const userID = "streak-reminder-stamp"
+
+	ensureGamingProfilesTable(t, db)
+	t.Cleanup(func() {
+		db.Exec(ctx, "DELETE FROM gaming_profiles WHERE user_id = $1", userID) //nolint:errcheck
+	})
+
+	// Place user in the at-risk window.
+	lastStudy := time.Now().UTC().Add(-22 * time.Hour)
+	upsertGamingProfile(t, db, userID, 4, &lastStudy, nil, nil)
+
+	// Confirm user is at risk before stamping.
+	before, err := s.GetUsersAtRiskOfStreakLoss(ctx, 20, 24)
+	if err != nil {
+		t.Fatalf("GetUsersAtRiskOfStreakLoss (before): %v", err)
+	}
+	if !containsUser(before, userID) {
+		t.Fatalf("expected user in at-risk set before stamp")
+	}
+
+	// Stamp last_streak_reminder_at.
+	if err := s.UpdateLastStreakReminderAt(ctx, userID); err != nil {
+		t.Fatalf("UpdateLastStreakReminderAt: %v", err)
+	}
+
+	// User must now be excluded — the dedup guard filters them.
+	after, err := s.GetUsersAtRiskOfStreakLoss(ctx, 20, 24)
+	if err != nil {
+		t.Fatalf("GetUsersAtRiskOfStreakLoss (after): %v", err)
+	}
+	if containsUser(after, userID) {
+		t.Errorf("user should be excluded after last_streak_reminder_at stamp")
+	}
+}
+
+// TestDeletePushToken_Integration verifies that DeletePushToken removes an
+// existing token and that subsequent GetPushTokens calls no longer return it.
+func TestDeletePushToken_Integration(t *testing.T) {
+	db := openTestDB(t)
+	s := store.New(db)
+	ctx := context.Background()
+	const userID = "delete-push-token-user"
+
+	t.Cleanup(func() {
+		db.Exec(ctx, "DELETE FROM push_tokens WHERE user_id = $1", userID) //nolint:errcheck
+	})
+
+	// Register two tokens.
+	if err := s.SavePushToken(ctx, userID, "keep-token", "android"); err != nil {
+		t.Fatalf("SavePushToken (keep): %v", err)
+	}
+	if err := s.SavePushToken(ctx, userID, "stale-token", "android"); err != nil {
+		t.Fatalf("SavePushToken (stale): %v", err)
+	}
+
+	// Delete the stale token.
+	if err := s.DeletePushToken(ctx, userID, "stale-token"); err != nil {
+		t.Fatalf("DeletePushToken: %v", err)
+	}
+
+	// Only the kept token must remain.
+	tokens, err := s.GetPushTokens(ctx, userID)
+	if err != nil {
+		t.Fatalf("GetPushTokens: %v", err)
+	}
+	if len(tokens) != 1 {
+		t.Fatalf("expected 1 token after delete, got %d: %v", len(tokens), tokens)
+	}
+	if tokens[0] != "keep-token" {
+		t.Errorf("remaining token = %q, want keep-token", tokens[0])
+	}
+
+	// Deleting a non-existent token must not error (idempotent).
+	if err := s.DeletePushToken(ctx, userID, "already-gone"); err != nil {
+		t.Errorf("DeletePushToken (non-existent): expected nil, got %v", err)
+	}
+}
