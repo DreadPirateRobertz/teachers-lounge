@@ -224,6 +224,36 @@ func TestBattleWS_InvalidTokenReturns401(t *testing.T) {
 	}
 }
 
+// TestBattleWS_NoneAlgorithmRejected guards against JWT algorithm-confusion:
+// a token signed with the "none" method must be rejected even though it has
+// valid claims, because parseBattleWSToken's keyfunc asserts HMAC.
+func TestBattleWS_NoneAlgorithmRejected(t *testing.T) {
+	s := &battleStore{session: activeSession()}
+	h := newBattleHandler(s, nil)
+	srv := newWSServer(t, h)
+	defer srv.Close()
+
+	claims := jwt.MapClaims{
+		"uid": "u1",
+		"aud": "teacherslounge-services",
+		"exp": time.Now().Add(time.Hour).Unix(),
+	}
+	tok := jwt.NewWithClaims(jwt.SigningMethodNone, claims)
+	signed, err := tok.SignedString(jwt.UnsafeAllowNoneSignatureType)
+	if err != nil {
+		t.Fatalf("sign none-token: %v", err)
+	}
+
+	_, resp := dialWS(t, srv, "sess-1", signed)
+	if resp == nil || resp.StatusCode != http.StatusUnauthorized {
+		got := "<nil>"
+		if resp != nil {
+			got = resp.Status
+		}
+		t.Fatalf("want 401 for alg=none token, got %s", got)
+	}
+}
+
 func TestBattleWS_ForeignUserReturns403(t *testing.T) {
 	s := &battleStore{session: activeSession()} // owner is "u1"
 	h := newBattleHandler(s, nil)

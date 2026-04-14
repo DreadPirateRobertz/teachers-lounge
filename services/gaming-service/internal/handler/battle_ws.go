@@ -3,6 +3,7 @@ package handler
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -188,7 +189,15 @@ func parseBattleWSToken(tokenStr string, secret []byte) (string, error) {
 	token, err := jwt.ParseWithClaims(
 		tokenStr,
 		claims,
-		func(t *jwt.Token) (any, error) { return secret, nil },
+		func(t *jwt.Token) (any, error) {
+			// Reject algorithm-confusion attacks (e.g. "none" or RS256-signed tokens
+			// that would otherwise verify against the HMAC secret as a public key).
+			// Mirrors middleware.parseToken.
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, fmt.Errorf("unexpected signing method: %v", t.Header["alg"])
+			}
+			return secret, nil
+		},
 		jwt.WithAudience("teacherslounge-services"),
 	)
 	if err != nil || !token.Valid {
