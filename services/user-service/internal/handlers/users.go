@@ -251,14 +251,22 @@ func (h *UsersHandler) GetFullExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	_ = h.store.WriteAuditLog(r.Context(), store.AuditLogParams{
+	// GDPR audit-must-succeed: if we cannot record the disclosure, we must
+	// not disclose. Other audit sites in this service use best-effort (_ =)
+	// because they log reads of resources the caller already owns; this
+	// endpoint returns the full export payload, so a missing audit record
+	// would be a compliance gap rather than an operational nuisance.
+	if err := h.store.WriteAuditLog(r.Context(), store.AuditLogParams{
 		AccessorID:   &userID,
 		StudentID:    &userID,
 		Action:       models.AuditActionExportView,
 		DataAccessed: "all_user_data",
 		Purpose:      "gdpr_right_to_portability",
 		IPAddress:    realIP(r),
-	})
+	}); err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to record audit log")
+		return
+	}
 
 	writeJSON(w, http.StatusOK, export)
 }

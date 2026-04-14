@@ -106,6 +106,13 @@ type errStore struct {
 	buildUserExportErr        error
 	updateUserErr             error
 	updateLearningProfileErr  error
+	writeAuditLogErr          error
+}
+
+// WriteAuditLog lets tests inject errors into audit-log writes so we can
+// exercise GDPR audit-log-must-succeed branches (export disclosure paths).
+func (s *errStore) WriteAuditLog(_ context.Context, _ store.AuditLogParams) error {
+	return s.writeAuditLogErr
 }
 
 func (s *errStore) CreateTeacherProfile(ctx context.Context, p store.CreateTeacherProfileParams) (*models.TeacherProfile, error) {

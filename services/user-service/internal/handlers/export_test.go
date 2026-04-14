@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -255,6 +256,35 @@ func TestGetFullExport_BuildUserExportError(t *testing.T) {
 
 	if rr.Code != http.StatusInternalServerError {
 		t.Errorf("want 500 on BuildUserExport error, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestGetFullExport_AuditLogError verifies that a WriteAuditLog failure on
+// the GDPR export path returns 500 and does NOT disclose the export.
+// Per GDPR: if we cannot record the disclosure, we must not disclose.
+func TestGetFullExport_AuditLogError(t *testing.T) {
+	userID := uuid.New()
+	ms := newMockStore()
+	ms.byID[userID] = &models.User{ID: userID, Email: "owner@example.com", AccountType: models.AccountTypeStandard}
+	ms.users["owner@example.com"] = ms.byID[userID]
+	s := &errStore{mockStore: ms, writeAuditLogErr: errors.New("audit write failed")}
+
+	router, tok := buildExportRouterWithStore(t, s, userID)
+
+	req := httptest.NewRequest(http.MethodGet, "/users/"+userID.String()+"/export", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("want 500 on WriteAuditLog error, got %d: %s", rr.Code, rr.Body.String())
+	}
+	// Body must not contain export data — a disclosure without an audit
+	// record is exactly the compliance gap this check exists to prevent.
+	body := rr.Body.String()
+	if strings.Contains(body, "\"interactions\"") || strings.Contains(body, "\"quiz_results\"") {
+		t.Errorf("response body leaked export data despite audit failure: %s", body)
 	}
 }
 
