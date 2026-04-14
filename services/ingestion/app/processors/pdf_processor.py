@@ -411,6 +411,203 @@ def _classify_figure_type(caption: str) -> str:
     return "diagram"
 
 
+def _build_chapter_index(elements: list) -> dict[int, str]:
+    """Build a page → chapter name mapping from unstructured elements.
+
+    Args:
+        elements: Parsed unstructured element list.
+
+    Returns:
+        Dict mapping 1-indexed page number → chapter heading text.
+    """
+    from unstructured.documents.elements import Title as _Title  # noqa: PLC0415
+
+    chapter_by_page: dict[int, str] = {}
+    current_chapter: str | None = None
+    for element in elements:
+        if isinstance(element, _Title):
+            text = element.text.strip()
+            if text and len(text) < 60 and text[0].isupper():
+                current_chapter = text
+        elif current_chapter is not None:
+            page = _get_page_number(element)
+            if page is not None and page not in chapter_by_page:
+                chapter_by_page[page] = current_chapter
+    return chapter_by_page
+
+
+async def _embed_and_upload_figure(
+    image_path: Path,
+    material_id: UUID,
+    course_id: UUID,
+    job_id: UUID,
+) -> tuple[list[float], str] | None:
+    """CLIP-embed an image and upload it to GCS.
+
+    Args:
+        image_path: Local path to the PNG figure file.
+        material_id: UUID of the source material.
+        course_id: UUID of the course.
+        job_id: UUID of the ingest job (for logging).
+
+    Returns:
+        ``(vector, gcs_path)`` on success, or ``None`` if either step fails.
+    """
+    try:
+        vector = await clip_embedder.embed_image(image_path)
+    except Exception as exc:
+        logger.warning("job_id=%s CLIP embed failed for %s: %s", job_id, image_path, exc)
+        return None
+
+    diagram_id = uuid4()
+    gcs_blob_name = f"{course_id}/{material_id}/figures/{diagram_id}.png"
+    try:
+        gcs_path = await gcs.upload_figure(image_path, gcs_blob_name)
+    except Exception as exc:
+        logger.warning(
+            "job_id=%s GCS upload failed diagram=%s: %s", job_id, diagram_id, exc
+        )
+        return None
+
+    return vector, gcs_path
+
+
+async def _collect_pymupdf_diagrams(
+    figure_infos: list,
+    material_id: UUID,
+    course_id: UUID,
+    job_id: UUID,
+    chapter_by_page: dict[int, str],
+) -> tuple[list[UUID], list[list[float]], list[dict]]:
+    """Embed + upload figures from PyMuPDF extraction.
+
+    Args:
+        figure_infos: List of :class:`~app.processors.figure_extractor.FigureInfo`.
+        material_id: UUID of the source material.
+        course_id: UUID of the course.
+        job_id: UUID of the ingest job (for logging).
+        chapter_by_page: Page-to-chapter mapping built from unstructured elements.
+
+    Returns:
+        ``(diagram_ids, vectors, payloads)`` ready for Qdrant upsert.
+    """
+    diagram_ids: list[UUID] = []
+    vectors: list[list[float]] = []
+    payloads: list[dict] = []
+
+    for fig in figure_infos:
+        result = await _embed_and_upload_figure(fig.image_path, material_id, course_id, job_id)
+        if result is None:
+            continue
+        vector, gcs_path = result
+        diagram_id = uuid4()
+        diagram_ids.append(diagram_id)
+        vectors.append(vector)
+        payloads.append({
+            "diagram_id": str(diagram_id),
+            "material_id": str(material_id),
+            "course_id": str(course_id),
+            "gcs_path": gcs_path,
+            "caption": fig.caption,
+            "figure_type": fig.figure_type,
+            "chapter": chapter_by_page.get(fig.page),
+            "page": fig.page,
+        })
+
+    return diagram_ids, vectors, payloads
+
+
+async def _collect_unstructured_diagrams(
+    elements: list,
+    material_id: UUID,
+    course_id: UUID,
+    job_id: UUID,
+) -> tuple[list[UUID], list[list[float]], list[dict]]:
+    """Embed + upload figures from unstructured hi_res Image elements (fallback).
+
+    Only Image elements that have ``metadata.image_path`` set (written by
+    unstructured's hi_res layout analysis) are processed.
+
+    Args:
+        elements: Parsed unstructured elements from the PDF.
+        material_id: UUID of the source material.
+        course_id: UUID of the course.
+        job_id: UUID of the ingest job (for logging).
+
+    Returns:
+        ``(diagram_ids, vectors, payloads)`` ready for Qdrant upsert.
+    """
+    from unstructured.documents.elements import (  # noqa: PLC0415
+        FigureCaption,
+        Image,
+    )
+    from unstructured.documents.elements import (
+        Title as _TitleU,
+    )
+
+    diagram_ids: list[UUID] = []
+    vectors: list[list[float]] = []
+    payloads: list[dict] = []
+
+    current_page: int | None = None
+    pending_caption: str | None = None
+    chapter_unst: str | None = None
+
+    for element in elements:
+        page = _get_page_number(element)
+        if page is not None:
+            current_page = page
+
+        if isinstance(element, _TitleU):
+            text = element.text.strip()
+            if text and len(text) < 60 and text[0].isupper():
+                chapter_unst = text
+            continue
+
+        if isinstance(element, FigureCaption):
+            pending_caption = element.text.strip()
+            continue
+
+        if not isinstance(element, Image):
+            continue
+
+        meta = getattr(element, "metadata", None)
+        image_path_str = getattr(meta, "image_path", None) if meta else None
+
+        if not image_path_str:
+            pending_caption = None
+            continue
+
+        image_path = Path(image_path_str)
+        if not image_path.exists():
+            logger.debug("job_id=%s figure image not found: %s", job_id, image_path)
+            pending_caption = None
+            continue
+
+        caption = pending_caption or element.text.strip() or ""
+        pending_caption = None
+
+        result = await _embed_and_upload_figure(image_path, material_id, course_id, job_id)
+        if result is None:
+            continue
+        vector, gcs_path = result
+        diagram_id = uuid4()
+        diagram_ids.append(diagram_id)
+        vectors.append(vector)
+        payloads.append({
+            "diagram_id": str(diagram_id),
+            "material_id": str(material_id),
+            "course_id": str(course_id),
+            "gcs_path": gcs_path,
+            "caption": caption,
+            "figure_type": _classify_figure_type(caption),
+            "chapter": chapter_unst,
+            "page": current_page,
+        })
+
+    return diagram_ids, vectors, payloads
+
+
 async def _process_figures(
     elements: list,
     material_id: UUID,
@@ -418,107 +615,55 @@ async def _process_figures(
     job_id: UUID,
     local_pdf_path: Path,
 ) -> int:
-    """Extract figures from parsed PDF elements, generate CLIP embeddings, and upsert.
+    """Extract figures from a PDF, generate CLIP embeddings, and upsert to Qdrant.
 
-    Iterates over elements looking for Image/FigureCaption pairs.  For each
-    figure that has a saved image path in its metadata (unstructured hi_res
-    mode writes these to a temp dir), embeds the image with CLIP and upserts
-    the vector into the diagrams Qdrant collection.
+    Primary path: uses PyMuPDF (via :mod:`app.processors.figure_extractor`) to
+    detect and crop embedded raster images from every page.
+
+    Fallback path: if PyMuPDF finds no figures, scans unstructured ``Image``
+    elements that were produced by the hi_res pipeline (these carry
+    ``metadata.image_path`` set by unstructured's layout analysis).
 
     Degrades gracefully — any per-figure error is logged and skipped so that
     the main ingestion pipeline is not interrupted.
 
     Args:
-        elements: Parsed unstructured elements from the PDF.
+        elements: Parsed unstructured elements from the PDF (used as fallback).
         material_id: UUID of the material record.
         course_id: UUID of the course this material belongs to.
         job_id: UUID of the ingest job (used for logging).
-        local_pdf_path: Path to the local PDF (used for context only).
+        local_pdf_path: Path to the local PDF file for PyMuPDF extraction.
 
     Returns:
         Number of diagrams successfully upserted.
     """
-    diagram_ids: list[UUID] = []
-    vectors: list[list[float]] = []
-    payloads: list[dict] = []
+    from app.processors.figure_extractor import extract_figures  # noqa: PLC0415
 
-    current_chapter: str | None = None
-    current_page: int | None = None
-    pending_caption: str | None = None
+    # ── Primary: PyMuPDF extraction ──────────────────────────────────────────
+    loop = asyncio.get_running_loop()
+    figure_infos = await loop.run_in_executor(None, extract_figures, local_pdf_path)
 
-    for element in elements:
-        page = _get_page_number(element)
-        if page is not None:
-            current_page = page
+    try:
+        chapter_by_page = _build_chapter_index(elements)
+    except Exception:
+        chapter_by_page = {}  # best-effort
 
-        from unstructured.documents.elements import (  # noqa: PLC0415
-            FigureCaption,
-            Image,
+    diagram_ids, vectors, payloads = await _collect_pymupdf_diagrams(
+        figure_infos, material_id, course_id, job_id, chapter_by_page
+    )
+
+    # Clean up temp PNGs produced by figure_extractor
+    for fig in figure_infos:
+        fig.image_path.unlink(missing_ok=True)
+
+    # ── Fallback: unstructured Image elements ────────────────────────────────
+    if not diagram_ids:
+        logger.debug(
+            "job_id=%s PyMuPDF found 0 figures — trying unstructured fallback", job_id
         )
-        from unstructured.documents.elements import (
-            Title as _Title,
+        diagram_ids, vectors, payloads = await _collect_unstructured_diagrams(
+            elements, material_id, course_id, job_id
         )
-        if isinstance(element, _Title):
-            text = element.text.strip()
-            if text and len(text) < 60 and text[0].isupper():
-                current_chapter = text
-            continue
-
-        if isinstance(element, FigureCaption):
-            pending_caption = element.text.strip()
-            continue
-
-        if isinstance(element, Image):
-            meta = getattr(element, "metadata", None)
-            image_path_str = getattr(meta, "image_path", None) if meta else None
-
-            if not image_path_str:
-                pending_caption = None
-                continue
-
-            image_path = Path(image_path_str)
-            if not image_path.exists():
-                logger.debug("job_id=%s figure image not found: %s", job_id, image_path)
-                pending_caption = None
-                continue
-
-            caption = pending_caption or element.text.strip() or ""
-            pending_caption = None
-
-            figure_type = _classify_figure_type(caption)
-
-            try:
-                vector = await clip_embedder.embed_image(image_path)
-            except Exception as exc:
-                logger.warning("job_id=%s CLIP embed failed for %s: %s", job_id, image_path, exc)
-                continue
-
-            diagram_id = uuid4()
-            gcs_blob_name = f"{course_id}/{material_id}/figures/{diagram_id}.png"
-
-            # Upload extracted figure to GCS so the frontend can serve it.
-            # Degrade gracefully — a failed upload is logged and the figure skipped
-            # rather than aborting the entire ingestion job.
-            try:
-                gcs_path = await gcs.upload_figure(image_path, gcs_blob_name)
-            except Exception as exc:
-                logger.warning(
-                    "job_id=%s GCS figure upload failed for %s: %s", job_id, diagram_id, exc
-                )
-                continue
-
-            diagram_ids.append(diagram_id)
-            vectors.append(vector)
-            payloads.append({
-                "diagram_id": str(diagram_id),
-                "material_id": str(material_id),
-                "course_id": str(course_id),
-                "gcs_path": gcs_path,
-                "caption": caption,
-                "figure_type": figure_type,
-                "chapter": current_chapter,
-                "page": current_page,
-            })
 
     if diagram_ids:
         await qdrant.upsert_diagrams(diagram_ids, vectors, payloads)
