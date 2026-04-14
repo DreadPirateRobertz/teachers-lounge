@@ -136,7 +136,7 @@ func TestReviewFlashcard_CommitError_Propagated(t *testing.T) {
 func TestGetHintIndex_ExistingKey_ReturnsParsedCount(t *testing.T) {
 	s, mr := newStoreWithRedis(t, &execDB{})
 	// Seed Redis directly via miniredis.
-	mr.Set("quiz:hints:sess-1:q-1", "3")
+	_ = mr.Set("quiz:hints:sess-1:q-1", "3")
 	n, err := s.GetHintIndex(context.Background(), "sess-1", "q-1")
 	if err != nil {
 		t.Fatalf("GetHintIndex: %v", err)
