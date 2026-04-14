@@ -96,32 +96,32 @@ func (r *boolRow) Scan(dest ...any) error {
 	return nil
 }
 
-// seqDB returns queued rows in FIFO order; allows a single test to drive
+// freezeSeqDB returns queued rows in FIFO order; allows a single test to drive
 // both the UPDATE and the classification SELECT of CreateStreakFreeze.
-type seqDB struct {
+type freezeSeqDB struct {
 	rows     []pgx.Row
 	lastSQLs []string
 	lastArgs [][]any
 }
 
-func (d *seqDB) QueryRow(_ context.Context, sql string, args ...any) pgx.Row {
+func (d *freezeSeqDB) QueryRow(_ context.Context, sql string, args ...any) pgx.Row {
 	d.lastSQLs = append(d.lastSQLs, sql)
 	d.lastArgs = append(d.lastArgs, args)
 	if len(d.rows) == 0 {
-		return &updateRow{err: fmt.Errorf("seqDB: no rows queued")}
+		return &updateRow{err: fmt.Errorf("freezeSeqDB: no rows queued")}
 	}
 	r := d.rows[0]
 	d.rows = d.rows[1:]
 	return r
 }
 
-func (d *seqDB) Query(_ context.Context, _ string, _ ...any) (pgx.Rows, error) {
+func (d *freezeSeqDB) Query(_ context.Context, _ string, _ ...any) (pgx.Rows, error) {
 	return nil, nil
 }
-func (d *seqDB) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+func (d *freezeSeqDB) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, nil
 }
-func (d *seqDB) Begin(_ context.Context) (pgx.Tx, error) { return nil, nil }
+func (d *freezeSeqDB) Begin(_ context.Context) (pgx.Tx, error) { return nil, nil }
 
 // newFreezeStore wires a store.Store around a fake DB. Redis is unused by
 // the streak-freeze methods so we reuse newMasteryStore's miniredis helper.
@@ -160,7 +160,7 @@ func TestCreateStreakFreeze_HappyPath_DeductsAndReturnsExpiry(t *testing.T) {
 func TestCreateStreakFreeze_NoGems_ReturnsErrNoGems(t *testing.T) {
 	// UPDATE returns no rows → classify SELECT reports gems < cost + no
 	// active freeze → CreateStreakFreeze must surface ErrNoGems.
-	db := &seqDB{rows: []pgx.Row{
+	db := &freezeSeqDB{rows: []pgx.Row{
 		&updateRow{err: pgx.ErrNoRows},
 		&classifyRow{gems: 10, existing: nil},
 	}}
@@ -174,7 +174,7 @@ func TestCreateStreakFreeze_NoGems_ReturnsErrNoGems(t *testing.T) {
 
 func TestCreateStreakFreeze_AlreadyFrozen_ReturnsErrAlreadyFrozen(t *testing.T) {
 	future := time.Now().Add(6 * time.Hour)
-	db := &seqDB{rows: []pgx.Row{
+	db := &freezeSeqDB{rows: []pgx.Row{
 		&updateRow{err: pgx.ErrNoRows},
 		&classifyRow{gems: 500, existing: &future},
 	}}
