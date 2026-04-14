@@ -150,7 +150,7 @@ func TestIsStreakFrozen_Active(t *testing.T) {
 	ctx := context.Background()
 
 	// Manually insert the freeze key (simulates a prior purchase).
-	mr.Set("streak:freeze:user-bob", "1")
+	_ = mr.Set("streak:freeze:user-bob", "1")
 	mr.SetTTL("streak:freeze:user-bob", 24*time.Hour)
 
 	frozen, err := s.IsStreakFrozen(ctx, "user-bob")
@@ -168,7 +168,7 @@ func TestIsStreakFrozen_Expired(t *testing.T) {
 	s, mr := newFreezeStore(t, &intRow{value: 0})
 	ctx := context.Background()
 
-	mr.Set("streak:freeze:user-carol", "1")
+	_ = mr.Set("streak:freeze:user-carol", "1")
 	mr.SetTTL("streak:freeze:user-carol", 1*time.Second)
 
 	// Fast-forward past the TTL to simulate expiry.
