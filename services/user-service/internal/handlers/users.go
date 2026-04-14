@@ -206,6 +206,60 @@ func (h *UsersHandler) DeleteAccount(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// GET /users/{id}/export — synchronously generate and download all user data as
+// a JSON attachment (GDPR right to data portability).
+//
+// Owner-only: the JWT caller must match the {id} path param.
+// Creates an export job, builds the full dataset synchronously, then streams the
+// result with Content-Disposition: attachment so browsers prompt a save dialog.
+func (h *UsersHandler) DownloadExport(w http.ResponseWriter, r *http.Request) {
+	userID, err := parseUserIDParam(r)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid user id")
+		return
+	}
+
+	callerID, ok := middleware.UserIDFromCtx(r.Context())
+	if !ok || callerID != userID {
+		writeError(w, http.StatusForbidden, "forbidden")
+		return
+	}
+
+	// Verify the user exists before creating a job.
+	if _, err := h.store.GetUserByID(r.Context(), userID); err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+
+	_ = h.store.WriteAuditLog(r.Context(), store.AuditLogParams{
+		AccessorID:   &userID,
+		StudentID:    &userID,
+		Action:       models.AuditActionExportData,
+		DataAccessed: "all_user_data",
+		Purpose:      "gdpr_right_to_portability",
+		IPAddress:    realIP(r),
+	})
+
+	jobID, err := h.store.CreateExportJob(r.Context(), userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to create export job")
+		return
+	}
+
+	export, err := h.store.BuildUserExport(r.Context(), jobID, userID)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "failed to build export")
+		return
+	}
+
+	w.Header().Set("Content-Disposition", `attachment; filename="export-`+userID.String()+`.json"`)
+	writeJSON(w, http.StatusOK, export)
+}
+
 // GET /users/{id}/export/{jobID} — retrieve a completed data export.
 // On first call for a pending job, triggers synchronous data collection.
 func (h *UsersHandler) GetExport(w http.ResponseWriter, r *http.Request) {

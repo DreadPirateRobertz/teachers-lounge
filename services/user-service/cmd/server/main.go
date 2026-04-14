@@ -125,6 +125,7 @@ func main() {
 			Get("/profile", usersH.GetProfile)
 		r.Patch("/preferences", usersH.UpdatePreferences)
 		r.Patch("/onboarding", usersH.CompleteOnboarding)
+		r.Get("/export", usersH.DownloadExport)
 		r.Post("/export", usersH.ExportData)
 		r.Get("/export/{jobID}", usersH.GetExport)
 		r.Delete("/", usersH.DeleteAccount)
