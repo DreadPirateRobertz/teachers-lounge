@@ -1,6 +1,7 @@
-"""Tests for CLIP image embedder and Qdrant diagram writer (Phase 6).
+"""Tests for CLIP image embedder, Qdrant diagram writer, and PyMuPDF figure extractor (Phase 6).
 
 Coverage targets:
+  - app/processors/figure_extractor.py  (extract_figures, _find_caption, _classify_figure_type)
   - app/services/clip_embedder.py  (embed_image, embed_image_sync stub mode)
   - app/services/qdrant_writer.py  (upsert_diagram, _upsert_diagram_sync)
 """
@@ -300,3 +301,302 @@ class TestQdrantWriter:
         assert payload["page"] == 5
         assert payload["caption"] == "A test caption"
         assert payload["image_b64_thumb"] == "dGVzdA=="
+
+
+# ── Helpers: synthetic PDF creation ─────────────────────────────────────────
+
+
+def _make_pdf_with_image(image_path: Path) -> Path:
+    """Create a minimal PDF that embeds *image_path* on page 1.
+
+    Args:
+        image_path: Path to a PNG/JPEG file to embed in the PDF.
+
+    Returns:
+        Path to the created temporary PDF file.
+    """
+    import fitz  # PyMuPDF
+
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)  # A4 points
+    rect = fitz.Rect(100, 100, 400, 350)
+    page.insert_image(rect, filename=str(image_path))
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    doc.save(tmp.name)
+    doc.close()
+    return Path(tmp.name)
+
+
+def _make_pdf_with_caption(image_path: Path, caption: str) -> Path:
+    """Create a PDF that embeds *image_path* with *caption* text below it.
+
+    Args:
+        image_path: Path to a PNG/JPEG file to embed.
+        caption: Caption text written directly below the image.
+
+    Returns:
+        Path to the created temporary PDF file.
+    """
+    import fitz
+
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    img_rect = fitz.Rect(100, 100, 400, 350)
+    page.insert_image(img_rect, filename=str(image_path))
+    # Write caption text just below the image
+    text_point = fitz.Point(100, 370)
+    page.insert_text(text_point, caption, fontsize=10)
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    doc.save(tmp.name)
+    doc.close()
+    return Path(tmp.name)
+
+
+def _make_empty_pdf() -> Path:
+    """Create a minimal PDF with no embedded images.
+
+    Returns:
+        Path to the created temporary PDF file.
+    """
+    import fitz
+
+    doc = fitz.open()
+    page = doc.new_page(width=595, height=842)
+    page.insert_text(fitz.Point(50, 100), "Text only page, no images.", fontsize=12)
+
+    tmp = tempfile.NamedTemporaryFile(delete=False, suffix=".pdf")
+    doc.save(tmp.name)
+    doc.close()
+    return Path(tmp.name)
+
+
+# ── TestFigureExtractor ───────────────────────────────────────────────────────
+
+
+class TestFigureExtractor:
+    """Tests for app/processors/figure_extractor.extract_figures()."""
+
+    def test_extract_figures_returns_list_from_pdf_with_image(self):
+        """extract_figures must return at least one FigureInfo for a PDF containing an image.
+
+        Args:
+            None
+        """
+        from app.processors.figure_extractor import extract_figures
+
+        img_path = _write_png_file(200, 200)
+        pdf_path = _make_pdf_with_image(img_path)
+        try:
+            figures = extract_figures(pdf_path)
+        finally:
+            img_path.unlink(missing_ok=True)
+            pdf_path.unlink(missing_ok=True)
+            for fig in figures:
+                fig.image_path.unlink(missing_ok=True)
+
+        assert len(figures) >= 1
+
+    def test_extract_figures_empty_for_text_only_pdf(self):
+        """extract_figures must return an empty list when the PDF has no embedded images.
+
+        Args:
+            None
+        """
+        from app.processors.figure_extractor import extract_figures
+
+        pdf_path = _make_empty_pdf()
+        try:
+            figures = extract_figures(pdf_path)
+        finally:
+            pdf_path.unlink(missing_ok=True)
+
+        assert figures == []
+
+    def test_extracted_figure_png_file_is_readable(self):
+        """Each extracted figure's image_path must point to a valid PNG file.
+
+        Args:
+            None
+        """
+        from PIL import Image
+
+        from app.processors.figure_extractor import extract_figures
+
+        img_path = _write_png_file(200, 200)
+        pdf_path = _make_pdf_with_image(img_path)
+        figures = []
+        try:
+            figures = extract_figures(pdf_path)
+            assert len(figures) >= 1
+            img = Image.open(figures[0].image_path)
+            assert img.width > 0 and img.height > 0
+        finally:
+            img_path.unlink(missing_ok=True)
+            pdf_path.unlink(missing_ok=True)
+            for fig in figures:
+                fig.image_path.unlink(missing_ok=True)
+
+    def test_figure_page_number_is_correct(self):
+        """Extracted FigureInfo.page must match the actual PDF page number (1-indexed).
+
+        Args:
+            None
+        """
+        from app.processors.figure_extractor import extract_figures
+
+        img_path = _write_png_file(200, 200)
+        pdf_path = _make_pdf_with_image(img_path)
+        figures = []
+        try:
+            figures = extract_figures(pdf_path)
+            assert len(figures) >= 1
+            assert figures[0].page == 1
+        finally:
+            img_path.unlink(missing_ok=True)
+            pdf_path.unlink(missing_ok=True)
+            for fig in figures:
+                fig.image_path.unlink(missing_ok=True)
+
+    def test_small_images_filtered_by_min_dimensions(self):
+        """Images smaller than min_width/min_height must be filtered out.
+
+        Args:
+            None
+        """
+        from app.processors.figure_extractor import extract_figures
+
+        # Create a small icon-sized image
+        img_path = _write_png_file(50, 50)
+        pdf_path = _make_pdf_with_image(img_path)
+        try:
+            figures = extract_figures(pdf_path, min_width=100, min_height=100)
+        finally:
+            img_path.unlink(missing_ok=True)
+            pdf_path.unlink(missing_ok=True)
+            for fig in figures:
+                fig.image_path.unlink(missing_ok=True)
+
+        assert figures == []
+
+    def test_figure_metadata_tags_type_as_diagram_by_default(self):
+        """FigureInfo.figure_type must default to ``diagram`` when no caption keywords match.
+
+        Args:
+            None
+        """
+        from app.processors.figure_extractor import extract_figures
+
+        img_path = _write_png_file(200, 200)
+        pdf_path = _make_pdf_with_image(img_path)
+        figures = []
+        try:
+            figures = extract_figures(pdf_path)
+            assert len(figures) >= 1
+            assert figures[0].figure_type == "diagram"
+        finally:
+            img_path.unlink(missing_ok=True)
+            pdf_path.unlink(missing_ok=True)
+            for fig in figures:
+                fig.image_path.unlink(missing_ok=True)
+
+    def test_no_fitz_returns_empty_list(self):
+        """extract_figures must return [] gracefully when fitz is not importable.
+
+        Simulates a missing PyMuPDF installation by patching the ``fitz``
+        module reference in sys.modules to None, which causes the lazy import
+        inside extract_figures to raise ImportError.
+
+        Args:
+            None
+        """
+        import importlib
+        import sys
+
+        import app.processors.figure_extractor as fe_mod
+
+        pdf_path = _make_empty_pdf()
+        try:
+            saved = sys.modules.get("fitz")
+            sys.modules["fitz"] = None  # type: ignore[assignment]
+            try:
+                importlib.reload(fe_mod)
+                result = fe_mod.extract_figures(pdf_path)
+            finally:
+                if saved is None:
+                    del sys.modules["fitz"]
+                else:
+                    sys.modules["fitz"] = saved
+                importlib.reload(fe_mod)
+
+            assert result == []
+        finally:
+            pdf_path.unlink(missing_ok=True)
+
+
+# ── TestClassifyFigureType ────────────────────────────────────────────────────
+
+
+class TestClassifyFigureType:
+    """Tests for app/processors/figure_extractor._classify_figure_type()."""
+
+    def test_chart_caption_yields_chart(self):
+        """Caption containing 'chart' must produce figure_type='chart'.
+
+        Args:
+            None
+        """
+        from app.processors.figure_extractor import _classify_figure_type
+
+        assert _classify_figure_type("Figure 1. Student performance chart") == "chart"
+
+    def test_graph_caption_yields_chart(self):
+        """Caption containing 'graph' must produce figure_type='chart'.
+
+        Args:
+            None
+        """
+        from app.processors.figure_extractor import _classify_figure_type
+
+        assert _classify_figure_type("Figure 2. Error rate graph over time") == "chart"
+
+    def test_table_caption_yields_table(self):
+        """Caption containing 'table' must produce figure_type='table'.
+
+        Args:
+            None
+        """
+        from app.processors.figure_extractor import _classify_figure_type
+
+        assert _classify_figure_type("Table 3. Summary of results") == "table"
+
+    def test_equation_caption_yields_equation_image(self):
+        """Caption containing 'equation' must produce figure_type='equation_image'.
+
+        Args:
+            None
+        """
+        from app.processors.figure_extractor import _classify_figure_type
+
+        assert _classify_figure_type("Equation 5. Bayes theorem") == "equation_image"
+
+    def test_empty_caption_yields_diagram(self):
+        """Empty caption must produce the default figure_type='diagram'.
+
+        Args:
+            None
+        """
+        from app.processors.figure_extractor import _classify_figure_type
+
+        assert _classify_figure_type("") == "diagram"
+
+    def test_unrecognized_caption_yields_diagram(self):
+        """Caption without keyword matches must produce figure_type='diagram'.
+
+        Args:
+            None
+        """
+        from app.processors.figure_extractor import _classify_figure_type
+
+        assert _classify_figure_type("Figure 4. System architecture overview") == "diagram"

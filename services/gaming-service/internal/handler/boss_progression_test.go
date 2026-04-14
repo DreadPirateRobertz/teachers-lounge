@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -66,6 +67,13 @@ func (p *progressionStore) GetChapterMasteryBatch(_ context.Context, _ string, p
 		}
 	}
 	return out, nil
+}
+
+func (p *progressionStore) CreateStreakFreeze(_ context.Context, _ string, _ int) (int, time.Time, error) {
+	return 0, time.Time{}, nil
+}
+func (p *progressionStore) IsStreakFrozen(_ context.Context, _ string) (bool, error) {
+	return false, nil
 }
 
 var _ handler.Storer = (*progressionStore)(nil)
@@ -344,3 +352,11 @@ func TestGetBossProgression_MasteryQueryError_Returns500(t *testing.T) {
 
 // Compile-time check: progressionStore must satisfy model.Profile usage.
 var _ *model.Profile = nil
+
+// WebSocket battle-state methods (required by Storer interface)
+func (s *progressionStore) GetBattle(_ context.Context, _ string) (*model.BattleSession, error) {
+	return nil, nil
+}
+func (s *progressionStore) UpdateBattleState(_ context.Context, _ *model.BattleSession) error {
+	return nil
+}

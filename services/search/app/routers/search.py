@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from fastapi import APIRouter, Query
 
 from app.config import settings
+from app.expander import expand_query
 from app.metrics import observe_query
 from app.models import SearchResponse
 from app.services.embedder import embed_query
@@ -39,6 +40,16 @@ async def search(
         int,
         Query(ge=1, le=settings.max_search_limit, description="Max results to return"),
     ] = settings.default_search_limit,
+    context_turns: Annotated[
+        list[str] | None,
+        Query(
+            description=(
+                "Optional recent conversation turns used to expand short "
+                "follow-up queries (tl-afb). Pass as repeated query params: "
+                "&context_turns=... — most-recent turn last."
+            ),
+        ),
+    ] = None,
 ) -> SearchResponse:
     """Hybrid search over the curriculum collection for a given course.
 
@@ -47,21 +58,29 @@ async def search(
 
     Falls back gracefully to dense-only when sparse vectors are not available.
     Supports optional narrowing by chapter, section, and content_type.
+
+    When ``q`` is a short follow-up (< ``query_expansion_short_threshold``
+    tokens) and ``context_turns`` is non-empty, the query is first rewritten
+    into a standalone form via the AI gateway. Expansion failures fall back
+    to the raw query, emit a WARNING log, and increment
+    ``search_query_expansion_total{outcome="fallback_error"|"fallback_blank"}``
+    (tl-afb).
     """
+    effective_q = await expand_query(q, context_turns)
     fetch_limit = max(limit, settings.sparse_rerank_limit)
 
     async with observe_query("hybrid"):
         query_vector, dense_results, sparse_results = await _run_search(
-            q, course_id, fetch_limit, chapter, section, content_type
+            effective_q, course_id, fetch_limit, chapter, section, content_type
         )
 
         fused = combine_dense_sparse(dense_results, sparse_results)
-        ranked = await rerank(q, fused)
+        ranked = await rerank(effective_q, fused)
         final = ranked[:limit]
 
     search_mode = "hybrid" if sparse_results else "dense"
     return SearchResponse(
-        query=q,
+        query=effective_q,
         course_id=course_id,
         results=final,
         total=len(final),

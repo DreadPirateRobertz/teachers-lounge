@@ -47,6 +47,7 @@ from .gateway import get_gateway_client
 from .history import append_message, get_session
 from .knowledge_model import get_dials, get_due_review_prompt, update_learning_profile_dials
 from .models import MessageRequest
+from .rag import reformulate_query
 from .rag_agent import PROFESSOR_NOVA_SYSTEM_PROMPT, build_rag_context
 from .search_client import fetch_diagram_chunks
 from .style_detector import build_style_prompt_section, detect_signals, update_dials
@@ -247,9 +248,12 @@ async def send_message(
         raise HTTPException(status_code=403, detail="Forbidden")
 
     student_message = body.content
-    await append_message(db, session_id, user.user_id, role="student", content=student_message)
 
     client = get_gateway_client()
+    # Build history BEFORE persisting the current student turn so the pruned
+    # window reflects only *prior* interactions. If we appended first, the
+    # freshly-written student row would come back as the final history entry
+    # and end up duplicated alongside the explicit user message below.
     history, context_summary = await build_pruned_history(
         db=db,
         client=client,
@@ -258,6 +262,7 @@ async def send_message(
         summarise_threshold=settings.context_summarise_threshold,
         fast_model=settings.tutor_fast_model,
     )
+    await append_message(db, session_id, user.user_id, role="student", content=student_message)
 
     # Step 1: Fetch student's learning-style dials (non-fatal)
     try:
@@ -273,9 +278,15 @@ async def send_message(
     source_chunks = []
     diagram_results = []
     if session.course_id is not None:
+        # Rewrite pronoun-heavy follow-ups into a self-contained retrieval
+        # query so the Search Service doesn't lose antecedents at embedding
+        # time. Falls back to body.content on any gateway failure.
+        retrieval_question = await reformulate_query(
+            body.content, history[-4:], client=client,
+        )
         base_prompt, source_chunks = await build_rag_context(
             student_id=user.user_id, session_id=session_id,
-            question=body.content, course_id=session.course_id, db=db,
+            question=retrieval_question, course_id=session.course_id, db=db,
         )
         if _VISUAL_QUERY_PATTERNS.search(body.content):
             diagram_results = await fetch_diagram_chunks(

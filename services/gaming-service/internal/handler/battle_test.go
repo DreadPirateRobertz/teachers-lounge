@@ -733,3 +733,23 @@ func TestActivatePowerUp_DoubleDamageBuffAdded(t *testing.T) {
 		t.Error("expected at least one active power after activating double_damage")
 	}
 }
+
+// WebSocket battle-state methods (required by Storer interface)
+func (s *battleStore) GetBattle(_ context.Context, _ string) (*model.BattleSession, error) {
+	return nil, nil
+}
+func (s *battleStore) UpdateBattleState(_ context.Context, _ *model.BattleSession) error {
+	return nil
+}
+func (s *saveBattleErrorStore) GetBattle(_ context.Context, _ string) (*model.BattleSession, error) {
+	return nil, nil
+}
+func (s *saveBattleErrorStore) UpdateBattleState(_ context.Context, _ *model.BattleSession) error {
+	return nil
+}
+func (s *getBattleErrorStore) GetBattle(_ context.Context, _ string) (*model.BattleSession, error) {
+	return nil, nil
+}
+func (s *getBattleErrorStore) UpdateBattleState(_ context.Context, _ *model.BattleSession) error {
+	return nil
+}

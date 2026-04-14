@@ -127,6 +127,7 @@ type QuestProgressRequest struct {
 	Action string `json:"action"`
 }
 
+
 // QuestProgressResponse is the response body for POST /gaming/quests/progress.
 type QuestProgressResponse struct {
 	Quests      []QuestState `json:"quests"`

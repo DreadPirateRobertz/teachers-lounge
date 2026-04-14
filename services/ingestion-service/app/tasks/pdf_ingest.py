@@ -2,9 +2,12 @@
 
 Workflow per task invocation:
 1. Extract raw text per page from PDF bytes using PyMuPDF (fitz).
-2. Chunk text into 512-token segments with 64-token overlap via tiktoken.
-3. Embed each chunk via the AI gateway (POST /embeddings).
-4. Upsert embeddings into the Qdrant ``curriculum`` collection.
+2. Extract tables per page using pdfplumber; convert to Markdown chunks.
+3. Chunk text into 512-token segments with 64-token overlap via tiktoken.
+4. Assign document-global chunk_index across text and table chunks.
+5. Embed each chunk via the AI gateway (POST /embeddings).
+6. Upsert embeddings into the Qdrant ``curriculum`` collection.
+   Table chunks include ``type="table"`` in the Qdrant payload.
 
 Retry policy: up to 3 retries with exponential backoff (base 60 s, cap 300 s).
 """
@@ -20,6 +23,7 @@ from qdrant_client import QdrantClient
 from qdrant_client.models import PointStruct
 
 from app.chunker import chunk_pdf_pages
+from app.table_extractor import extract_table_chunks
 
 logger = logging.getLogger(__name__)
 
@@ -128,12 +132,17 @@ def _upsert_to_qdrant(
 
     Each point is assigned a fresh UUID. The payload stores the fields
     required for downstream retrieval and attribution:
-    course_id, page, chunk_index, source_pdf, and the raw text.
+    course_id, page, chunk_index, source_pdf, type, and the raw text.
+    The ``type`` field defaults to ``"text"`` for prose chunks and is
+    ``"table"`` for chunks produced by the table extractor.
 
     Upserts are issued in batches of 100 to avoid oversized requests.
 
     Args:
-        chunks: Chunk dicts produced by ``chunk_pdf_pages``.
+        chunks: Chunk dicts produced by ``chunk_pdf_pages`` or
+            ``extract_table_chunks``. Each dict must have keys:
+            ``text``, ``page``, ``chunk_index``. The optional ``type``
+            key defaults to ``"text"`` when absent.
         vectors: Embedding vectors; must be the same length as ``chunks``.
         course_id: Identifier for the owning course.
         source_pdf: Original PDF path or filename.
@@ -153,6 +162,7 @@ def _upsert_to_qdrant(
                 "chunk_index": chunk["chunk_index"],
                 "source_pdf": source_pdf,
                 "text": chunk["text"],
+                "type": chunk.get("type", "text"),
             },
         )
         for chunk, vector in zip(chunks, vectors)
@@ -213,19 +223,34 @@ def ingest_pdf(self, pdf_bytes: bytes, course_id: str, source_pdf: str) -> dict:
     pages = _extract_pages(pdf_bytes)
     logger.info("ingest_pdf: extracted %d pages | source_pdf=%s", len(pages), source_pdf)
 
-    # Step 2: Chunk
-    chunks = chunk_pdf_pages(pages, chunk_size=_CHUNK_SIZE, overlap=_CHUNK_OVERLAP)
-    logger.info("ingest_pdf: produced %d chunks | source_pdf=%s", len(chunks), source_pdf)
+    # Step 2: Chunk prose text
+    text_chunks = chunk_pdf_pages(pages, chunk_size=_CHUNK_SIZE, overlap=_CHUNK_OVERLAP)
+    logger.info(
+        "ingest_pdf: produced %d text chunks | source_pdf=%s", len(text_chunks), source_pdf
+    )
+
+    # Step 3: Extract tables (pdfplumber); assign chunk_index continuing from text chunks
+    table_chunks = extract_table_chunks(pdf_bytes)
+    global_index = len(text_chunks)
+    for chunk in table_chunks:
+        chunk["chunk_index"] = global_index
+        global_index += 1
+    logger.info(
+        "ingest_pdf: produced %d table chunks | source_pdf=%s", len(table_chunks), source_pdf
+    )
+
+    # Combine all chunks; text chunks already have chunk_index from chunk_pdf_pages
+    chunks = text_chunks + table_chunks
 
     if not chunks:
         logger.warning("ingest_pdf: no chunks produced | source_pdf=%s", source_pdf)
         return {"chunk_count": 0, "course_id": course_id, "source_pdf": source_pdf}
 
-    # Step 3: Embed
+    # Step 4: Embed
     texts = [c["text"] for c in chunks]
     vectors = _embed_texts(texts)
 
-    # Step 4: Upsert to Qdrant
+    # Step 5: Upsert to Qdrant
     _upsert_to_qdrant(chunks, vectors, course_id, source_pdf)
 
     result = {"chunk_count": len(chunks), "course_id": course_id, "source_pdf": source_pdf}

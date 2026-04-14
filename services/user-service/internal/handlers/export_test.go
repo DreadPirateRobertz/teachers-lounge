@@ -2,8 +2,10 @@ package handlers_test
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -13,7 +15,39 @@ import (
 	"github.com/teacherslounge/user-service/internal/handlers"
 	"github.com/teacherslounge/user-service/internal/middleware"
 	"github.com/teacherslounge/user-service/internal/models"
+	"github.com/teacherslounge/user-service/internal/store"
 )
+
+// buildExportRouterWithStore is the store.Storer-typed variant of
+// buildExportRouter so tests can inject error-injecting fakes.
+func buildExportRouterWithStore(t *testing.T, s store.Storer, tokenUserID uuid.UUID) (http.Handler, string) {
+	t.Helper()
+
+	jwtMgr := auth.NewJWTManager(testJWTSecret, 15*time.Minute, 24*time.Hour)
+	mc := newMockCache()
+	usersH := handlers.NewUsersHandler(s, mc)
+
+	tokenUser := &models.User{
+		ID:          tokenUserID,
+		Email:       "owner@example.com",
+		AccountType: models.AccountTypeStandard,
+	}
+	tok, err := jwtMgr.IssueAccessToken(tokenUser, "trialing")
+	if err != nil {
+		t.Fatalf("IssueAccessToken: %v", err)
+	}
+
+	r := chi.NewRouter()
+	r.Route("/users/{id}", func(r chi.Router) {
+		r.Use(middleware.Authenticate(jwtMgr))
+		r.Use(middleware.RequireSelf(func(req *http.Request) string {
+			return chi.URLParam(req, "id")
+		}))
+		r.Get("/export", usersH.GetFullExport)
+	})
+
+	return r, tok
+}
 
 // buildExportRouter wires GET /users/{id}/export behind the standard
 // Authenticate + RequireSelf middleware chain used by every other
@@ -156,5 +190,121 @@ func TestGetFullExport_Unauthenticated(t *testing.T) {
 
 	if rr.Code != http.StatusUnauthorized {
 		t.Errorf("want 401 for missing Authorization header, got %d", rr.Code)
+	}
+}
+
+// TestGetFullExport_GetUserByIDError verifies that a non-NotFound error from
+// GetUserByID surfaces as 500 rather than leaking into a half-built export.
+func TestGetFullExport_GetUserByIDError(t *testing.T) {
+	userID := uuid.New()
+	s := &getUserByIDErrStore{
+		errStore:       &errStore{mockStore: newMockStore()},
+		getUserByIDErr: errors.New("db error"),
+	}
+
+	router, tok := buildExportRouterWithStore(t, s, userID)
+
+	req := httptest.NewRequest(http.MethodGet, "/users/"+userID.String()+"/export", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("want 500 on GetUserByID error, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestGetFullExport_CreateExportJobError verifies that a CreateExportJob
+// failure returns 500 before any audit log or export build happens.
+func TestGetFullExport_CreateExportJobError(t *testing.T) {
+	userID := uuid.New()
+	ms := newMockStore()
+	ms.byID[userID] = &models.User{ID: userID, Email: "owner@example.com", AccountType: models.AccountTypeStandard}
+	ms.users["owner@example.com"] = ms.byID[userID]
+	s := &errStore{mockStore: ms, createExportJobErr: errors.New("insert failed")}
+
+	router, tok := buildExportRouterWithStore(t, s, userID)
+
+	req := httptest.NewRequest(http.MethodGet, "/users/"+userID.String()+"/export", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("want 500 on CreateExportJob error, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestGetFullExport_BuildUserExportError verifies that a BuildUserExport
+// failure returns 500 rather than a partial payload.
+func TestGetFullExport_BuildUserExportError(t *testing.T) {
+	userID := uuid.New()
+	ms := newMockStore()
+	ms.byID[userID] = &models.User{ID: userID, Email: "owner@example.com", AccountType: models.AccountTypeStandard}
+	ms.users["owner@example.com"] = ms.byID[userID]
+	s := &errStore{mockStore: ms, buildUserExportErr: errors.New("build failed")}
+
+	router, tok := buildExportRouterWithStore(t, s, userID)
+
+	req := httptest.NewRequest(http.MethodGet, "/users/"+userID.String()+"/export", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("want 500 on BuildUserExport error, got %d: %s", rr.Code, rr.Body.String())
+	}
+}
+
+// TestGetFullExport_AuditLogError verifies that a WriteAuditLog failure on
+// the GDPR export path returns 500 and does NOT disclose the export.
+// Per GDPR: if we cannot record the disclosure, we must not disclose.
+func TestGetFullExport_AuditLogError(t *testing.T) {
+	userID := uuid.New()
+	ms := newMockStore()
+	ms.byID[userID] = &models.User{ID: userID, Email: "owner@example.com", AccountType: models.AccountTypeStandard}
+	ms.users["owner@example.com"] = ms.byID[userID]
+	s := &errStore{mockStore: ms, writeAuditLogErr: errors.New("audit write failed")}
+
+	router, tok := buildExportRouterWithStore(t, s, userID)
+
+	req := httptest.NewRequest(http.MethodGet, "/users/"+userID.String()+"/export", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	rr := httptest.NewRecorder()
+
+	router.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusInternalServerError {
+		t.Errorf("want 500 on WriteAuditLog error, got %d: %s", rr.Code, rr.Body.String())
+	}
+	// Body must not contain export data — a disclosure without an audit
+	// record is exactly the compliance gap this check exists to prevent.
+	body := rr.Body.String()
+	if strings.Contains(body, "\"interactions\"") || strings.Contains(body, "\"quiz_results\"") {
+		t.Errorf("response body leaked export data despite audit failure: %s", body)
+	}
+}
+
+// TestGetFullExport_InvalidUserIDParam verifies that the handler returns 400
+// when the URL id cannot be parsed as a UUID. Exercised by calling the
+// handler directly (RequireSelf would 403 before parseUserIDParam otherwise).
+func TestGetFullExport_InvalidUserIDParam(t *testing.T) {
+	ms := newMockStore()
+	mc := newMockCache()
+	usersH := handlers.NewUsersHandler(ms, mc)
+
+	r := chi.NewRouter()
+	r.Get("/users/{id}/export", usersH.GetFullExport)
+
+	req := httptest.NewRequest(http.MethodGet, "/users/not-a-uuid/export", nil)
+	rr := httptest.NewRecorder()
+
+	r.ServeHTTP(rr, req)
+
+	if rr.Code != http.StatusBadRequest {
+		t.Errorf("want 400 for non-UUID id, got %d: %s", rr.Code, rr.Body.String())
 	}
 }

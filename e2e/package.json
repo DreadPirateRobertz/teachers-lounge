@@ -9,8 +9,12 @@
     "test:ui": "playwright test --ui",
     "install:browsers": "playwright install --with-deps chromium"
   },
+  "dependencies": {
+    "ws": "^8.18.2"
+  },
   "devDependencies": {
     "@playwright/test": "^1.52.0",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.14"
   }
 }

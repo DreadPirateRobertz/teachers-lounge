@@ -1,4 +1,6 @@
 node_modules/
 .auth/
-test-results/
+# Ignore raw test artifacts but keep screenshots committed to docs/
+test-results/results.json
+test-results/attachments/
 playwright-report/

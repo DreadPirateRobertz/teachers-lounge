@@ -118,3 +118,15 @@ func (s *Store) DeductGems(ctx context.Context, userID string, amount int) (int,
 	}
 	return remaining, nil
 }
+
+// GetBattle retrieves a battle session by its ID for the WebSocket layer.
+// It is a named alias of GetBattleSession used by the WS handler.
+func (s *Store) GetBattle(ctx context.Context, battleID string) (*model.BattleSession, error) {
+	return s.GetBattleSession(ctx, battleID)
+}
+
+// UpdateBattleState persists updated battle state for the WebSocket layer.
+// It is a named alias of SaveBattleSession used by the WS handler.
+func (s *Store) UpdateBattleState(ctx context.Context, session *model.BattleSession) error {
+	return s.SaveBattleSession(ctx, session)
+}
