@@ -84,3 +84,31 @@ type StreakReminderResponse struct {
 	Sent   int `json:"sent"`    // device-token deliveries that succeeded
 	Failed int `json:"failed"`  // device-token deliveries that returned an error
 }
+
+// LevelUpRequest is the payload for POST /internal/push/level-up.
+// Emitted by gaming-service when UpsertXP crosses a level boundary.
+type LevelUpRequest struct {
+	UserID   string `json:"user_id"`
+	NewLevel int    `json:"new_level"`
+}
+
+// QuestCompleteRequest is the payload for POST /internal/push/quest-complete.
+// Emitted by gaming-service when a daily quest reaches 100% completion.
+type QuestCompleteRequest struct {
+	UserID     string `json:"user_id"`
+	QuestTitle string `json:"quest_title"`
+	XPReward   int    `json:"xp_reward"`
+}
+
+// PushDispatchResponse is the response body for /internal/push/level-up and
+// /internal/push/quest-complete. FCM fan-out happens asynchronously after
+// the response is written, so Sent/Failed are not populated here; the
+// response only reports whether the dispatch was accepted or deduplicated.
+//
+//   Skipped=true, Reason="duplicate"  — dedup window matched, no push sent
+//   Skipped=true, Reason="no_tokens"  — user has zero registered devices
+//   Skipped=false                     — FCM fan-out started in background
+type PushDispatchResponse struct {
+	Skipped bool   `json:"skipped"`
+	Reason  string `json:"reason,omitempty"`
+}

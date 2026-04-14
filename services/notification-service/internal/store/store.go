@@ -131,12 +131,18 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 			PRIMARY KEY (user_id, token)
 		);
 
-		-- Deduplication guard for streak-reminder cron (tl-wti).
-		-- gaming_profiles is owned by gaming-service but both services share the
-		-- same Postgres cluster. Adding the column here is idempotent (IF NOT
-		-- EXISTS) and does not require gaming-service to know about it.
+		-- Deduplication guards for push notifications. gaming_profiles is owned
+		-- by gaming-service but both services share the same Postgres cluster,
+		-- so columns can be added here idempotently (IF NOT EXISTS) without
+		-- requiring gaming-service to know about them.
+		--
+		--   last_streak_reminder_at    — tl-wti streak-reminder cron
+		--   last_level_up_notif_at     — achievement push on level crossing
+		--   last_quest_complete_notif_at — achievement push on daily quest 100%
 		ALTER TABLE IF EXISTS gaming_profiles
-			ADD COLUMN IF NOT EXISTS last_streak_reminder_at TIMESTAMPTZ;`
+			ADD COLUMN IF NOT EXISTS last_streak_reminder_at TIMESTAMPTZ,
+			ADD COLUMN IF NOT EXISTS last_level_up_notif_at TIMESTAMPTZ,
+			ADD COLUMN IF NOT EXISTS last_quest_complete_notif_at TIMESTAMPTZ;`
 
 	if _, err := db.Exec(ctx, ddl); err != nil {
 		return fmt.Errorf("store: migrate: %w", err)
