@@ -541,7 +541,8 @@ export function computeVictoryLoot(boss: BossVisualDef, turns: number): LootItem
   ]
 }
 
-function VictoryScreen({ boss, turns }: { boss: BossVisualDef; turns: number }) {
+/** @internal Exported for unit testing only. */
+export function VictoryScreen({ boss, turns }: { boss: BossVisualDef; turns: number }) {
   const loot = computeVictoryLoot(boss, turns)
   return (
     <div className="flex flex-col items-center gap-4 text-center">
