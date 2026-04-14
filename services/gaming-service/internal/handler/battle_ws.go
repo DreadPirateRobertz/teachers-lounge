@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -11,6 +12,14 @@ import (
 	"github.com/teacherslounge/gaming-service/internal/middleware"
 	"github.com/teacherslounge/gaming-service/internal/model"
 )
+
+// sanitizeForLog strips CR/LF from user-controlled strings before they flow
+// into log entries, preventing log-forging (CWE-117).
+func sanitizeForLog(s string) string {
+	s = strings.ReplaceAll(s, "\n", "")
+	s = strings.ReplaceAll(s, "\r", "")
+	return s
+}
 
 var upgrader = websocket.Upgrader{
 	// ReadBufferSize and WriteBufferSize tune the per-connection I/O buffers.
@@ -45,7 +54,7 @@ func (h *Handler) BattleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Verify the battle exists and belongs to the caller.
 	session, err := h.store.GetBattle(r.Context(), battleID)
 	if err != nil {
-		h.logger.Error("ws: get battle", zap.String("battle_id", battleID), zap.Error(err))
+		h.logger.Error("ws: get battle", zap.String("battle_id", sanitizeForLog(battleID)), zap.Error(err))
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
 	}
@@ -61,7 +70,7 @@ func (h *Handler) BattleWebSocket(w http.ResponseWriter, r *http.Request) {
 	// Upgrade to WebSocket.
 	raw, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
-		h.logger.Error("ws: upgrade", zap.String("battle_id", battleID), zap.Error(err))
+		h.logger.Error("ws: upgrade", zap.String("battle_id", sanitizeForLog(battleID)), zap.Error(err))
 		return
 	}
 
@@ -77,7 +86,7 @@ func (h *Handler) BattleWebSocket(w http.ResponseWriter, r *http.Request) {
 		Type:    model.EventJoin,
 		Payload: session,
 	}); err != nil {
-		h.logger.Warn("ws: write join event", zap.String("battle_id", battleID), zap.Error(err))
+		h.logger.Warn("ws: write join event", zap.String("battle_id", sanitizeForLog(battleID)), zap.Error(err))
 		return
 	}
 
