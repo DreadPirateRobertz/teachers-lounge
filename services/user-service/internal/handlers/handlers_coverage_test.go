@@ -106,6 +106,13 @@ type errStore struct {
 	buildUserExportErr        error
 	updateUserErr             error
 	updateLearningProfileErr  error
+	writeAuditLogErr          error
+}
+
+// WriteAuditLog lets tests inject errors into audit-log writes so we can
+// exercise GDPR audit-log-must-succeed branches (export disclosure paths).
+func (s *errStore) WriteAuditLog(_ context.Context, _ store.AuditLogParams) error {
+	return s.writeAuditLogErr
 }
 
 func (s *errStore) CreateTeacherProfile(ctx context.Context, p store.CreateTeacherProfileParams) (*models.TeacherProfile, error) {
@@ -691,8 +698,8 @@ func TestAddStudent_ByStudentID(t *testing.T) {
 func TestAddStudent_ByEmail(t *testing.T) {
 	s := &errStore{mockStore: newMockStore()}
 	// Add a student to the mockStore by email
-	s.mockStore.users["student@school.edu"] = &models.User{ID: validStudentID, Email: "student@school.edu"}
-	s.mockStore.byID[validStudentID] = s.mockStore.users["student@school.edu"]
+	s.users["student@school.edu"] = &models.User{ID: validStudentID, Email: "student@school.edu"}
+	s.byID[validStudentID] = s.users["student@school.edu"]
 	h := newTeachersHandler(s)
 	email := "student@school.edu"
 	r := teacherReq(http.MethodPost,
@@ -1035,7 +1042,7 @@ func newSubsHandler(s store.Storer, bm billing.SubscriptionManager) *handlers.Su
 func subsStore(withSub bool, subErr error) *errStore {
 	s := &errStore{mockStore: newMockStore()}
 	if withSub {
-		s.mockStore.subs[validTeacherID] = &models.Subscription{
+		s.subs[validTeacherID] = &models.Subscription{
 			ID:     uuid.New(),
 			UserID: validTeacherID,
 			Plan:   models.PlanTrial,
@@ -1119,7 +1126,7 @@ func TestCancelSubscription_NotFound(t *testing.T) {
 
 func TestCancelSubscription_NotActive(t *testing.T) {
 	s := &errStore{mockStore: newMockStore()}
-	s.mockStore.subs[validTeacherID] = &models.Subscription{
+	s.subs[validTeacherID] = &models.Subscription{
 		ID:     uuid.New(),
 		UserID: validTeacherID,
 		Status: models.StatusCancelled, // not active
@@ -1204,7 +1211,7 @@ func TestToSubscriptionResponse_WithTrialAndPeriodEnd(t *testing.T) {
 	s := &errStore{mockStore: newMockStore()}
 	trialEnd := time.Now().Add(24 * time.Hour)
 	periodEnd := time.Now().Add(30 * 24 * time.Hour)
-	s.mockStore.subs[validTeacherID] = &models.Subscription{
+	s.subs[validTeacherID] = &models.Subscription{
 		ID:               uuid.New(),
 		UserID:           validTeacherID,
 		Plan:             models.PlanTrial,
@@ -1267,7 +1274,7 @@ func newUsersHandler(s store.Storer) *handlers.UsersHandler {
 
 func TestUpdatePreferences_Success(t *testing.T) {
 	s := &errStore{mockStore: newMockStore()}
-	s.mockStore.byID[validTeacherID] = &models.User{ID: validTeacherID, DisplayName: "Old"}
+	s.byID[validTeacherID] = &models.User{ID: validTeacherID, DisplayName: "Old"}
 	h := newUsersHandler(s)
 
 	name := "New Name"
@@ -1302,7 +1309,7 @@ func TestUpdatePreferences_InvalidJSON(t *testing.T) {
 func TestUpdatePreferences_UpdateUserError(t *testing.T) {
 	s := &errStore{mockStore: newMockStore(), updateUserErr: errors.New("db error")}
 	// Need user to exist so UpdateUser is called
-	s.mockStore.byID[validTeacherID] = &models.User{ID: validTeacherID}
+	s.byID[validTeacherID] = &models.User{ID: validTeacherID}
 	h := newUsersHandler(s)
 	name := "X"
 	r := teacherReq(http.MethodPatch,
@@ -1709,7 +1716,7 @@ func (s *getLearningProfileErrStore) GetLearningProfile(_ context.Context, _ uui
 
 func TestGetProfile_LearningProfileError(t *testing.T) {
 	base := &errStore{mockStore: newMockStore()}
-	base.mockStore.byID[validTeacherID] = &models.User{ID: validTeacherID, Email: "a@b.com"}
+	base.byID[validTeacherID] = &models.User{ID: validTeacherID, Email: "a@b.com"}
 	s := &getLearningProfileErrStore{
 		errStore:           base,
 		learningProfileErr: errors.New("db error"), // non-ErrNotFound
