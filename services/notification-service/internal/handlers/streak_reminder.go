@@ -106,7 +106,15 @@ func (h *StreakReminderHandler) Serve(w http.ResponseWriter, r *http.Request) {
 				zap.String("user_id", u.UserID), zap.Error(err))
 			continue
 		}
-		sentForUser := 0
+		// Stamp last_streak_reminder_at unconditionally before attempting sends.
+		// This prevents cron hammering during an FCM outage: even if every send
+		// fails, the dedup guard still suppresses this user on the next tick.
+		// Intentional: the stamp is a "we tried" marker, not a "delivery confirmed"
+		// marker — operators should monitor resp.Failed for delivery health.
+		if stampErr := h.store.UpdateLastStreakReminderAt(ctx, u.UserID); stampErr != nil {
+			h.logger.Warn("streak-reminder: stamp last_streak_reminder_at",
+				zap.String("user_id", u.UserID), zap.Error(stampErr))
+		}
 		for _, token := range tokens {
 			if err := h.pusher.Send(ctx, token, streakPushTitle, streakPushBody, nil); err != nil {
 				h.logger.Warn("streak-reminder: push send failed",
@@ -123,16 +131,6 @@ func (h *StreakReminderHandler) Serve(w http.ResponseWriter, r *http.Request) {
 				continue
 			}
 			resp.Sent++
-			sentForUser++
-		}
-		// Stamp last_streak_reminder_at after at least one push was dispatched
-		// so the deduplication guard suppresses duplicate reminders when the
-		// cron fires again within the same 20–24h window.
-		if sentForUser > 0 {
-			if stampErr := h.store.UpdateLastStreakReminderAt(ctx, u.UserID); stampErr != nil {
-				h.logger.Warn("streak-reminder: stamp last_streak_reminder_at",
-					zap.String("user_id", u.UserID), zap.Error(stampErr))
-			}
 		}
 	}
 
