@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"net/http"
 	"time"
+
+	"go.uber.org/zap"
 )
 
 const defaultFCMEndpoint = "https://fcm.googleapis.com/fcm/send"
@@ -107,10 +109,30 @@ func (p *FCMPusher) Send(ctx context.Context, token, title, body string, data ma
 // LogPusher is a Pusher that discards notifications without delivering them.
 // Use it when FCM credentials are absent (e.g. local development) so the
 // rest of the stack exercises the same code path as production.
-type LogPusher struct{}
+// It logs a warning on every Send call so operators know the delivery is a noop.
+type LogPusher struct {
+	Logger *zap.Logger
+}
 
-// Send accepts a push notification and returns nil without delivering it.
-// The caller is responsible for any logging around skipped delivery.
-func (LogPusher) Send(_ context.Context, _, _, _ string, _ map[string]any) error {
+// Send logs a warning and returns nil without delivering the notification.
+// The warn is intentional: operators need to know that FCM is not configured
+// and every send is silently dropped, so the log is the signal.
+func (p LogPusher) Send(_ context.Context, token, title, _ string, _ map[string]any) error {
+	log := p.Logger
+	if log == nil {
+		log = zap.NewNop()
+	}
+	log.Warn("LogPusher.Send: FCM not configured — notification discarded (noop)",
+		zap.String("token_prefix", tokenPrefix(token)),
+		zap.String("title", title),
+	)
 	return nil
+}
+
+// tokenPrefix returns the first 8 characters of token for safe logging.
+func tokenPrefix(token string) string {
+	if len(token) <= 8 {
+		return token
+	}
+	return token[:8]
 }

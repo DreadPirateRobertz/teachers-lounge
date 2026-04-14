@@ -65,7 +65,7 @@ func main() {
 		pusher = push.NewFCMPusher(cfg.fcmServerKey)
 		logger.Info("FCM push enabled")
 	} else {
-		pusher = push.LogPusher{}
+		pusher = push.LogPusher{Logger: logger}
 		logger.Warn("FCM_SERVER_KEY not set — push notifications will not be delivered")
 	}
 
