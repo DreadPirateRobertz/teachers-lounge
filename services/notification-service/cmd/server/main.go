@@ -65,7 +65,7 @@ func main() {
 		pusher = push.NewFCMPusher(cfg.fcmServerKey)
 		logger.Info("FCM push enabled")
 	} else {
-		pusher = push.LogPusher{}
+		pusher = push.LogPusher{Logger: logger}
 		logger.Warn("FCM_SERVER_KEY not set — push notifications will not be delivered")
 	}
 
@@ -95,6 +95,7 @@ func main() {
 	}
 	wsHandler := handlers.NewWSHandler(wsHub, jwtAuth, logger)
 	notifyHandler := handlers.NewNotifyHandler(wsHub, logger)
+	streakReminderHandler := handlers.NewStreakReminderHandler(notifStore, pusher, logger)
 
 	// ── Router ────────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -115,6 +116,7 @@ func main() {
 	// Not exposed via the public ingress; secured at the network layer.
 	r.Route("/internal", func(r chi.Router) {
 		r.Post("/notify/boss-unlock", notifyHandler.BossUnlock)
+		r.Post("/notify/streak-reminder", streakReminderHandler.Serve)
 	})
 
 	r.Route("/notify", func(r chi.Router) {

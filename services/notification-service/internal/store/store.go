@@ -73,6 +73,18 @@ func (s *Store) SavePushToken(ctx context.Context, userID, token, platform strin
 	return nil
 }
 
+// DeletePushToken removes a single FCM device token for a user.
+// Called when FCM returns InvalidRegistration or NotRegistered to purge the
+// stale token so it is not retried on future cron runs. A missing row is not
+// an error — the token may have already been purged by a concurrent runner.
+func (s *Store) DeletePushToken(ctx context.Context, userID, token string) error {
+	const q = `DELETE FROM push_tokens WHERE user_id = $1 AND token = $2`
+	if _, err := s.db.Exec(ctx, q, userID, token); err != nil {
+		return fmt.Errorf("store: delete push token: %w", err)
+	}
+	return nil
+}
+
 // GetPushTokens returns all FCM device tokens registered for a user.
 // Returns an empty (non-nil) slice when the user has no tokens.
 func (s *Store) GetPushTokens(ctx context.Context, userID string) ([]string, error) {
@@ -94,7 +106,8 @@ func (s *Store) GetPushTokens(ctx context.Context, userID string) ([]string, err
 	return tokens, rows.Err()
 }
 
-// Migrate creates the notifications and push_tokens tables if they do not exist.
+// Migrate creates the notifications and push_tokens tables if they do not exist,
+// and applies any additive DDL migrations needed by the notification service.
 // Called once on startup before the server accepts traffic.
 func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 	const ddl = `
@@ -116,7 +129,14 @@ func Migrate(ctx context.Context, db *pgxpool.Pool) error {
 			platform   TEXT        NOT NULL DEFAULT 'web',
 			updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
 			PRIMARY KEY (user_id, token)
-		);`
+		);
+
+		-- Deduplication guard for streak-reminder cron (tl-wti).
+		-- gaming_profiles is owned by gaming-service but both services share the
+		-- same Postgres cluster. Adding the column here is idempotent (IF NOT
+		-- EXISTS) and does not require gaming-service to know about it.
+		ALTER TABLE IF EXISTS gaming_profiles
+			ADD COLUMN IF NOT EXISTS last_streak_reminder_at TIMESTAMPTZ;`
 
 	if _, err := db.Exec(ctx, ddl); err != nil {
 		return fmt.Errorf("store: migrate: %w", err)

@@ -117,6 +117,27 @@ jobs:
       fail-fast: false
       matrix:
         service: [user-service, gaming-service, notification-service]
+        include:
+          # Provides TEST_DB_URL for notification-service store integration tests.
+          # Other matrix entries do not define test_db_url and the env var is empty.
+          - service: notification-service
+            test_db_url: "postgres://testuser:testpass@localhost:5432/testdb?sslmode=disable"
+    services:
+      # Postgres service is started for all matrix entries; only the
+      # notification-service test step passes TEST_DB_URL via matrix.test_db_url.
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: testuser
+          POSTGRES_PASSWORD: testpass
+          POSTGRES_DB: testdb
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
     defaults:
       run:
         working-directory: services/${{ matrix.service }}
@@ -144,6 +165,8 @@ jobs:
           working-directory: services/${{ matrix.service }}
       - run: go test ./... -race -timeout 60s -coverprofile=coverage.out -covermode=atomic
         if: steps.check.outputs.exists == 'true'
+        env:
+          TEST_DB_URL: ${{ matrix.test_db_url || '' }}
       - name: Upload coverage to Codecov
         if: steps.check.outputs.exists == 'true'
         uses: codecov/codecov-action@v5

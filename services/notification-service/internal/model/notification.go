@@ -66,3 +66,21 @@ type TriggerResponse struct {
 	EmailSent bool `json:"email_sent"`  // true when email was attempted without error
 	InAppSent bool `json:"in_app_sent"` // true when in-app notification was persisted
 }
+
+// UserAtRisk identifies a user whose active streak is about to expire.
+// Emitted by GetUsersAtRiskOfStreakLoss for consumption by the streak-reminder
+// cron: users with a live streak who have not studied for a configurable
+// window (default ≥20h, <24h) and who do not hold an active freeze.
+type UserAtRisk struct {
+	UserID        string `json:"user_id"`
+	CurrentStreak int    `json:"current_streak"`
+}
+
+// StreakReminderResponse is the response body for POST /internal/notify/streak-reminder.
+// Counts are best-effort — individual FCM failures are recorded under Failed
+// without failing the request so the cron can keep iterating other users.
+type StreakReminderResponse struct {
+	AtRisk int `json:"at_risk"` // users returned by the at-risk query
+	Sent   int `json:"sent"`    // device-token deliveries that succeeded
+	Failed int `json:"failed"`  // device-token deliveries that returned an error
+}
