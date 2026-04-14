@@ -1,10 +1,11 @@
 package store_test
 
-// Tests for CreateStreakFreeze and IsStreakFrozen in streak_freeze.go (tl-2n5).
+// Store-level tests for CreateStreakFreeze + IsStreakFrozen (tl-2n5).
 //
-// Uses a lightweight intRow fake for Postgres (returns a canned gem balance) and
-// miniredis for the Redis freeze-key operations. Full integration tests (real
-// UPDATE against gaming_profiles) belong in the e2e suite.
+// Uses captureDB from boss_progression_test.go so we verify SQL args + branch
+// semantics without spinning up a real Postgres. The two-query classification
+// path on UPDATE→no-rows is exercised by swapping the DB's row between
+// QueryRow calls.
 
 import (
 	"context"
@@ -13,185 +14,270 @@ import (
 	"testing"
 	"time"
 
-	"github.com/alicebob/miniredis/v2"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/redis/go-redis/v9"
 
 	"github.com/teacherslounge/gaming-service/internal/store"
 )
 
-// ── DB fakes ──────────────────────────────────────────────────────────────────
+// ── row stubs ─────────────────────────────────────────────────────────────────
 
-// intRow is a pgx.Row that scans a single int into dest[0].
-type intRow struct {
-	value int
-	err   error
+// updateRow scans (gems int, expires time.Time) for the happy path of
+// CreateStreakFreeze's UPDATE ... RETURNING.
+type updateRow struct {
+	gems    int
+	expires time.Time
+	err     error
 }
 
-func (r *intRow) Scan(dest ...any) error {
+func (r *updateRow) Scan(dest ...any) error {
 	if r.err != nil {
 		return r.err
 	}
-	if len(dest) == 0 {
-		return fmt.Errorf("intRow.Scan: no destination")
+	if len(dest) != 2 {
+		return fmt.Errorf("updateRow.Scan: want 2 dests, got %d", len(dest))
 	}
-	p, ok := dest[0].(*int)
+	gp, ok := dest[0].(*int)
 	if !ok {
-		return fmt.Errorf("intRow.Scan: dest[0] is not *int")
+		return fmt.Errorf("updateRow.Scan: dest[0] is not *int")
 	}
-	*p = r.value
+	ep, ok := dest[1].(*time.Time)
+	if !ok {
+		return fmt.Errorf("updateRow.Scan: dest[1] is not *time.Time")
+	}
+	*gp = r.gems
+	*ep = r.expires
 	return nil
 }
 
-// staticDB always returns the same pgx.Row regardless of the query.
-type staticDB struct {
-	row pgx.Row
+// classifyRow scans (gems int, streak_frozen_until *time.Time) for the
+// failure-classification SELECT.
+type classifyRow struct {
+	gems     int
+	existing *time.Time
+	err      error
 }
 
-func (d *staticDB) QueryRow(_ context.Context, _ string, _ ...any) pgx.Row {
-	return d.row
+func (r *classifyRow) Scan(dest ...any) error {
+	if r.err != nil {
+		return r.err
+	}
+	if len(dest) != 2 {
+		return fmt.Errorf("classifyRow.Scan: want 2 dests, got %d", len(dest))
+	}
+	gp, ok := dest[0].(*int)
+	if !ok {
+		return fmt.Errorf("classifyRow.Scan: dest[0] is not *int")
+	}
+	ep, ok := dest[1].(**time.Time)
+	if !ok {
+		return fmt.Errorf("classifyRow.Scan: dest[1] is not **time.Time")
+	}
+	*gp = r.gems
+	*ep = r.existing
+	return nil
 }
 
-func (d *staticDB) Query(_ context.Context, _ string, _ ...any) (pgx.Rows, error) {
+// boolRow scans a single bool for IsStreakFrozen.
+type boolRow struct {
+	value bool
+	err   error
+}
+
+func (r *boolRow) Scan(dest ...any) error {
+	if r.err != nil {
+		return r.err
+	}
+	bp, ok := dest[0].(*bool)
+	if !ok {
+		return fmt.Errorf("boolRow.Scan: dest[0] is not *bool")
+	}
+	*bp = r.value
+	return nil
+}
+
+// freezeSeqDB returns queued rows in FIFO order; allows a single test to drive
+// both the UPDATE and the classification SELECT of CreateStreakFreeze.
+type freezeSeqDB struct {
+	rows     []pgx.Row
+	lastSQLs []string
+	lastArgs [][]any
+}
+
+func (d *freezeSeqDB) QueryRow(_ context.Context, sql string, args ...any) pgx.Row {
+	d.lastSQLs = append(d.lastSQLs, sql)
+	d.lastArgs = append(d.lastArgs, args)
+	if len(d.rows) == 0 {
+		return &updateRow{err: fmt.Errorf("freezeSeqDB: no rows queued")}
+	}
+	r := d.rows[0]
+	d.rows = d.rows[1:]
+	return r
+}
+
+func (d *freezeSeqDB) Query(_ context.Context, _ string, _ ...any) (pgx.Rows, error) {
 	return nil, nil
 }
-
-func (d *staticDB) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
+func (d *freezeSeqDB) Exec(_ context.Context, _ string, _ ...any) (pgconn.CommandTag, error) {
 	return pgconn.CommandTag{}, nil
 }
+func (d *freezeSeqDB) Begin(_ context.Context) (pgx.Tx, error) { return nil, nil }
 
-func (d *staticDB) Begin(_ context.Context) (pgx.Tx, error) {
-	return nil, nil
-}
-
-// ── helpers ───────────────────────────────────────────────────────────────────
-
-// newFreezeStore builds a Store wired with a static DB row and a real miniredis.
-// The returned *miniredis.Miniredis lets tests control TTL expiry via FastForward.
-func newFreezeStore(t *testing.T, row pgx.Row) (*store.Store, *miniredis.Miniredis) {
+// newFreezeStore wires a store.Store around a fake DB. Redis is unused by
+// the streak-freeze methods so we reuse newMasteryStore's miniredis helper.
+func newFreezeStore(t *testing.T, db store.DB) *store.Store {
 	t.Helper()
-	mr, err := miniredis.Run()
-	if err != nil {
-		t.Fatalf("miniredis.Run: %v", err)
-	}
-	t.Cleanup(mr.Close)
-	rdb := redis.NewClient(&redis.Options{Addr: mr.Addr()})
-	return store.New(&staticDB{row: row}, rdb), mr
+	return newMasteryStore(t, db)
 }
 
-// ── CreateStreakFreeze tests ───────────────────────────────────────────────────
+// ── CreateStreakFreeze ────────────────────────────────────────────────────────
 
-// TestCreateStreakFreeze_Success verifies that a successful purchase deducts gems
-// and records an active freeze key in Redis.
-func TestCreateStreakFreeze_Success(t *testing.T) {
-	const wantGemsLeft = 75 // 125 - 50
-	s, mr := newFreezeStore(t, &intRow{value: wantGemsLeft})
-	ctx := context.Background()
+func TestCreateStreakFreeze_HappyPath_DeductsAndReturnsExpiry(t *testing.T) {
+	expected := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second)
+	db := &captureDB{row: &updateRow{gems: 150, expires: expected}}
 
-	got, err := s.CreateStreakFreeze(ctx, "user-alice")
+	s := newFreezeStore(t, db)
+	gemsLeft, expires, err := s.CreateStreakFreeze(context.Background(), "u1", 50)
 	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
+		t.Fatalf("CreateStreakFreeze: %v", err)
 	}
-	if got != wantGemsLeft {
-		t.Errorf("gems_left: got %d, want %d", got, wantGemsLeft)
+	if gemsLeft != 150 {
+		t.Errorf("gemsLeft: want 150, got %d", gemsLeft)
+	}
+	if !expires.Equal(expected) {
+		t.Errorf("expires: want %s, got %s", expected, expires)
 	}
 
-	// Freeze key must be present in Redis.
-	frozen, err := s.IsStreakFrozen(ctx, "user-alice")
+	// SQL should be a single UPDATE RETURNING with the user + gem cost + duration.
+	if db.calls != 1 {
+		t.Errorf("QueryRow calls: want 1, got %d", db.calls)
+	}
+	if len(db.lastArgs) < 3 || db.lastArgs[0] != "u1" || db.lastArgs[1] != 50 {
+		t.Errorf("unexpected args: %+v", db.lastArgs)
+	}
+}
+
+func TestCreateStreakFreeze_NoGems_ReturnsErrNoGems(t *testing.T) {
+	// UPDATE returns no rows → classify SELECT reports gems < cost + no
+	// active freeze → CreateStreakFreeze must surface ErrNoGems.
+	db := &freezeSeqDB{rows: []pgx.Row{
+		&updateRow{err: pgx.ErrNoRows},
+		&classifyRow{gems: 10, existing: nil},
+	}}
+	s := newFreezeStore(t, db)
+
+	_, _, err := s.CreateStreakFreeze(context.Background(), "u1", 50)
+	if !errors.Is(err, store.ErrNoGems) {
+		t.Fatalf("expected ErrNoGems, got %v", err)
+	}
+}
+
+func TestCreateStreakFreeze_AlreadyFrozen_ReturnsErrAlreadyFrozen(t *testing.T) {
+	future := time.Now().Add(6 * time.Hour)
+	db := &freezeSeqDB{rows: []pgx.Row{
+		&updateRow{err: pgx.ErrNoRows},
+		&classifyRow{gems: 500, existing: &future},
+	}}
+	s := newFreezeStore(t, db)
+
+	_, _, err := s.CreateStreakFreeze(context.Background(), "u1", 50)
+	if !errors.Is(err, store.ErrAlreadyFrozen) {
+		t.Fatalf("expected ErrAlreadyFrozen, got %v", err)
+	}
+}
+
+func TestCreateStreakFreeze_ExpiredFreeze_AllowedToRepurchase(t *testing.T) {
+	// If streak_frozen_until is in the past, the UPDATE's guard passes and
+	// we get the happy path. This test pins that behavior so a future
+	// refactor can't silently make expired freezes block new ones.
+	expected := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second)
+	db := &captureDB{row: &updateRow{gems: 100, expires: expected}}
+	s := newFreezeStore(t, db)
+
+	gemsLeft, _, err := s.CreateStreakFreeze(context.Background(), "u1", 50)
 	if err != nil {
-		t.Fatalf("IsStreakFrozen error: %v", err)
+		t.Fatalf("CreateStreakFreeze: %v", err)
+	}
+	if gemsLeft != 100 {
+		t.Errorf("gemsLeft: want 100, got %d", gemsLeft)
+	}
+}
+
+func TestCreateStreakFreeze_DBError_Propagated(t *testing.T) {
+	boom := errors.New("db exploded")
+	db := &captureDB{row: &updateRow{err: boom}}
+	s := newFreezeStore(t, db)
+
+	_, _, err := s.CreateStreakFreeze(context.Background(), "u1", 50)
+	if err == nil || !errors.Is(err, boom) {
+		t.Fatalf("expected wrapped boom, got %v", err)
+	}
+}
+
+// ── IsStreakFrozen ────────────────────────────────────────────────────────────
+
+func TestIsStreakFrozen_TrueWhenActive(t *testing.T) {
+	db := &captureDB{row: &boolRow{value: true}}
+	s := newFreezeStore(t, db)
+
+	frozen, err := s.IsStreakFrozen(context.Background(), "u1")
+	if err != nil {
+		t.Fatalf("IsStreakFrozen: %v", err)
 	}
 	if !frozen {
-		t.Error("expected freeze key to be set after CreateStreakFreeze")
-	}
-
-	// Verify the key carries a TTL (miniredis tracks it).
-	ttl := mr.TTL("streak:freeze:user-alice")
-	if ttl <= 0 {
-		t.Errorf("expected positive TTL on freeze key, got %v", ttl)
+		t.Error("want frozen=true")
 	}
 }
 
-// TestCreateStreakFreeze_InsufficientCoins verifies ErrInsufficientCoins is
-// returned when the UPDATE matches no rows (gems < cost).
-func TestCreateStreakFreeze_InsufficientCoins(t *testing.T) {
-	s, _ := newFreezeStore(t, &intRow{err: pgx.ErrNoRows})
+func TestIsStreakFrozen_FalseWhenExpired(t *testing.T) {
+	db := &captureDB{row: &boolRow{value: false}}
+	s := newFreezeStore(t, db)
 
-	_, err := s.CreateStreakFreeze(context.Background(), "user-poor")
-	if err == nil {
-		t.Fatal("expected an error, got nil")
-	}
-	if !errors.Is(err, store.ErrInsufficientCoins) {
-		t.Errorf("want ErrInsufficientCoins, got %v", err)
-	}
-}
-
-// TestCreateStreakFreeze_DBError verifies unexpected DB errors are propagated.
-func TestCreateStreakFreeze_DBError(t *testing.T) {
-	dbErr := errors.New("connection reset by peer")
-	s, _ := newFreezeStore(t, &intRow{err: dbErr})
-
-	_, err := s.CreateStreakFreeze(context.Background(), "user-flaky")
-	if err == nil {
-		t.Fatal("expected an error, got nil")
-	}
-	if errors.Is(err, store.ErrInsufficientCoins) {
-		t.Error("unexpected ErrInsufficientCoins — should be a wrapped DB error")
-	}
-}
-
-// ── IsStreakFrozen tests ──────────────────────────────────────────────────────
-
-// TestIsStreakFrozen_Active verifies that a key manually set in Redis is
-// detected as frozen.
-func TestIsStreakFrozen_Active(t *testing.T) {
-	s, mr := newFreezeStore(t, &intRow{value: 0})
-	ctx := context.Background()
-
-	// Manually insert the freeze key (simulates a prior purchase).
-	_ = mr.Set("streak:freeze:user-bob", "1")
-	mr.SetTTL("streak:freeze:user-bob", 24*time.Hour)
-
-	frozen, err := s.IsStreakFrozen(ctx, "user-bob")
+	frozen, err := s.IsStreakFrozen(context.Background(), "u1")
 	if err != nil {
-		t.Fatalf("IsStreakFrozen error: %v", err)
-	}
-	if !frozen {
-		t.Error("expected frozen=true when key exists")
-	}
-}
-
-// TestIsStreakFrozen_Expired verifies that IsStreakFrozen returns false when the
-// Redis key is absent (simulates TTL expiry via miniredis FastForward).
-func TestIsStreakFrozen_Expired(t *testing.T) {
-	s, mr := newFreezeStore(t, &intRow{value: 0})
-	ctx := context.Background()
-
-	_ = mr.Set("streak:freeze:user-carol", "1")
-	mr.SetTTL("streak:freeze:user-carol", 1*time.Second)
-
-	// Fast-forward past the TTL to simulate expiry.
-	mr.FastForward(2 * time.Second)
-
-	frozen, err := s.IsStreakFrozen(ctx, "user-carol")
-	if err != nil {
-		t.Fatalf("IsStreakFrozen error: %v", err)
+		t.Fatalf("IsStreakFrozen: %v", err)
 	}
 	if frozen {
-		t.Error("expected frozen=false after TTL expiry")
+		t.Error("want frozen=false")
 	}
 }
 
-// TestIsStreakFrozen_NotSet verifies false is returned when no freeze was ever purchased.
-func TestIsStreakFrozen_NotSet(t *testing.T) {
-	s, _ := newFreezeStore(t, &intRow{value: 0})
+func TestIsStreakFrozen_NoRow_ReturnsFalseNoError(t *testing.T) {
+	// New user with no gaming_profiles row should be treated as not-frozen
+	// rather than surfacing a hard error. Callers that create the row on
+	// first interaction remain free to do so later.
+	db := &captureDB{row: &boolRow{err: pgx.ErrNoRows}}
+	s := newFreezeStore(t, db)
 
-	frozen, err := s.IsStreakFrozen(context.Background(), "user-dave")
+	frozen, err := s.IsStreakFrozen(context.Background(), "new-user")
 	if err != nil {
-		t.Fatalf("IsStreakFrozen error: %v", err)
+		t.Fatalf("IsStreakFrozen: %v", err)
 	}
 	if frozen {
-		t.Error("expected frozen=false for user with no freeze")
+		t.Error("want frozen=false for missing row")
+	}
+}
+
+func TestIsStreakFrozen_DBError_Propagated(t *testing.T) {
+	boom := errors.New("db exploded")
+	db := &captureDB{row: &boolRow{err: boom}}
+	s := newFreezeStore(t, db)
+
+	_, err := s.IsStreakFrozen(context.Background(), "u1")
+	if err == nil || !errors.Is(err, boom) {
+		t.Fatalf("expected wrapped boom, got %v", err)
+	}
+}
+
+func TestIsStreakFrozen_ArgsForwarded(t *testing.T) {
+	db := &captureDB{row: &boolRow{value: false}}
+	s := newFreezeStore(t, db)
+
+	_, err := s.IsStreakFrozen(context.Background(), "user-xyz")
+	if err != nil {
+		t.Fatalf("IsStreakFrozen: %v", err)
+	}
+	if len(db.lastArgs) != 1 || db.lastArgs[0] != "user-xyz" {
+		t.Errorf("unexpected args: %+v", db.lastArgs)
 	}
 }

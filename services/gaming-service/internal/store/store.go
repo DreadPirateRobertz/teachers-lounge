@@ -125,12 +125,12 @@ func (s *Store) StreakCheckin(ctx context.Context, userID string) (current, long
 
 		lastTime := time.Unix(lastTS, 0)
 		if now.Sub(lastTime) > streakResetWindow {
-			// Gap > 24h: consume a streak freeze if one is active, otherwise reset.
+			// Gap > 24h: check for an active DB-stored streak freeze; if one is
+			// active, preserve the streak (the freeze expires naturally at
+			// streak_frozen_until). Otherwise reset.
 			frozen, _ := s.IsStreakFrozen(ctx, userID)
 			if frozen {
-				currentStreak = int(count) // preserve streak
-				// Consume the freeze so it can't be reused.
-				_ = s.rdb.Del(ctx, streakFreezeKeyPrefix+userID)
+				currentStreak = int(count) // preserve streak; freeze expires at streak_frozen_until
 			} else {
 				currentStreak = 1
 				reset = true

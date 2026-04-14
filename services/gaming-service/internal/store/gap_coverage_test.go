@@ -106,9 +106,17 @@ func TestDeleteBattleSession_RedisError_Propagated(t *testing.T) {
 // ── StreakCheckin — reset path ────────────────────────────────────────────────
 
 // TestStreakCheckin_ResetPath_GapExceedsWindow verifies that when the stored
-// last_ts is more than 24 hours ago, the streak resets to 1 with reset=true.
+// last_ts is more than 24 hours ago and no streak freeze is active, the streak
+// resets to 1 with reset=true.
 func TestStreakCheckin_ResetPath_GapExceedsWindow(t *testing.T) {
-	s, mr := newStoreWithRedis(t, &rowQueueDB{rows: []pgx.Row{&battleIntRow{value: 1}}})
+	// StreakCheckin makes two DB queries when gap > 24h:
+	//   1. IsStreakFrozen: COALESCE(streak_frozen_until > NOW(), FALSE) → bool
+	//   2. The upsert RETURNING longest_streak → int
+	notFrozen := &funcRow{fn: func(dest ...any) error {
+		*(dest[0].(*bool)) = false // no active freeze → trigger reset
+		return nil
+	}}
+	s, mr := newStoreWithRedis(t, &rowQueueDB{rows: []pgx.Row{notFrozen, &battleIntRow{value: 1}}})
 
 	// Seed Redis with a last_ts that is 26 hours in the past.
 	oldTS := time.Now().Add(-26 * time.Hour).Unix()
@@ -119,7 +127,7 @@ func TestStreakCheckin_ResetPath_GapExceedsWindow(t *testing.T) {
 		t.Fatalf("StreakCheckin: %v", err)
 	}
 	if !reset {
-		t.Error("expected reset=true for gap > 24h")
+		t.Error("expected reset=true for gap > 24h with no active freeze")
 	}
 	if current != 1 {
 		t.Errorf("current: got %d, want 1 after reset", current)

@@ -1,18 +1,24 @@
 package handler_test
 
-// Tests for StreakFreeze handler (tl-2n5).
+// Handler-layer tests for POST /gaming/streak/freeze (tl-2n5). Store-side
+// coverage lives in internal/store/streak_freeze_test.go.
 //
-// Uses a freezeStore stub that embeds noopStore and overrides only
-// CreateStreakFreeze and IsStreakFrozen so each test case stays focused.
+// Uses a small freezeStore fake that embeds noopStore and overrides only
+// CreateStreakFreeze. Tests cover the three response branches:
+//   - happy path        → 200 with new gem balance + expiry
+//   - not enough gems   → 422 ErrNoGems
+//   - already frozen    → 422 ErrAlreadyFrozen
+//   - unauthenticated   → 403
+//   - store hard error  → 500
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -22,162 +28,127 @@ import (
 	"github.com/teacherslounge/gaming-service/internal/taunt"
 )
 
-// ── freezeStore stub ──────────────────────────────────────────────────────────
-
+// freezeStore overrides CreateStreakFreeze to return canned results so we
+// exercise each branch of the FreezeStreak handler.
 type freezeStore struct {
 	noopStore
-	freezeFn func(ctx context.Context, userID string) (int, error)
-	frozenFn func(ctx context.Context, userID string) (bool, error)
+
+	gemsLeft  int
+	expiresAt time.Time
+	err       error
+
+	callCount   int
+	lastUserID  string
+	lastGemCost int
 }
 
-func (s *freezeStore) CreateStreakFreeze(ctx context.Context, userID string) (int, error) {
-	if s.freezeFn != nil {
-		return s.freezeFn(ctx, userID)
-	}
-	return 80, nil
+func (s *freezeStore) CreateStreakFreeze(_ context.Context, userID string, gemCost int) (int, time.Time, error) {
+	s.callCount++
+	s.lastUserID = userID
+	s.lastGemCost = gemCost
+	return s.gemsLeft, s.expiresAt, s.err
 }
 
-func (s *freezeStore) IsStreakFrozen(ctx context.Context, userID string) (bool, error) {
-	if s.frozenFn != nil {
-		return s.frozenFn(ctx, userID)
-	}
-	return false, nil
-}
-
-func newFreezeHandler(s handler.Storer) *handler.Handler {
+func newFreezeHandler(s *freezeStore) *handler.Handler {
 	return handler.New(s, taunt.StaticGenerator{}, zap.NewNop())
 }
 
-func freezeBody(userID string) *bytes.Buffer {
-	b, _ := json.Marshal(model.StreakFreezeRequest{UserID: userID})
-	return bytes.NewBuffer(b)
+func freezeRequest() *http.Request {
+	return httptest.NewRequest(http.MethodPost, "/gaming/streak/freeze", nil)
 }
 
 // ── tests ─────────────────────────────────────────────────────────────────────
 
-// TestStreakFreeze_Success verifies a successful purchase returns 200 with
-// active=true and the updated gem balance.
-func TestStreakFreeze_Success(t *testing.T) {
-	st := &freezeStore{
-		freezeFn: func(_ context.Context, _ string) (int, error) { return 75, nil },
-	}
-	h := newFreezeHandler(st)
+func TestFreezeStreak_HappyPath_Returns200WithBalanceAndExpiry(t *testing.T) {
+	expires := time.Now().Add(24 * time.Hour).UTC().Truncate(time.Second)
+	s := &freezeStore{gemsLeft: 150, expiresAt: expires}
+	h := newFreezeHandler(s)
 
-	req := httptest.NewRequest(http.MethodPost, "/gaming/streak/freeze", freezeBody("u1"))
-	req = withUser(req, "u1")
-	rec := httptest.NewRecorder()
+	rr := httptest.NewRecorder()
+	h.FreezeStreak(rr, withUser(freezeRequest(), "u1"))
 
-	h.StreakFreeze(rec, req)
-
-	if rec.Code != http.StatusOK {
-		t.Fatalf("expected 200, got %d: %s", rec.Code, rec.Body.String())
+	if rr.Code != http.StatusOK {
+		t.Fatalf("expected 200, got %d: %s", rr.Code, rr.Body.String())
 	}
 	var resp model.StreakFreezeResponse
-	if err := json.NewDecoder(rec.Body).Decode(&resp); err != nil {
-		t.Fatalf("decode: %v", err)
+	if err := json.NewDecoder(rr.Body).Decode(&resp); err != nil {
+		t.Fatalf("decode body: %v", err)
 	}
-	if !resp.Active {
-		t.Error("expected active=true")
+	if resp.GemsLeft != 150 {
+		t.Errorf("GemsLeft: want 150, got %d", resp.GemsLeft)
 	}
-	if resp.GemsLeft != 75 {
-		t.Errorf("expected gems_left=75, got %d", resp.GemsLeft)
+	if !resp.ExpiresAt.Equal(expires) {
+		t.Errorf("ExpiresAt: want %s, got %s", expires, resp.ExpiresAt)
 	}
-}
-
-// TestStreakFreeze_InsufficientCoins verifies 422 when the user cannot afford
-// the freeze (store returns ErrInsufficientCoins).
-func TestStreakFreeze_InsufficientCoins(t *testing.T) {
-	st := &freezeStore{
-		freezeFn: func(_ context.Context, _ string) (int, error) { return 0, store.ErrInsufficientCoins },
+	if s.callCount != 1 {
+		t.Errorf("CreateStreakFreeze calls: want 1, got %d", s.callCount)
 	}
-	h := newFreezeHandler(st)
-
-	req := httptest.NewRequest(http.MethodPost, "/gaming/streak/freeze", freezeBody("u1"))
-	req = withUser(req, "u1")
-	rec := httptest.NewRecorder()
-
-	h.StreakFreeze(rec, req)
-
-	if rec.Code != http.StatusUnprocessableEntity {
-		t.Errorf("expected 422, got %d", rec.Code)
+	if s.lastUserID != "u1" {
+		t.Errorf("lastUserID: want u1, got %q", s.lastUserID)
+	}
+	if s.lastGemCost != model.StreakFreezeCost {
+		t.Errorf("lastGemCost: want %d, got %d", model.StreakFreezeCost, s.lastGemCost)
 	}
 }
 
-// TestStreakFreeze_StoreError verifies 500 on an unexpected store error.
-func TestStreakFreeze_StoreError(t *testing.T) {
-	st := &freezeStore{
-		freezeFn: func(_ context.Context, _ string) (int, error) { return 0, errors.New("db timeout") },
+func TestFreezeStreak_NoCaller_Returns403(t *testing.T) {
+	s := &freezeStore{}
+	h := newFreezeHandler(s)
+
+	rr := httptest.NewRecorder()
+	// No WithUserID on the request → unauthenticated caller.
+	h.FreezeStreak(rr, freezeRequest())
+
+	if rr.Code != http.StatusForbidden {
+		t.Fatalf("expected 403, got %d", rr.Code)
 	}
-	h := newFreezeHandler(st)
-
-	req := httptest.NewRequest(http.MethodPost, "/gaming/streak/freeze", freezeBody("u1"))
-	req = withUser(req, "u1")
-	rec := httptest.NewRecorder()
-
-	h.StreakFreeze(rec, req)
-
-	if rec.Code != http.StatusInternalServerError {
-		t.Errorf("expected 500, got %d", rec.Code)
+	if s.callCount != 0 {
+		t.Errorf("store must not be called when caller is unauthenticated; got %d calls", s.callCount)
 	}
 }
 
-// TestStreakFreeze_Forbidden_WrongUser verifies 403 when the caller's JWT does
-// not match the user_id in the request body.
-func TestStreakFreeze_Forbidden_WrongUser(t *testing.T) {
-	h := newFreezeHandler(&freezeStore{})
+func TestFreezeStreak_NotEnoughGems_Returns422(t *testing.T) {
+	s := &freezeStore{err: store.ErrNoGems}
+	h := newFreezeHandler(s)
 
-	req := httptest.NewRequest(http.MethodPost, "/gaming/streak/freeze", freezeBody("user-a"))
-	req = withUser(req, "user-b") // mismatch
-	rec := httptest.NewRecorder()
+	rr := httptest.NewRecorder()
+	h.FreezeStreak(rr, withUser(freezeRequest(), "u1"))
 
-	h.StreakFreeze(rec, req)
-
-	if rec.Code != http.StatusForbidden {
-		t.Errorf("expected 403, got %d", rec.Code)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d", rr.Code)
+	}
+	var body map[string]string
+	_ = json.NewDecoder(rr.Body).Decode(&body)
+	if body["error"] != "not enough gems" {
+		t.Errorf("error message: want 'not enough gems', got %q", body["error"])
 	}
 }
 
-// TestStreakFreeze_Forbidden_NoAuth verifies 403 when no JWT is present.
-func TestStreakFreeze_Forbidden_NoAuth(t *testing.T) {
-	h := newFreezeHandler(&freezeStore{})
+func TestFreezeStreak_AlreadyFrozen_Returns422(t *testing.T) {
+	s := &freezeStore{err: store.ErrAlreadyFrozen}
+	h := newFreezeHandler(s)
 
-	req := httptest.NewRequest(http.MethodPost, "/gaming/streak/freeze", freezeBody("u1"))
-	// no withUser → empty context
-	rec := httptest.NewRecorder()
+	rr := httptest.NewRecorder()
+	h.FreezeStreak(rr, withUser(freezeRequest(), "u1"))
 
-	h.StreakFreeze(rec, req)
-
-	if rec.Code != http.StatusForbidden {
-		t.Errorf("expected 403, got %d", rec.Code)
+	if rr.Code != http.StatusUnprocessableEntity {
+		t.Fatalf("expected 422, got %d", rr.Code)
+	}
+	var body map[string]string
+	_ = json.NewDecoder(rr.Body).Decode(&body)
+	if body["error"] != "streak already frozen" {
+		t.Errorf("error message: want 'streak already frozen', got %q", body["error"])
 	}
 }
 
-// TestStreakFreeze_InvalidBody verifies 400 for malformed JSON.
-func TestStreakFreeze_InvalidBody(t *testing.T) {
-	h := newFreezeHandler(&freezeStore{})
+func TestFreezeStreak_StoreError_Returns500(t *testing.T) {
+	s := &freezeStore{err: errors.New("db exploded")}
+	h := newFreezeHandler(s)
 
-	req := httptest.NewRequest(http.MethodPost, "/gaming/streak/freeze", bytes.NewBufferString("{not-json"))
-	req = withUser(req, "u1")
-	rec := httptest.NewRecorder()
+	rr := httptest.NewRecorder()
+	h.FreezeStreak(rr, withUser(freezeRequest(), "u1"))
 
-	h.StreakFreeze(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", rec.Code)
-	}
-}
-
-// TestStreakFreeze_MissingUserID verifies 400 when user_id is empty.
-func TestStreakFreeze_MissingUserID(t *testing.T) {
-	h := newFreezeHandler(&freezeStore{})
-
-	req := httptest.NewRequest(http.MethodPost, "/gaming/streak/freeze", freezeBody(""))
-	req = withUser(req, "u1")
-	rec := httptest.NewRecorder()
-
-	h.StreakFreeze(rec, req)
-
-	if rec.Code != http.StatusBadRequest {
-		t.Errorf("expected 400, got %d", rec.Code)
+	if rr.Code != http.StatusInternalServerError {
+		t.Fatalf("expected 500, got %d", rr.Code)
 	}
 }

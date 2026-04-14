@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"go.uber.org/zap"
 
@@ -68,8 +69,8 @@ func (p *progressionStore) GetChapterMasteryBatch(_ context.Context, _ string, p
 	return out, nil
 }
 
-func (p *progressionStore) CreateStreakFreeze(_ context.Context, _ string) (int, error) {
-	return 0, nil
+func (p *progressionStore) CreateStreakFreeze(_ context.Context, _ string, _ int) (int, time.Time, error) {
+	return 0, time.Time{}, nil
 }
 func (p *progressionStore) IsStreakFrozen(_ context.Context, _ string) (bool, error) {
 	return false, nil
