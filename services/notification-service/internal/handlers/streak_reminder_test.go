@@ -257,10 +257,12 @@ func TestStreakReminder_TokenLookupErrorIsSkippedNotFatal(t *testing.T) {
 	}
 }
 
-// TestStreakReminder_StampsLastReminderAtAfterSend verifies that after at least
-// one push token is successfully dispatched, last_streak_reminder_at is stamped
-// so subsequent cron runs within the window skip this user.
-func TestStreakReminder_StampsLastReminderAtAfterSend(t *testing.T) {
+// TestStreakReminder_StampsLastReminderAtBeforeSend verifies that when a user
+// has registered push tokens, last_streak_reminder_at is stamped before the
+// fan-out (not after), so FCM outages don't cause repeat hammering. Users with
+// no registered tokens are not stamped — they remain eligible if they register
+// a device within the at-risk window.
+func TestStreakReminder_StampsLastReminderAtBeforeSend(t *testing.T) {
 	store := &fakeStreakStore{
 		atRisk: []model.UserAtRisk{
 			{UserID: "u1", CurrentStreak: 5},

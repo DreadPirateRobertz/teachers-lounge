@@ -106,11 +106,14 @@ func (h *StreakReminderHandler) Serve(w http.ResponseWriter, r *http.Request) {
 				zap.String("user_id", u.UserID), zap.Error(err))
 			continue
 		}
-		// Stamp last_streak_reminder_at unconditionally before attempting sends.
-		// This prevents cron hammering during an FCM outage: even if every send
-		// fails, the dedup guard still suppresses this user on the next tick.
-		// Intentional: the stamp is a "we tried" marker, not a "delivery confirmed"
-		// marker — operators should monitor resp.Failed for delivery health.
+		if len(tokens) == 0 {
+			continue
+		}
+		// Stamp last_streak_reminder_at before attempting sends (not after).
+		// Stamping first prevents cron hammering during an FCM outage: even if
+		// every send fails, the dedup guard suppresses this user on the next tick.
+		// Guard: only stamp when the user has registered tokens — a user with no
+		// devices should remain eligible if they register one within the window.
 		if stampErr := h.store.UpdateLastStreakReminderAt(ctx, u.UserID); stampErr != nil {
 			h.logger.Warn("streak-reminder: stamp last_streak_reminder_at",
 				zap.String("user_id", u.UserID), zap.Error(stampErr))
