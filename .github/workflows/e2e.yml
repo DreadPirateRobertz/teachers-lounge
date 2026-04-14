@@ -1,0 +1,133 @@
+name: E2E Tests
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  e2e:
+    name: E2E suite + living doc
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+          cache-dependency-path: e2e/package-lock.json
+
+      - name: Install E2E dependencies
+        working-directory: e2e
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: e2e
+        run: npm run install:browsers
+
+      - name: Start Docker Compose stack
+        run: |
+          cp env.example .env.local || true
+          cat >> .env.local <<'ENV_EOF'
+          USER_SERVICE_URL=http://localhost:8080
+          GAMING_SERVICE_URL=http://localhost:8081
+          TUTORING_SERVICE_URL=http://localhost:8082
+          AI_GATEWAY_URL=http://localhost:8083
+          NOTIFICATION_SERVICE_URL=http://localhost:8084
+          INGESTION_SERVICE_URL=http://localhost:8085
+          SEARCH_SERVICE_URL=http://localhost:8086
+          NEXTAUTH_SECRET=ci-test-secret
+          ENV_EOF
+          docker compose --env-file .env.local up --build --detach --wait || true
+        env:
+          DOCKER_BUILDKIT: '1'
+
+      - name: Wait for frontend to be healthy
+        run: |
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/api/health > /dev/null 2>&1; then
+              echo "Frontend healthy"
+              break
+            fi
+            echo "Waiting... attempt $i"
+            sleep 5
+          done
+
+      - name: Run Playwright E2E tests
+        id: playwright
+        working-directory: e2e
+        run: npm test -- --project=setup --project=e2e
+        env:
+          BASE_URL: http://localhost:3000
+          CI: 'true'
+        continue-on-error: true
+
+      - name: Generate testing-master.html
+        run: node scripts/gen-testing-doc.mjs
+        continue-on-error: true
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: |
+            e2e/test-results/
+            e2e/playwright-report/
+            docs/testing-master.html
+          retention-days: 14
+
+      - name: Commit updated testing-master.html
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/testing-master.html
+          if git diff --cached --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "chore(e2e): update living test doc [skip ci]"
+            git push
+          fi
+
+      - name: Check feature coverage
+        if: steps.playwright.outcome != 'cancelled'
+        run: |
+          if [ -f e2e/test-results/results.json ]; then
+            node -e "
+              const r = JSON.parse(require('fs').readFileSync('e2e/test-results/results.json'));
+              function flatten(suites) {
+                let out = [];
+                for (const s of suites || []) {
+                  for (const spec of s.specs || []) {
+                    for (const t of spec.tests || []) {
+                      out.push(t.results?.[0]?.status || 'unknown');
+                    }
+                  }
+                  out = out.concat(flatten(s.suites));
+                }
+                return out;
+              }
+              const statuses = flatten(r.suites || []);
+              const passed = statuses.filter(s => s === 'passed').length;
+              const total = statuses.length;
+              console.log('Feature coverage: ' + passed + '/' + total + ' tests passing');
+            "
+          fi
+
+      - name: Tear down Docker stack
+        if: always()
+        run: docker compose down --volumes --remove-orphans 2>/dev/null || true
