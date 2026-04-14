@@ -121,8 +121,10 @@ docker compose --env-file .env.local up --build</code></pre>
   <p>*Frontend healthcheck reports unhealthy due to IPv6/IPv4 mismatch in BusyBox wget — <code>curl localhost:3000/api/health</code> returns <code>{"status":"ok"}</code>. Fixed in docker-compose.yml, clears on next restart.</p>
 
   <div class="screenshot-box" id="ss-stack">
-    <div>📸 Screenshot: <strong>docker compose ps</strong> output showing all containers healthy</div>
-    <div class="label">pending — shen capturing from pop-os</div>
+    <div>📸 <strong>docker compose ps</strong> — 9/13 services healthy (captured 2026-04-13)</div>
+    <pre style="text-align:left;font-size:0.75rem;overflow:auto;max-height:200px;"><!-- contents of docs/screenshots/01-docker-compose-ps.txt --></pre>
+    <a href="screenshots/01-docker-compose-ps.txt" style="font-size:0.8rem;">View full output →</a>
+    <div class="label">qdrant healthcheck broken but serving · ingestion/search skipped (depend on qdrant)</div>
   </div>
 </section>
 
@@ -150,8 +152,8 @@ curl -s localhost:3000/api/health      # frontend</code></pre>
   <div class="section-tag">tutoring-service · port 8000</div>
 
   <div class="screenshot-box" id="ss-chat">
-    <div>📸 Screenshot: <strong>Chat interface</strong> — tutoring session in progress, student question + AI tutor response visible</div>
-    <div class="label">pending — shen capturing from pop-os</div>
+    <img src="screenshots/04-chat-interface.png" alt="Chat interface — full shell with chat, mastery, quests, achievements, level-up modal">
+    <div class="label">captured 2026-04-13 · full shell: chat + mastery + quests + achievements + level-up modal</div>
   </div>
 
   <div class="scenario">
@@ -198,13 +200,13 @@ curl -s localhost:3000/api/health      # frontend</code></pre>
   <div class="section-tag">gaming-service · port 8083 · frontend Three.js</div>
 
   <div class="screenshot-box" id="ss-boss-entry">
-    <div>📸 Screenshot: <strong>Boss battle entry screen</strong> — boss selection, mastery gate progress bars</div>
-    <div class="label">pending — shen capturing from pop-os</div>
+    <img src="screenshots/02-boss-battle-entry.png" alt="Boss battle entry screen — title card with Begin Battle CTA">
+    <div class="label">captured 2026-04-13 · title card with "Begin Battle" CTA</div>
   </div>
 
   <div class="screenshot-box" id="ss-boss-battle">
-    <div>📸 Screenshot: <strong>Active boss battle</strong> — Three.js scene with boss HP bar, player HP bar, combo counter, round indicator</div>
-    <div class="label">pending — shen capturing from pop-os</div>
+    <img src="screenshots/03-boss-battle-active.png" alt="Boss battle active — dev-mode CSP blocked Three.js hydration, shows entry screen">
+    <div class="label">⚠️ blocked — dev-mode CSP prevents Three.js hydration · requires <code>npm run build &amp;&amp; npm start</code> · tracked in tl-dye</div>
   </div>
 
   <div class="scenario">
@@ -233,8 +235,8 @@ curl -s localhost:3000/api/health      # frontend</code></pre>
   </div>
 
   <div class="screenshot-box" id="ss-loot">
-    <div>📸 Screenshot: <strong>Loot reveal screen</strong> — staggered item reveal animation (LootReveal component), items appearing one by one</div>
-    <div class="label">pending — shen capturing from pop-os</div>
+    <div>📸 <strong>Loot reveal screen</strong> — staggered item reveal animation (LootReveal component)</div>
+    <div class="label">⚠️ pending — requires seeded victorious battle run · tracked in tl-kvl (E2E simulation harness)</div>
   </div>
 
   <div class="scenario">
@@ -290,8 +292,8 @@ curl -s localhost:3000/api/health      # frontend</code></pre>
   </div>
 
   <div class="screenshot-box" id="ss-leaderboard">
-    <div>📸 Screenshot: <strong>Leaderboard</strong> — weekly tab, top 10 students, current user highlighted</div>
-    <div class="label">pending — shen capturing from pop-os</div>
+    <img src="screenshots/05-leaderboard.png" alt="Leaderboard — cold-start empty state, no progression data seeded">
+    <div class="label">captured 2026-04-13 · ⚠️ empty state — no seed data · full leaderboard via tl-kvl E2E suite</div>
   </div>
 </section>
 
@@ -301,8 +303,8 @@ curl -s localhost:3000/api/health      # frontend</code></pre>
   <div class="section-tag">frontend · analytics-service · tutoring-service</div>
 
   <div class="screenshot-box" id="ss-adaptive">
-    <div>📸 Screenshot: <strong>Adaptive dashboard</strong> — mastery heatmap, upcoming reviews, weak concept alerts, learning style indicator dial</div>
-    <div class="label">pending — shen capturing from pop-os</div>
+    <img src="screenshots/06-adaptive-dashboard.png" alt="Adaptive dashboard — cold-start empty state, no mastery data">
+    <div class="label">captured 2026-04-13 · ⚠️ empty state — no mastery events seeded · full dashboard via tl-kvl E2E suite</div>
   </div>
 
   <div class="scenario">

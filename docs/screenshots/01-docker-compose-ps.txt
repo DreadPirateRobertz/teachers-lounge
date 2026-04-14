@@ -1,0 +1,10 @@
+NAME                                    SERVICE                STATUS                    PORTS
+teacherslounge-ai-gateway-1             ai-gateway             Up 22 hours (healthy)     127.0.0.1:4000->4000/tcp
+teacherslounge-analytics-service-1      analytics-service      Up 22 hours (healthy)     127.0.0.1:8085->8085/tcp
+teacherslounge-gaming-service-1         gaming-service         Up 4 minutes (healthy)    127.0.0.1:8083->8083/tcp
+teacherslounge-notification-service-1   notification-service   Up 5 minutes (healthy)    127.0.0.1:9000->9000/tcp
+teacherslounge-postgres-1               postgres               Up 22 hours (healthy)     127.0.0.1:5432->5432/tcp
+teacherslounge-qdrant-1                 qdrant                 Up 22 hours (unhealthy)   127.0.0.1:6333->6333/tcp, 6334/tcp
+teacherslounge-redis-1                  redis                  Up 22 hours (healthy)     127.0.0.1:6379->6379/tcp
+teacherslounge-tutoring-service-1       tutoring-service       Up 4 minutes (healthy)    127.0.0.1:8000->8080/tcp
+teacherslounge-user-service-1           user-service           Up 4 minutes (healthy)    127.0.0.1:8080->8080/tcp

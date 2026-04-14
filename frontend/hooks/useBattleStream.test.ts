@@ -219,9 +219,7 @@ describe('useBattleStream — message handling', () => {
       MockWebSocket.instances[0].simulateOpen()
     })
     act(() => {
-      MockWebSocket.instances[0].simulateMessage(
-        makeEvent({ player_hp: 0, phase: 'defeat' }),
-      )
+      MockWebSocket.instances[0].simulateMessage(makeEvent({ player_hp: 0, phase: 'defeat' }))
     })
     expect(result.current.battleState?.phase).toBe('defeat')
     expect(result.current.battleState?.playerHp).toBe(0)
@@ -336,10 +334,9 @@ describe('useBattleStream — cleanup', () => {
   })
 
   it('opens a new WebSocket when sessionId changes', () => {
-    const { rerender } = renderHook(
-      ({ sid }: { sid: string | null }) => useBattleStream(sid),
-      { initialProps: { sid: 'session-1' as string | null } },
-    )
+    const { rerender } = renderHook(({ sid }: { sid: string | null }) => useBattleStream(sid), {
+      initialProps: { sid: 'session-1' as string | null },
+    })
     expect(MockWebSocket.instances).toHaveLength(1)
     expect(MockWebSocket.instances[0].url).toContain('session-1')
 
@@ -349,10 +346,9 @@ describe('useBattleStream — cleanup', () => {
   })
 
   it('closes the old WebSocket when sessionId changes', () => {
-    const { rerender } = renderHook(
-      ({ sid }: { sid: string | null }) => useBattleStream(sid),
-      { initialProps: { sid: 'session-1' as string | null } },
-    )
+    const { rerender } = renderHook(({ sid }: { sid: string | null }) => useBattleStream(sid), {
+      initialProps: { sid: 'session-1' as string | null },
+    })
     const firstWs = MockWebSocket.instances[0]
     rerender({ sid: 'session-2' })
     expect(firstWs.readyState).toBe(MockWebSocket.CLOSED)
