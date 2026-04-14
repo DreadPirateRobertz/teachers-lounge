@@ -28,6 +28,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { type AnimationState, type BossVisualDef, getRandomTaunt } from './BossCharacterLibrary'
 import BossHUD, { type PowerUp } from './BossHUD'
 import BattleResolve from './BattleResolve'
+import LootReveal, { type LootItem } from './LootReveal'
 import QuestionCard, { type BattleQuestion } from './QuestionCard'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import useSwipeGesture, { SwipeDirection } from '@/hooks/useSwipeGesture'
@@ -472,7 +473,7 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
       )}
 
       {/* ── Victory ── */}
-      {phase === 'victory' && <VictoryScreen boss={boss} />}
+      {phase === 'victory' && <VictoryScreen boss={boss} turns={turn} />}
 
       {/* ── Defeat ── */}
       {phase === 'defeat' && <DefeatScreen boss={boss} onRetry={startBattle} />}
@@ -523,7 +524,25 @@ function StartScreen({
   )
 }
 
-function VictoryScreen({ boss }: { boss: BossVisualDef }) {
+/**
+ * Derive client-side victory rewards from the battle outcome.
+ *
+ * Kept pure + exported for unit testing. The backend is the source of truth
+ * for persisted rewards; this is a presentational approximation for the
+ * post-battle reveal. Values are deterministic given `turns` and `boss`.
+ */
+export function computeVictoryLoot(boss: BossVisualDef, turns: number): LootItem[] {
+  const xp = 100 + turns * 10
+  const gems = 25
+  return [
+    { key: 'xp', icon: '⚡', label: 'XP Earned', amount: xp },
+    { key: 'gems', icon: '💎', label: 'Gems', amount: gems },
+    { key: 'badge', icon: '🏅', label: `Badge: ${boss.name} Slayer`, amount: null },
+  ]
+}
+
+function VictoryScreen({ boss, turns }: { boss: BossVisualDef; turns: number }) {
+  const loot = computeVictoryLoot(boss, turns)
   return (
     <div className="flex flex-col items-center gap-4 text-center">
       <div className="text-4xl">🏆</div>
@@ -531,6 +550,7 @@ function VictoryScreen({ boss }: { boss: BossVisualDef }) {
       <p className="text-sm text-text-base font-mono">
         You defeated <span style={{ color: boss.primaryColor }}>{boss.name}</span>
       </p>
+      <LootReveal items={loot} />
       <Link
         href="/"
         className="mt-4 text-sm text-neon-blue border border-neon-blue/30 px-5 py-2 rounded-lg
