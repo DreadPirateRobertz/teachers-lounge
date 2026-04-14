@@ -153,7 +153,7 @@ func (h *Handler) runBattleWS(ctx context.Context, conn *websocket.Conn, battleI
 		for {
 			if _, _, err := conn.NextReader(); err != nil {
 				if !websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
-					h.logger.Warn("ws: read error", zap.String("battle_id", battleID), zap.Error(err))
+					h.logger.Warn("ws: read error", zap.String("battle_id", sanitizeForLog(battleID)), zap.Error(err))
 				}
 				return
 			}
@@ -175,13 +175,13 @@ func (h *Handler) runBattleWS(ctx context.Context, conn *websocket.Conn, battleI
 			}
 			_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
 			if err := conn.WriteJSON(evt); err != nil {
-				h.logger.Warn("ws: write event", zap.String("battle_id", battleID), zap.String("event_type", evt.Type), zap.Error(err))
+				h.logger.Warn("ws: write event", zap.String("battle_id", sanitizeForLog(battleID)), zap.String("event_type", sanitizeForLog(evt.Type)), zap.Error(err))
 				return
 			}
 		case <-ping.C:
 			_ = conn.SetWriteDeadline(time.Now().Add(wsWriteTimeout))
 			if err := conn.WriteMessage(websocket.PingMessage, nil); err != nil {
-				h.logger.Warn("ws: ping failed", zap.String("battle_id", battleID), zap.Error(err))
+				h.logger.Warn("ws: ping failed", zap.String("battle_id", sanitizeForLog(battleID)), zap.Error(err))
 				return
 			}
 		}
