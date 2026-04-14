@@ -96,7 +96,7 @@ func newWSServer(t *testing.T, st handler.Storer, userID string) (*httptest.Serv
 // readEvent reads and decodes the next BattleEvent from a WS connection.
 func readEvent(t *testing.T, conn *websocket.Conn, timeout time.Duration) model.BattleEvent {
 	t.Helper()
-	conn.SetReadDeadline(time.Now().Add(timeout))
+	_ = conn.SetReadDeadline(time.Now().Add(timeout))
 	_, msg, err := conn.ReadMessage()
 	if err != nil {
 		t.Fatalf("ws read: %v", err)
@@ -300,7 +300,7 @@ func TestBattleWS_BattleEndTriggersLootRoll(t *testing.T) {
 
 	// We expect either 200 (attack processed) or the session to be returned.
 	// The important thing is that the WS client receives a loot_roll event.
-	conn.SetReadDeadline(time.Now().Add(3 * time.Second))
+	_ = conn.SetReadDeadline(time.Now().Add(3 * time.Second))
 
 	// Read events until we see loot_roll or timeout.
 	var gotLoot bool

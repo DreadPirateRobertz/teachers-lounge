@@ -91,7 +91,7 @@ func (h *Handler) BattleWebSocket(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Read pump: keep the connection alive with ping/pong and detect disconnect.
-	raw.SetReadDeadline(time.Now().Add(pongWait))
+	_ = raw.SetReadDeadline(time.Now().Add(pongWait))
 	raw.SetPongHandler(func(string) error {
 		return raw.SetReadDeadline(time.Now().Add(pongWait))
 	})

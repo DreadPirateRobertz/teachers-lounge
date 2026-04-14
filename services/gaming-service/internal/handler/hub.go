@@ -85,9 +85,3 @@ func (h *Hub) broadcast(battleID string, event model.BattleEvent) {
 	}
 }
 
-// connCount returns the number of active connections for battleID (for testing).
-func (h *Hub) connCount(battleID string) int {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	return len(h.battles[battleID])
-}
