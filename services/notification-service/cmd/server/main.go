@@ -96,6 +96,7 @@ func main() {
 	wsHandler := handlers.NewWSHandler(wsHub, jwtAuth, logger)
 	notifyHandler := handlers.NewNotifyHandler(wsHub, logger)
 	streakReminderHandler := handlers.NewStreakReminderHandler(notifStore, pusher, logger)
+	achievementPushHandler := handlers.NewAchievementPushHandler(notifStore, pusher, logger)
 
 	// ── Router ────────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -117,6 +118,8 @@ func main() {
 	r.Route("/internal", func(r chi.Router) {
 		r.Post("/notify/boss-unlock", notifyHandler.BossUnlock)
 		r.Post("/notify/streak-reminder", streakReminderHandler.Serve)
+		r.Post("/push/level-up", achievementPushHandler.LevelUp)
+		r.Post("/push/quest-complete", achievementPushHandler.QuestComplete)
 	})
 
 	r.Route("/notify", func(r chi.Router) {
