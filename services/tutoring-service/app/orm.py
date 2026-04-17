@@ -290,3 +290,31 @@ class Misconception(Base):
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+# ── Concept review schedule — SM-2 on global concept slugs (tl-5wz) ───────────
+
+
+class ConceptReviewSchedule(Base):
+    """Per-student SM-2 schedule keyed on global concept slugs.
+
+    Distinct from StudentConceptMastery (per-course Concept UUIDs). The
+    scheduler here runs on text ``concept_id`` identifiers supplied by
+    callers from the global concept graph.
+    """
+
+    __tablename__ = "concept_review_schedule"
+    __table_args__ = (
+        # Powers GET /spaced-repetition/due: filter by user, sort by due_at.
+        Index("ix_crs_user_due", "user_id", "due_at"),
+    )
+
+    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
+    concept_id: Mapped[str] = mapped_column(Text, primary_key=True)
+    ease_factor: Mapped[float] = mapped_column(Float, default=2.5, nullable=False)
+    interval_days: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    repetitions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    due_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

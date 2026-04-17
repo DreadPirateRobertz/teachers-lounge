@@ -38,6 +38,7 @@ from .profile import router as profile_router
 from .quiz import router as quiz_router
 from .reviews import router as reviews_router
 from .sessions import router as sessions_router
+from .spaced_repetition import router as spaced_repetition_router
 
 configure_logging(service_name="tutoring-service", log_level=settings.log_level)
 logger = logging.getLogger(__name__)
@@ -83,6 +84,7 @@ app.include_router(sessions_router, prefix="/v1")
 app.include_router(chat_router, prefix="/v1")
 app.include_router(chat_simple_router, prefix="/v1")
 app.include_router(reviews_router, prefix="/v1")
+app.include_router(spaced_repetition_router, prefix="/v1")
 app.include_router(concepts_router, prefix="/v1")
 app.include_router(quiz_router, prefix="/v1")
 app.include_router(profile_router, prefix="/v1")

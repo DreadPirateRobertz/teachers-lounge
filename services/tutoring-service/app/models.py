@@ -344,3 +344,54 @@ class MisconceptionEntry(BaseModel):
     confidence: float
     recorded_at: datetime
     recency_weight: float
+
+
+# ── Spaced repetition DTOs (tl-5wz) ───────────────────────────────────────────
+
+
+class SpacedRepetitionReviewRequest(BaseModel):
+    """Request body for POST /spaced-repetition/review-result."""
+
+    concept_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description="Global concept graph slug identifying the reviewed concept.",
+    )
+    quality: int = Field(
+        ...,
+        ge=0,
+        le=5,
+        description="SM-2 review quality: 0=blackout, 3=correct-with-effort, 5=perfect.",
+    )
+
+
+class SpacedRepetitionReviewResponse(BaseModel):
+    """Response body returned after a review is recorded."""
+
+    concept_id: str
+    quality: int
+    ease_factor: float
+    interval_days: int
+    repetitions: int
+    last_reviewed_at: datetime
+    due_at: datetime
+
+
+class SpacedRepetitionDueItem(BaseModel):
+    """One concept that is due (or overdue) for review."""
+
+    concept_id: str
+    ease_factor: float
+    interval_days: int
+    repetitions: int
+    last_reviewed_at: datetime | None
+    due_at: datetime | None
+    is_overdue: bool
+
+
+class SpacedRepetitionDueResponse(BaseModel):
+    """Response body for GET /spaced-repetition/due."""
+
+    items: list[SpacedRepetitionDueItem]
+    total_due: int
