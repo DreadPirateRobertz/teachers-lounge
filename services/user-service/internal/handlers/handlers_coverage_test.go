@@ -241,11 +241,11 @@ func (s *errStore) GetExportJob(ctx context.Context, jobID, userID uuid.UUID) (*
 	return &models.ExportJob{ID: jobID, UserID: userID, Status: models.ExportStatusPending}, nil
 }
 
-func (s *errStore) BuildUserExport(ctx context.Context, jobID, userID uuid.UUID) (*models.UserExport, error) {
+func (s *errStore) BuildUserExport(ctx context.Context, jobID uuid.UUID, user *models.User) (*models.UserExport, error) {
 	if s.buildUserExportErr != nil {
 		return nil, s.buildUserExportErr
 	}
-	return &models.UserExport{}, nil
+	return &models.UserExport{User: user}, nil
 }
 
 func (s *errStore) UpdateUser(ctx context.Context, id uuid.UUID, p store.UpdateUserParams) (*models.User, error) {
@@ -1380,7 +1380,9 @@ func TestExportData_StoreError(t *testing.T) {
 }
 
 func TestGetExport_Success_Pending(t *testing.T) {
-	s := &errStore{mockStore: newMockStore()}
+	ms := newMockStore()
+	ms.byID[validTeacherID] = &models.User{ID: validTeacherID, Email: "t@example.com", AccountType: models.AccountTypeStandard}
+	s := &errStore{mockStore: ms}
 	jobID := uuid.New()
 	s.getExportJobResult = &models.ExportJob{ID: jobID, UserID: validTeacherID, Status: models.ExportStatusPending}
 	h := newUsersHandler(s)
@@ -1458,7 +1460,9 @@ func TestGetExport_GetJobStoreError(t *testing.T) {
 }
 
 func TestGetExport_BuildError(t *testing.T) {
-	s := &errStore{mockStore: newMockStore(), buildUserExportErr: errors.New("build error")}
+	ms := newMockStore()
+	ms.byID[validTeacherID] = &models.User{ID: validTeacherID, Email: "t@example.com", AccountType: models.AccountTypeStandard}
+	s := &errStore{mockStore: ms, buildUserExportErr: errors.New("build error")}
 	jobID := uuid.New()
 	s.getExportJobResult = &models.ExportJob{ID: jobID, UserID: validTeacherID, Status: models.ExportStatusPending}
 	h := newUsersHandler(s)
@@ -1468,6 +1472,45 @@ func TestGetExport_BuildError(t *testing.T) {
 	w := serve(h.GetExport, r)
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("want 500, got %d", w.Code)
+	}
+}
+
+// TestGetExport_Pending_UserNotFound covers the TOCTOU window in the
+// synchronous rebuild path: the export job is pending but the user record
+// disappeared between job creation and this GET. Must return 404 rather than
+// panicking in BuildUserExport on a nil user.
+func TestGetExport_Pending_UserNotFound(t *testing.T) {
+	ms := newMockStore()
+	// user intentionally not seeded → loadUser returns ErrNotFound
+	s := &errStore{mockStore: ms}
+	jobID := uuid.New()
+	s.getExportJobResult = &models.ExportJob{ID: jobID, UserID: validTeacherID, Status: models.ExportStatusPending}
+	h := newUsersHandler(s)
+	r := chiReq(http.MethodGet, "/", nil, map[string]string{
+		"id": validTeacherID.String(), "jobID": jobID.String(),
+	})
+	w := serve(h.GetExport, r)
+	if w.Code != http.StatusNotFound {
+		t.Errorf("want 404 when user no longer exists, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
+// TestGetExport_Pending_GetUserStoreError verifies transient GetUserByID
+// failures during the rebuild path surface as 500 so operators notice
+// (instead of being silently swallowed as 404).
+func TestGetExport_Pending_GetUserStoreError(t *testing.T) {
+	ms := newMockStore()
+	inner := &errStore{mockStore: ms}
+	jobID := uuid.New()
+	inner.getExportJobResult = &models.ExportJob{ID: jobID, UserID: validTeacherID, Status: models.ExportStatusPending}
+	s := &getUserByIDErrStore{errStore: inner, getUserByIDErr: errors.New("db down")}
+	h := newUsersHandler(s)
+	r := chiReq(http.MethodGet, "/", nil, map[string]string{
+		"id": validTeacherID.String(), "jobID": jobID.String(),
+	})
+	w := serve(h.GetExport, r)
+	if w.Code != http.StatusInternalServerError {
+		t.Errorf("want 500 on transient store failure, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

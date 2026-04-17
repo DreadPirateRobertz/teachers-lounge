@@ -36,7 +36,7 @@ type Storer interface {
 	QueryAuditLog(ctx context.Context, p QueryAuditLogParams) ([]*models.AuditEntry, error)
 	CreateExportJob(ctx context.Context, userID uuid.UUID) (uuid.UUID, error)
 	GetExportJob(ctx context.Context, jobID, userID uuid.UUID) (*models.ExportJob, error)
-	BuildUserExport(ctx context.Context, jobID, userID uuid.UUID) (*models.UserExport, error)
+	BuildUserExport(ctx context.Context, jobID uuid.UUID, user *models.User) (*models.UserExport, error)
 	InitConsent(ctx context.Context, userID uuid.UUID, ip, userAgent string) error
 	GetConsent(ctx context.Context, userID uuid.UUID) (*models.ConsentBundle, error)
 	UpdateConsent(ctx context.Context, userID uuid.UUID, p UpdateConsentParams) error

@@ -120,6 +120,10 @@ func main() {
 		r.Use(middleware.RequireSelf(func(req *http.Request) string {
 			return chi.URLParam(req, "id")
 		}))
+		// Single store fetch per request: rejects deleted/deactivated users
+		// with 401 (closes the unexpired-JWT TOCTOU) and caches the record
+		// in ctx so handlers don't refetch.
+		r.Use(middleware.LoadUser(db))
 
 		r.With(middleware.AuditLog(db, models.AuditActionReadProfile, "user_profile,learning_profile", "ferpa_compliance")).
 			Get("/profile", usersH.GetProfile)
@@ -149,6 +153,7 @@ func main() {
 	// Admin routes (JWT + is_admin required + rate limited)
 	r.Route("/admin", func(r chi.Router) {
 		r.Use(middleware.Authenticate(jwtManager))
+		r.Use(middleware.LoadUser(db))
 		r.Use(middleware.RequireAdmin(db))
 		r.With(middleware.RateLimit(redisClient, "admin_audit", 100, 1*time.Hour)).
 			Get("/audit", adminH.GetAuditLog)
@@ -160,6 +165,7 @@ func main() {
 		r.Use(middleware.RequireSelf(func(req *http.Request) string {
 			return chi.URLParam(req, "id")
 		}))
+		r.Use(middleware.LoadUser(db))
 		r.Use(middleware.RequireTeacherProfile(db))
 
 		// Classes
