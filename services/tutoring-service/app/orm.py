@@ -311,3 +311,50 @@ class ConceptGraphNode(Base):
     label: Mapped[str] = mapped_column(Text, nullable=False)
     subject: Mapped[str] = mapped_column(Text, nullable=False, index=True)
     path: Mapped[str] = mapped_column(Text, nullable=False)
+
+
+# ── Flashcards (tl-y3v) ───────────────────────────────────────────────────────
+
+
+class Flashcard(Base):
+    """Free-text Q/A card auto-generated from a tutoring session transcript.
+
+    Distinct from :class:`StudentConceptMastery` and ``concept_review_schedule``
+    because cards are keyed by card UUID rather than by concept — a single
+    concept may produce several cards (definition, example, application),
+    and a card may not map to any global concept slug at all.
+
+    SM-2 state uses the ``sm2_`` prefix to make the columns self-describing
+    in Anki-import SQL dumps and to avoid collision with the generic
+    ``ease_factor`` / ``interval_days`` / ``repetitions`` columns on
+    StudentConceptMastery and ConceptReviewSchedule.
+    """
+
+    __tablename__ = "flashcards"
+    __table_args__ = (
+        # Powers GET /flashcards?due=true — filter by user, sort by due_at asc.
+        Index("ix_flashcards_user_due", "user_id", "due_at"),
+        # Powers dedup inside /flashcards/generate and the session-history UI.
+        Index("ix_flashcards_user_session", "user_id", "source_session_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True, default=uuid4)
+    user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), nullable=False)
+    front: Mapped[str] = mapped_column(Text, nullable=False)
+    back: Mapped[str] = mapped_column(Text, nullable=False)
+    concept_id: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_session_id: Mapped[UUID | None] = mapped_column(
+        UUID(as_uuid=True),
+        ForeignKey("chat_sessions.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
+    last_reviewed_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # Newly generated cards are immediately due so they appear in the review
+    # queue on the first GET /flashcards?due=true after generation.
+    due_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now, nullable=False)
+    sm2_interval_days: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    sm2_ease_factor: Mapped[float] = mapped_column(Float, default=2.5, nullable=False)
+    sm2_repetitions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

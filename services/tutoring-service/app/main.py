@@ -31,6 +31,7 @@ from .concept_graph_routes import router as concept_graph_router
 from .concepts import router as concepts_router
 from .config import settings
 from .database import Base, engine
+from .flashcards import router as flashcards_router
 from .health import router as health_router
 from .logging_config import configure_logging
 from .metrics import metrics_app
@@ -88,6 +89,7 @@ app.include_router(concepts_router, prefix="/v1")
 app.include_router(concept_graph_router, prefix="/v1")
 app.include_router(quiz_router, prefix="/v1")
 app.include_router(profile_router, prefix="/v1")
+app.include_router(flashcards_router, prefix="/v1")
 
 
 @app.on_event("startup")
@@ -104,5 +106,3 @@ async def on_startup():
 async def on_shutdown():
     """Close Redis cache connection on application shutdown."""
     await close_cache()
-
-

@@ -414,9 +414,7 @@ class PrerequisiteGap(BaseModel):
     concept_id: str
     label: str
     path: str
-    mastery_score: float = Field(
-        ..., ge=0.0, le=1.0, description="Mastery score in [0, 1]."
-    )
+    mastery_score: float = Field(..., ge=0.0, le=1.0, description="Mastery score in [0, 1].")
 
 
 # ── Flashcard DTOs (tl-y3v) ───────────────────────────────────────────────────
