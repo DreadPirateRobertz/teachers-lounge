@@ -11,6 +11,7 @@ import (
 
 	"github.com/teacherslounge/gaming-service/internal/middleware"
 	"github.com/teacherslounge/gaming-service/internal/model"
+	"github.com/teacherslounge/gaming-service/internal/notifier"
 	"github.com/teacherslounge/gaming-service/internal/taunt"
 	"github.com/teacherslounge/gaming-service/internal/xp"
 )
@@ -84,18 +85,73 @@ type Storer interface {
 }
 
 // Handler holds the store, taunt generator, logger, and WebSocket hub.
+//
+// notifier dispatches level-up and quest-complete events to the
+// notification-service. It is nil-checked at each call site so a zero-valued
+// Handler (e.g. in tests that don't care about pushes) is safe.
 type Handler struct {
-	store   Storer
-	taunter taunt.Generator
-	logger  *zap.Logger
-	hub     *Hub
+	store    Storer
+	taunter  taunt.Generator
+	logger   *zap.Logger
+	hub      *Hub
+	notifier notifier.Notifier
+}
+
+// Option configures a Handler at construction time.
+type Option func(*Handler)
+
+// WithNotifier injects a Notifier for achievement pushes. Without this option
+// no push notifications are fired (the handler operates as before).
+func WithNotifier(n notifier.Notifier) Option {
+	return func(h *Handler) { h.notifier = n }
 }
 
 // New creates a Handler.
 // taunter is used by Attack to produce contextual boss taunts on wrong answers;
 // pass a taunt.StaticGenerator when the AI gateway is not configured.
-func New(store Storer, taunter taunt.Generator, logger *zap.Logger) *Handler {
-	return &Handler{store: store, taunter: taunter, logger: logger, hub: newHub()}
+// Optional functional opts (e.g. WithNotifier) wire cross-service integrations.
+func New(store Storer, taunter taunt.Generator, logger *zap.Logger, opts ...Option) *Handler {
+	h := &Handler{store: store, taunter: taunter, logger: logger, hub: newHub()}
+	for _, o := range opts {
+		o(h)
+	}
+	return h
+}
+
+// notifyLevelUp fires a level-up push in a background goroutine. Safe to call
+// when no notifier is configured — it simply returns.
+func (h *Handler) notifyLevelUp(userID string, newLevel int) {
+	if h.notifier == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := h.notifier.NotifyLevelUp(ctx, userID, newLevel); err != nil {
+			h.logger.Warn("notify level-up",
+				zap.String("user_id", userID),
+				zap.Int("new_level", newLevel),
+				zap.Error(err))
+		}
+	}()
+}
+
+// notifyQuestComplete fires a quest-completion push in a background goroutine.
+// Safe to call when no notifier is configured.
+func (h *Handler) notifyQuestComplete(userID, questTitle string, xpReward int) {
+	if h.notifier == nil {
+		return
+	}
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		defer cancel()
+		if err := h.notifier.NotifyQuestComplete(ctx, userID, questTitle, xpReward); err != nil {
+			h.logger.Warn("notify quest-complete",
+				zap.String("user_id", userID),
+				zap.String("quest_title", questTitle),
+				zap.Error(err))
+		}
+	}()
 }
 
 // GainXP handles POST /gaming/xp
@@ -130,6 +186,10 @@ func (h *Handler) GainXP(w http.ResponseWriter, r *http.Request) {
 		h.logger.Error("upsert xp", zap.String("user_id", req.UserID), zap.Error(err))
 		writeError(w, http.StatusInternalServerError, "internal error")
 		return
+	}
+
+	if leveledUp {
+		h.notifyLevelUp(req.UserID, newLevel)
 	}
 
 	writeJSON(w, http.StatusOK, model.GainXPResponse{
@@ -257,6 +317,21 @@ func (h *Handler) UpdateQuestProgress(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Snapshot pre-state so we can diff which quests newly completed during
+	// this call and fire a push per newly-completed quest. A failed snapshot
+	// degrades gracefully to "no pushes" — we still process the update.
+	var preCompleted map[string]bool
+	if h.notifier != nil {
+		if pre, err := h.store.GetDailyQuests(r.Context(), req.UserID); err == nil {
+			preCompleted = make(map[string]bool, len(pre))
+			for _, q := range pre {
+				if q.Completed {
+					preCompleted[q.ID] = true
+				}
+			}
+		}
+	}
+
 	quests, xpEarned, gemsEarned, err := h.store.UpdateQuestProgress(r.Context(), req.UserID, req.Action)
 	if err != nil {
 		h.logger.Error("update quest progress", zap.String("user_id", req.UserID), zap.Error(err))
@@ -270,8 +345,9 @@ func (h *Handler) UpdateQuestProgress(w http.ResponseWriter, r *http.Request) {
 		GemsAwarded: gemsEarned,
 	}
 
+	var leveledUp bool
 	if xpEarned > 0 || gemsEarned > 0 {
-		newXP, newLevel, leveledUp, _, err := h.store.AwardQuestRewards(r.Context(), req.UserID, xpEarned, gemsEarned)
+		newXP, newLevel, up, _, err := h.store.AwardQuestRewards(r.Context(), req.UserID, xpEarned, gemsEarned)
 		if err != nil {
 			h.logger.Error("award quest rewards", zap.String("user_id", req.UserID), zap.Error(err))
 			writeError(w, http.StatusInternalServerError, "internal error")
@@ -279,7 +355,21 @@ func (h *Handler) UpdateQuestProgress(w http.ResponseWriter, r *http.Request) {
 		}
 		resp.NewXP = newXP
 		resp.NewLevel = newLevel
-		resp.LevelUp = leveledUp
+		resp.LevelUp = up
+		leveledUp = up
+	}
+
+	// Fire pushes only after all store writes succeed so we don't notify on a
+	// call that ultimately returns 500.
+	if preCompleted != nil {
+		for _, q := range quests {
+			if q.Completed && !preCompleted[q.ID] {
+				h.notifyQuestComplete(req.UserID, q.Title, q.XPReward)
+			}
+		}
+	}
+	if leveledUp {
+		h.notifyLevelUp(req.UserID, resp.NewLevel)
 	}
 
 	writeJSON(w, http.StatusOK, resp)
