@@ -710,7 +710,17 @@ func (s *Store) GetExportJob(ctx context.Context, jobID, userID uuid.UUID) (*mod
 
 // BuildUserExport collects all PII for a user and stores it in the export_jobs row.
 // It transitions the job from pending → processing → complete atomically.
-func (s *Store) BuildUserExport(ctx context.Context, jobID, userID uuid.UUID) (*models.UserExport, error) {
+//
+// The caller must pass a pre-fetched user; BuildUserExport does not refetch.
+// This eliminates the redundant GetUserByID round-trip and closes the TOCTOU
+// window where a delete between the caller's existence check and the export
+// build would surface as ErrNotFound mid-build.
+func (s *Store) BuildUserExport(ctx context.Context, jobID uuid.UUID, user *models.User) (*models.UserExport, error) {
+	if user == nil {
+		return nil, fmt.Errorf("user must not be nil")
+	}
+	userID := user.ID
+
 	// Mark processing
 	_, err := s.pool.Exec(ctx,
 		`UPDATE export_jobs SET status = 'processing' WHERE id = $1 AND user_id = $2`,
@@ -719,12 +729,9 @@ func (s *Store) BuildUserExport(ctx context.Context, jobID, userID uuid.UUID) (*
 		return nil, fmt.Errorf("mark processing: %w", err)
 	}
 
-	export := &models.UserExport{ExportedAt: time.Now().UTC()}
-
-	// User
-	export.User, err = s.GetUserByID(ctx, userID)
-	if err != nil {
-		return nil, fmt.Errorf("get user: %w", err)
+	export := &models.UserExport{
+		ExportedAt: time.Now().UTC(),
+		User:       user,
 	}
 
 	// Learning profile

@@ -159,21 +159,19 @@ func (m *mockStore) GetExportJob(_ context.Context, jobID, _ uuid.UUID) (*models
 	return job, nil
 }
 
-func (m *mockStore) BuildUserExport(_ context.Context, jobID, userID uuid.UUID) (*models.UserExport, error) {
+func (m *mockStore) BuildUserExport(_ context.Context, jobID uuid.UUID, user *models.User) (*models.UserExport, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	export := &models.UserExport{
 		ExportedAt:   time.Now(),
+		User:         user,
 		Interactions: []models.InteractionExport{},
 		QuizResults:  []models.QuizResultExport{},
-	}
-	if u, ok := m.byID[userID]; ok {
-		export.User = u
 	}
 	completed := models.ExportJobStatus("complete")
 	m.exportJobs[jobID] = &models.ExportJob{
 		ID:         jobID,
-		UserID:     userID,
+		UserID:     user.ID,
 		Status:     completed,
 		ResultData: export,
 	}

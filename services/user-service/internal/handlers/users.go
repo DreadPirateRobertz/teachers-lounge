@@ -33,7 +33,7 @@ func (h *UsersHandler) GetProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user, err := h.store.GetUserByID(r.Context(), userID)
+	user, err := h.loadUser(r, userID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "user not found")
@@ -226,10 +226,10 @@ func (h *UsersHandler) GetFullExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Verify the user exists before creating an export job. Returns 404 for
-	// stale tokens whose user has been deleted — prevents a half-populated
-	// export with a nil User field.
-	user, err := h.store.GetUserByID(r.Context(), userID)
+	// Reuse the user record loaded by middleware.LoadUser when present;
+	// otherwise fetch directly. Returns 404 for stale tokens whose user
+	// has been deleted — prevents a half-populated export.
+	user, err := h.loadUser(r, userID)
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			writeError(w, http.StatusNotFound, "user not found")
@@ -239,28 +239,20 @@ func (h *UsersHandler) GetFullExport(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create a job row so BuildUserExport has an export_jobs id to write
-	// back into. The job is tied to the user ID checked above.
 	jobID, err := h.store.CreateExportJob(r.Context(), userID)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to create export job")
 		return
 	}
 
-	export, err := h.store.BuildUserExport(r.Context(), jobID, userID)
+	// BuildUserExport accepts the pre-fetched user so it does not issue a
+	// second GetUserByID — closes the TOCTOU window where a delete between
+	// the existence check and the build would surface mid-export.
+	export, err := h.store.BuildUserExport(r.Context(), jobID, user)
 	if err != nil {
-		// A concurrent deletion between GetUserByID and BuildUserExport
-		// surfaces here as ErrNotFound — return 404 rather than 500.
-		if errors.Is(err, store.ErrNotFound) {
-			writeError(w, http.StatusNotFound, "user not found")
-			return
-		}
 		writeError(w, http.StatusInternalServerError, "failed to build export")
 		return
 	}
-	// Pin the export's User field to the pre-verified record, closing the
-	// TOCTOU window between GetUserByID and BuildUserExport's internal fetch.
-	export.User = user
 
 	// GDPR audit-must-succeed: if we cannot record the disclosure, we must
 	// not disclose. Other audit sites in this service use best-effort (_ =)
@@ -315,7 +307,16 @@ func (h *UsersHandler) GetExport(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Pending or processing: build synchronously (Pub/Sub not yet wired).
-	export, err := h.store.BuildUserExport(r.Context(), jobID, userID)
+	user, err := h.loadUser(r, userID)
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			writeError(w, http.StatusNotFound, "user not found")
+			return
+		}
+		writeError(w, http.StatusInternalServerError, "internal error")
+		return
+	}
+	export, err := h.store.BuildUserExport(r.Context(), jobID, user)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "failed to build export")
 		return
@@ -344,6 +345,17 @@ func (h *UsersHandler) GetExport(w http.ResponseWriter, r *http.Request) {
 
 func parseUserIDParam(r *http.Request) (uuid.UUID, error) {
 	return uuid.Parse(chi.URLParam(r, "id"))
+}
+
+// loadUser returns the user cached in the request context by
+// middleware.LoadUser, falling back to a direct store fetch when the
+// middleware was not wired (e.g. unit tests that exercise a single handler).
+// In production this collapses two round-trips into one.
+func (h *UsersHandler) loadUser(r *http.Request, userID uuid.UUID) (*models.User, error) {
+	if u := middleware.UserFromCtx(r.Context()); u != nil && u.ID == userID {
+		return u, nil
+	}
+	return h.store.GetUserByID(r.Context(), userID)
 }
 
 func nilIfEmpty(m map[string]float64) *map[string]float64 {
