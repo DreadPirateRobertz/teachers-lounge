@@ -36,7 +36,7 @@ qdrant-client==1.12.1
 
 # Vision / figure extraction
 PyMuPDF==1.24.3
-Pillow==10.4.0
+Pillow==12.2.0
 transformers==4.44.2
 torch==2.5.1
 
