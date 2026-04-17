@@ -44,3 +44,9 @@ vendor/
 
 # Docker
 .dockerignore
+
+# Gas Town ops — never commit
+.beads/
+*.wisp
+*.mol
+metadata.json

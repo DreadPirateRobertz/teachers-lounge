@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>TeachersLounge — Living Test Report</title>
+  <title>TeachersLounge — Testing Master</title>
   <style>
     :root {
       --bg: #0d1117;
@@ -17,238 +17,755 @@
       --red: #f85149;
       --purple: #bc8cff;
       --orange: #ffa657;
+      --blue: #388bfd;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; line-height: 1.6; }
     header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 1.5rem 2rem; position: sticky; top: 0; z-index: 100; }
     header h1 { font-size: 1.4rem; color: var(--accent); }
     header p { color: var(--muted); font-size: 0.85rem; margin-top: 0.25rem; }
-    .header-meta { display: flex; align-items: center; gap: 1.5rem; margin-top: 0.5rem; flex-wrap: wrap; }
-    .status-pill { padding: 0.2rem 0.75rem; border-radius: 12px; font-size: 0.78rem; font-weight: 700; }
-    .status-pill.passing { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
-    .status-pill.failing { background: rgba(248,81,73,0.15); color: var(--red); border: 1px solid rgba(248,81,73,0.3); }
-    .status-pill.no-data { background: rgba(139,148,158,0.15); color: var(--muted); border: 1px solid rgba(139,148,158,0.3); }
-    .stats { font-size: 0.82rem; color: var(--muted); }
     nav { display: flex; gap: 1rem; margin-top: 0.75rem; flex-wrap: wrap; }
-    nav a { color: var(--accent); text-decoration: none; font-size: 0.82rem; opacity: 0.8; }
+    nav a { color: var(--accent); text-decoration: none; font-size: 0.85rem; opacity: 0.8; }
     nav a:hover { opacity: 1; }
     main { max-width: 1100px; margin: 0 auto; padding: 2rem; }
-    section { margin-bottom: 3rem; }
     h2 { color: var(--accent); font-size: 1.2rem; margin: 2.5rem 0 1rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--border); }
-    h3 { color: var(--text); font-size: 1rem; margin-bottom: 0.25rem; }
-    h4 { color: var(--muted); font-size: 0.85rem; text-transform: uppercase; letter-spacing: 0.06em; margin: 1.25rem 0 0.5rem; }
-    p { color: var(--muted); font-size: 0.88rem; margin-bottom: 0.5rem; }
-    .muted-text { color: var(--muted); font-size: 0.85rem; font-style: italic; }
-    .feature-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; margin: 1rem 0; }
-    .feature-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
-    .screenshot { max-width: 100%; border: 1px solid var(--border); border-radius: 6px; margin-top: 0.75rem; display: block; }
-    .screenshot-placeholder { background: #0a0e13; border: 1px dashed var(--border); border-radius: 6px; padding: 2rem 1.5rem; text-align: center; color: var(--muted); font-size: 0.82rem; margin-top: 0.75rem; }
-    .test-results { margin-top: 1rem; }
-    .test-list { list-style: none; }
-    .test-item { border-left: 3px solid var(--border); padding: 0.5rem 0.75rem; margin: 0.4rem 0; background: var(--surface); border-radius: 0 6px 6px 0; }
-    .test-item.passed { border-left-color: var(--green); }
-    .test-item.failed { border-left-color: var(--red); }
-    .test-item.skipped, .test-item.pending { border-left-color: var(--yellow); }
-    .test-header { display: flex; align-items: center; gap: 0.6rem; flex-wrap: wrap; }
-    .test-title { color: var(--text); font-size: 0.85rem; flex: 1; }
-    .test-duration { color: var(--muted); font-size: 0.78rem; white-space: nowrap; }
-    .test-error { background: #1a0000; border: 1px solid var(--red); border-radius: 4px; padding: 0.5rem 0.75rem; font-family: monospace; font-size: 0.78rem; color: var(--red); margin-top: 0.4rem; white-space: pre-wrap; overflow-x: auto; }
-    .badge { display: inline-flex; align-items: center; padding: 0.15rem 0.5rem; border-radius: 10px; font-size: 0.72rem; font-weight: 700; white-space: nowrap; }
-    .badge.green { background: rgba(63,185,80,0.15); color: var(--green); border: 1px solid rgba(63,185,80,0.3); }
-    .badge.red { background: rgba(248,81,73,0.15); color: var(--red); border: 1px solid rgba(248,81,73,0.3); }
+    h3 { color: var(--text); font-size: 1rem; margin: 1.5rem 0 0.75rem; }
+    h4 { color: var(--muted); font-size: 0.9rem; margin: 1rem 0 0.5rem; text-transform: uppercase; letter-spacing: 0.05em; }
+    p { color: var(--muted); margin-bottom: 0.75rem; font-size: 0.9rem; }
+    code { background: #0d1117; border: 1px solid var(--border); border-radius: 4px; padding: 0.15rem 0.4rem; font-family: 'JetBrains Mono', 'Fira Code', monospace; font-size: 0.82rem; color: var(--orange); }
+    pre { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; padding: 1rem 1.25rem; overflow-x: auto; margin: 0.75rem 0; }
+    pre code { background: none; border: none; padding: 0; color: var(--text); font-size: 0.82rem; }
+    .badge { display: inline-flex; align-items: center; gap: 0.3rem; padding: 0.2rem 0.6rem; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+    .badge.green  { background: rgba(63,185,80,0.15);  color: var(--green);  border: 1px solid rgba(63,185,80,0.3); }
     .badge.yellow { background: rgba(210,153,34,0.15); color: var(--yellow); border: 1px solid rgba(210,153,34,0.3); }
-    .badge.muted { background: rgba(139,148,158,0.1); color: var(--muted); border: 1px solid rgba(139,148,158,0.2); }
-    footer { border-top: 1px solid var(--border); padding: 1.5rem 2rem; color: var(--muted); font-size: 0.8rem; text-align: center; margin-top: 3rem; }
+    .badge.red    { background: rgba(248,81,73,0.15);  color: var(--red);    border: 1px solid rgba(248,81,73,0.3); }
+    .badge.blue   { background: rgba(88,166,255,0.15); color: var(--accent); border: 1px solid rgba(88,166,255,0.3); }
+    .badge.purple { background: rgba(188,140,255,0.15);color: var(--purple); border: 1px solid rgba(188,140,255,0.3); }
+    .badge.orange { background: rgba(255,166,87,0.15); color: var(--orange); border: 1px solid rgba(255,166,87,0.3); }
+    .scenario { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.25rem; margin: 1rem 0; }
+    .scenario-header { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.75rem; }
+    .scenario-header h4 { margin: 0; color: var(--text); text-transform: none; letter-spacing: 0; font-size: 0.95rem; }
+    .steps { list-style: none; counter-reset: steps; }
+    .steps li { counter-increment: steps; display: flex; gap: 0.75rem; margin: 0.5rem 0; font-size: 0.88rem; color: var(--text); }
+    .steps li::before { content: counter(steps); background: var(--accent); color: var(--bg); min-width: 1.4rem; height: 1.4rem; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.72rem; font-weight: 700; flex-shrink: 0; margin-top: 0.1rem; }
+    .steps li .expect { color: var(--green); font-size: 0.82rem; }
+    .screenshot-box { background: #0a0e13; border: 1px dashed var(--border); border-radius: 8px; padding: 2.5rem 1.5rem; text-align: center; margin: 1rem 0; color: var(--muted); font-size: 0.85rem; }
+    .screenshot-box .label { font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.08em; margin-top: 0.5rem; color: #444; }
+    .screenshot-box img { max-width: 100%; border-radius: 6px; display: block; margin: 0 auto; }
+    .table-wrap { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; margin: 0.75rem 0; }
+    .service-row { display: flex; align-items: center; justify-content: space-between; padding: 0.6rem 0.9rem; border-bottom: 1px solid var(--border); font-size: 0.88rem; }
+    .service-row:last-child { border-bottom: none; }
+    .service-row .name { font-family: monospace; color: var(--orange); }
+    .service-row .port { color: var(--muted); font-size: 0.8rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+    th { background: #0d1117; color: var(--muted); text-align: left; padding: 0.6rem 0.9rem; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.06em; border-bottom: 1px solid var(--border); }
+    td { padding: 0.6rem 0.9rem; border-bottom: 1px solid rgba(48,54,61,0.5); color: var(--text); vertical-align: top; }
+    tr:last-child td { border-bottom: none; }
+    .note { background: rgba(88,166,255,0.06); border: 1px solid rgba(88,166,255,0.2); border-radius: 6px; padding: 0.75rem 1rem; font-size: 0.85rem; color: var(--muted); margin: 0.75rem 0; }
+    .note strong { color: var(--accent); }
+    .warn-box { background: rgba(210,153,34,0.06); border: 1px solid rgba(210,153,34,0.2); border-radius: 6px; padding: 0.75rem 1rem; font-size: 0.85rem; color: var(--muted); margin: 0.75rem 0; }
+    .warn-box strong { color: var(--yellow); }
+    .section-tag { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.08em; color: var(--purple); font-weight: 600; margin-bottom: 0.75rem; display: block; }
+    a { color: var(--accent); text-decoration: none; }
+    a:hover { text-decoration: underline; }
+    footer { border-top: 1px solid var(--border); padding: 1.5rem 2rem; text-align: center; color: var(--muted); font-size: 0.8rem; margin-top: 3rem; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>TeachersLounge — Living Test Report</h1>
-    <p>Auto-generated by <code>scripts/gen-testing-doc.mjs</code> · Last run: 2026-04-14T04:17:39.226Z</p>
-    <div class="header-meta">
-      <span class="status-pill no-data">⚪ No data</span>
-      
-    </div>
-    <nav>
-      <a href="#auth">Auth / User Service</a>
-    <a href="#tutoring">Tutoring Service</a>
-    <a href="#gaming">Gaming Service</a>
-    <a href="#notifications">Notification Service</a>
-    </nav>
-  </header>
-  <main>
-    
-    <section id="auth">
-      <h2>Auth / User Service</h2>
-      
-        <div class="feature-card">
-          <div class="feature-header">
-            <h3 id="register">Register new user</h3>
-          </div>
-          <p>Registration form submission → success landing on dashboard.</p>
-          <div class="screenshot-placeholder">📸 Screenshot captured on next test run</div>
-        </div>
 
-        <div class="feature-card">
-          <div class="feature-header">
-            <h3 id="login">Login</h3>
-          </div>
-          <p>Login with valid credentials → dashboard visible.</p>
-          <div class="screenshot-placeholder">📸 Screenshot captured on next test run</div>
-        </div>
+<header>
+  <h1>TeachersLounge — Testing Master</h1>
+  <p>Consolidated testing report + guide &middot; Maintained by Petra (PM) &middot; Last updated: 2026-04-13 (session 3)</p>
+  <nav>
+    <a href="#ci-status">CI Status</a>
+    <a href="#open-prs">Open PRs</a>
+    <a href="#stack">Stack Setup</a>
+    <a href="#smoke">Smoke Tests</a>
+    <a href="#chat">Chat / Tutoring</a>
+    <a href="#boss">Boss Battles</a>
+    <a href="#gaming">Gaming / XP</a>
+    <a href="#adaptive">Adaptive Dashboard</a>
+    <a href="#ingestion">Ingestion</a>
+    <a href="#unit">Unit Tests</a>
+    <a href="#ci-gates">CI Gates</a>
+    <a href="#tdd">TDD Standard</a>
+    <a href="#patterns">Test Patterns</a>
+    <a href="#debt">Test Debt</a>
+    <a href="#known">Known Issues</a>
+  </nav>
+</header>
 
-        <div class="feature-card">
-          <div class="feature-header">
-            <h3 id="jwt-refresh">JWT refresh</h3>
-          </div>
-          <p>POST /api/user/auth/refresh returns a new token without re-login.</p>
-          <div class="screenshot-placeholder">📸 Screenshot captured on next test run</div>
-        </div>
+<main>
 
-        <div class="feature-card">
-          <div class="feature-header">
-            <h3 id="gdpr-export">GDPR data export</h3>
-          </div>
-          <p>GET /api/user/profile/export returns user data download.</p>
-          <div class="screenshot-placeholder">📸 Screenshot captured on next test run</div>
-        </div>
-      <div class="test-results">
-        <h4>Test results</h4>
-        <p class="muted-text">No test results yet for this feature.</p>
-      </div>
-    </section>
+<!-- ── CI Status ─────────────────────────────────────────────────── -->
+<section id="ci-status">
+  <h2>CI Status — Service Summary</h2>
+  <p>Living status table — updated after each PR batch.</p>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>Service</th><th>Tests</th><th>Coverage</th><th>CI Status</th><th>Last updated</th></tr>
+      </thead>
+      <tbody>
+        <tr>
+          <td><strong>frontend</strong> (Next.js)</td>
+          <td>748+</td>
+          <td>&ge;80% patch</td>
+          <td><span class="badge green">&#10003; Green</span> <span style="color:var(--muted);font-size:0.8rem">PR #227 Prettier fix merged</span></td>
+          <td style="color:var(--muted);font-size:0.8rem">2026-04-13</td>
+        </tr>
+        <tr>
+          <td><strong>tutoring-service</strong> (Python)</td>
+          <td>passing</td>
+          <td>&ge;80% patch</td>
+          <td><span class="badge yellow">&#8635; PR #237</span> <span style="color:var(--muted);font-size:0.8rem">tl-y3e RAG reformulation — 5-agent review blocking (2 criticals)</span></td>
+          <td style="color:var(--muted);font-size:0.8rem">2026-04-13</td>
+        </tr>
+        <tr>
+          <td><strong>ingestion-service</strong> (Python)</td>
+          <td>passing</td>
+          <td>&ge;80% patch</td>
+          <td><span class="badge yellow">&#8635; In progress</span> <span style="color:var(--muted);font-size:0.8rem">tl-k2q PDF pipeline tests (dink)</span></td>
+          <td style="color:var(--muted);font-size:0.8rem">2026-04-13</td>
+        </tr>
+        <tr>
+          <td><strong>search-service</strong> (Python)</td>
+          <td>passing</td>
+          <td>~90%</td>
+          <td><span class="badge yellow">&#8635; PR #239</span> <span style="color:var(--muted);font-size:0.8rem">tl-afb query expansion — 1 test fix needed</span></td>
+          <td style="color:var(--muted);font-size:0.8rem">2026-04-13</td>
+        </tr>
+        <tr>
+          <td><strong>analytics-service</strong> (Python)</td>
+          <td>passing</td>
+          <td>&rarr; 90%</td>
+          <td><span class="badge yellow">&#8635; In progress</span> <span style="color:var(--muted);font-size:0.8rem">tl-nsg full pytest suite (polecat)</span></td>
+          <td style="color:var(--muted);font-size:0.8rem">2026-04-13</td>
+        </tr>
+        <tr>
+          <td><strong>eval-service</strong> (Python)</td>
+          <td>passing</td>
+          <td>&ge;80% patch</td>
+          <td><span class="badge yellow">&#8635; In progress</span> <span style="color:var(--muted);font-size:0.8rem">tl-hj6 expanding to 90% (polecat shiny)</span></td>
+          <td style="color:var(--muted);font-size:0.8rem">2026-04-13</td>
+        </tr>
+        <tr>
+          <td><strong>user-service</strong> (Go)</td>
+          <td>passing</td>
+          <td>~90%</td>
+          <td><span class="badge yellow">&#8635; PR #238</span> <span style="color:var(--muted);font-size:0.8rem">tl-d3s GDPR export — QF1008 lint fix (bean)</span></td>
+          <td style="color:var(--muted);font-size:0.8rem">2026-04-13</td>
+        </tr>
+        <tr>
+          <td><strong>gaming-service</strong> (Go)</td>
+          <td>passing</td>
+          <td>~87%</td>
+          <td><span class="badge green">&#10003; Green</span> <span style="color:var(--muted);font-size:0.8rem">N+1 fix #221, leaderboard tests #222</span></td>
+          <td style="color:var(--muted);font-size:0.8rem">2026-04-13</td>
+        </tr>
+        <tr>
+          <td><strong>notification-service</strong> (Go)</td>
+          <td>passing</td>
+          <td>&ge;80% patch</td>
+          <td><span class="badge yellow">&#8635; In progress</span> <span style="color:var(--muted);font-size:0.8rem">tl-w8y carn fixing errcheck lint</span></td>
+          <td style="color:var(--muted);font-size:0.8rem">2026-04-13</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
 
-    <section id="tutoring">
-      <h2>Tutoring Service</h2>
-      
-        <div class="feature-card">
-          <div class="feature-header">
-            <h3 id="start-session">Start tutoring session</h3>
-          </div>
-          <p>Chat panel renders with empty thread ready for input.</p>
-          <div class="screenshot-placeholder">📸 Screenshot captured on next test run</div>
-        </div>
+<!-- ── Open PRs ───────────────────────────────────────────────────── -->
+<section id="open-prs">
+  <h2>Open PRs — Test Status</h2>
 
-        <div class="feature-card">
-          <div class="feature-header">
-            <h3 id="send-receive">Send message, receive tutor response</h3>
-          </div>
-          <p>User sends a message; Prof. Nova replies via SSE stream.</p>
-          <div class="screenshot-placeholder">📸 Screenshot captured on next test run</div>
-        </div>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>PR</th><th>Branch</th><th>CI</th><th>Blocker</th></tr></thead>
+      <tbody>
+        <tr>
+          <td><a href="../../pull/237">#237</a></td>
+          <td><code>feat/tl-y3e-rag-reformulation</code></td>
+          <td><span class="badge yellow">&#8635; Review blocking</span></td>
+          <td>5-agent review found 2 criticals: TypeError escape + double-user-turn ordering bug. Alai fixing.</td>
+        </tr>
+        <tr>
+          <td><a href="../../pull/238">#238</a></td>
+          <td><code>fix/tl-d3s-gdpr-sync-export</code></td>
+          <td><span class="badge red">&#10060; Lint fail</span></td>
+          <td>golangci QF1008 in 4 pre-existing lines. Bean fixing.</td>
+        </tr>
+        <tr>
+          <td><a href="../../pull/239">#239</a></td>
+          <td><code>feat/tl-afb-search-query-expansion</code></td>
+          <td><span class="badge red">&#10060; 1 test fail</span></td>
+          <td>Wrong patch path in endpoint wiring test. Dink fixing.</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
 
-        <div class="feature-card">
-          <div class="feature-header">
-            <h3 id="context-summarisation">Context summarisation at 40+ messages</h3>
-          </div>
-          <p>POST /api/chat/summarise is reachable and returns a summary.</p>
-          <div class="screenshot-placeholder">📸 Screenshot captured on next test run</div>
-        </div>
+  <h3>Recently Merged — Session 3 (2026-04-13)</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>PR</th><th>Bead</th><th>Description</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td><a href="../../pull/227">#227</a></td><td>chore</td><td>Prettier --write on 8 pre-existing frontend files</td><td><span class="badge green">&#10003; Merged</span></td></tr>
+        <tr><td><a href="../../pull/226">#226</a></td><td><code>tl-udx</code></td><td>Session summary endpoint (GET /v1/sessions/{id}/summary)</td><td><span class="badge green">&#10003; Merged</span></td></tr>
+        <tr><td><a href="../../pull/225">#225</a></td><td><code>tl-94n</code></td><td>Qdrant snapshot alerting + helm render tests</td><td><span class="badge green">&#10003; Admin-merged</span> (infra-only)</td></tr>
+      </tbody>
+    </table>
+  </div>
 
-        <div class="feature-card">
-          <div class="feature-header">
-            <h3 id="adaptive-dashboard">Adaptive dashboard</h3>
-          </div>
-          <p>Mastery heatmap renders after study events.</p>
-          <div class="screenshot-placeholder">📸 Screenshot captured on next test run</div>
-        </div>
-      <div class="test-results">
-        <h4>Test results</h4>
-        <p class="muted-text">No test results yet for this feature.</p>
-      </div>
-    </section>
+  <h3>Recently Merged — Session 2 (2026-04-13)</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>PR</th><th>Bead</th><th>Description</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td><a href="../../pull/223">#223</a></td><td><code>tl-udx</code></td><td>Learning style detection tests (tutoring-service)</td><td><span class="badge green">&#10003; Merged</span></td></tr>
+        <tr><td><a href="../../pull/222">#222</a></td><td><code>tl-kc7</code></td><td>Leaderboard API tests (gaming-service, 24 tests)</td><td><span class="badge green">&#10003; Merged</span></td></tr>
+        <tr><td><a href="../../pull/221">#221</a></td><td><code>tl-7wv</code></td><td>N+1 batch mastery fix + notification errcheck</td><td><span class="badge green">&#10003; Merged</span></td></tr>
+        <tr><td><a href="../../pull/220">#220</a></td><td><code>tl-he3</code></td><td>Search-service Prometheus histogram (~90% coverage)</td><td><span class="badge green">&#10003; Merged</span></td></tr>
+        <tr><td><a href="../../pull/219">#219</a></td><td><code>tl-dye</code></td><td>Boss battle LootReveal (useRef guard fix)</td><td><span class="badge green">&#10003; Merged</span></td></tr>
+      </tbody>
+    </table>
+  </div>
 
-    <section id="gaming">
-      <h2>Gaming Service</h2>
-      
-        <div class="feature-card">
-          <div class="feature-header">
-            <h3 id="streak">Streak tracking</h3>
-          </div>
-          <p>Study event increments streak counter.</p>
-          <div class="screenshot-placeholder">📸 Screenshot captured on next test run</div>
-        </div>
+  <h3>Recently Merged — Session 1 (2026-04-13)</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>PR</th><th>Bead</th><th>Description</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td><a href="../../pull/218">#218</a></td><td><code>tl-7wv</code></td><td>Boss progression mastery-gate (Go)</td><td><span class="badge green">&#10003; Merged</span></td></tr>
+        <tr><td><a href="../../pull/216">#216</a></td><td>chore</td><td>CONTRIBUTING.md + TDD spec + 5-agent mandate</td><td><span class="badge green">&#10003; Merged</span></td></tr>
+        <tr><td><a href="../../pull/215">#215</a></td><td><code>tl-94n</code></td><td>Qdrant snapshot alerting + restore runbook</td><td><span class="badge green">&#10003; Merged</span></td></tr>
+        <tr><td><a href="../../pull/214">#214</a></td><td><code>tl-8be</code></td><td>Qdrant HNSW benchmark</td><td><span class="badge green">&#10003; Merged</span></td></tr>
+        <tr><td><a href="../../pull/213">#213</a></td><td><code>tl-8co</code></td><td>Context window management</td><td><span class="badge green">&#10003; Merged</span></td></tr>
+        <tr><td><a href="../../pull/211">#211</a></td><td><code>tl-7ot</code></td><td>Boss battle backend (gaming-service)</td><td><span class="badge green">&#10003; Merged</span></td></tr>
+        <tr><td><a href="../../pull/210">#210</a></td><td><code>tl-c47</code></td><td>Playwright E2E — 7 user journeys</td><td><span class="badge green">&#10003; Merged</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
 
-        <div class="feature-card">
-          <div class="feature-header">
-            <h3 id="streak-freeze">Streak freeze purchase (50 gems)</h3>
-          </div>
-          <p>POST /api/gaming/streak/freeze activates freeze.</p>
-          <div class="screenshot-placeholder">📸 Screenshot captured on next test run</div>
-        </div>
+<!-- ── Stack Setup ───────────────────────────────────────────────── -->
+<section id="stack">
+  <h2>Stack Setup</h2>
+  <p>All integration testing runs against the Docker Compose stack on the <strong>pop-os</strong> dev machine (halworker85). Services must be healthy before running smoke tests.</p>
 
-        <div class="feature-card">
-          <div class="feature-header">
-            <h3 id="boss-entry">Boss battle entry</h3>
-          </div>
-          <p>/boss-battle/1 renders title card with name and stats.</p>
-          <div class="screenshot-placeholder">📸 Screenshot captured on next test run</div>
-        </div>
+  <h3>Start the stack</h3>
+  <pre><code># On pop-os: ~/gt/teachers-lounge
+cp .env.example .env.local   # fill ANTHROPIC_API_KEY, STRIPE_SECRET_KEY, etc.
+docker compose --env-file .env.local up --build</code></pre>
 
-        <div class="feature-card">
-          <div class="feature-header">
-            <h3 id="boss-active">Boss battle active</h3>
-          </div>
-          <p>Three.js canvas mounts with HP bars; WS receives damage events.</p>
-          <div class="screenshot-placeholder">📸 Screenshot captured on next test run</div>
-        </div>
+  <h3>Service health (docker compose ps)</h3>
+  <div class="table-wrap">
+    <div class="service-row"><span class="name">postgres</span><span class="port">127.0.0.1:5432</span><span><span class="badge green">&#10003; healthy</span></span></div>
+    <div class="service-row"><span class="name">redis</span><span class="port">127.0.0.1:6379</span><span><span class="badge green">&#10003; healthy</span></span></div>
+    <div class="service-row"><span class="name">ai-gateway (LiteLLM)</span><span class="port">127.0.0.1:4000</span><span><span class="badge green">&#10003; healthy</span></span></div>
+    <div class="service-row"><span class="name">user-service</span><span class="port">127.0.0.1:8080</span><span><span class="badge green">&#10003; healthy</span></span></div>
+    <div class="service-row"><span class="name">tutoring-service</span><span class="port">127.0.0.1:8000</span><span><span class="badge green">&#10003; healthy</span></span></div>
+    <div class="service-row"><span class="name">gaming-service</span><span class="port">127.0.0.1:8083</span><span><span class="badge green">&#10003; healthy</span></span></div>
+    <div class="service-row"><span class="name">analytics-service</span><span class="port">127.0.0.1:8085</span><span><span class="badge green">&#10003; healthy</span></span></div>
+    <div class="service-row"><span class="name">ingestion-service</span><span class="port">127.0.0.1:8001</span><span><span class="badge yellow">&#8635; building</span></span></div>
+    <div class="service-row"><span class="name">search-service</span><span class="port">127.0.0.1:8002</span><span><span class="badge yellow">&#8635; building</span></span></div>
+    <div class="service-row"><span class="name">notification-service</span><span class="port">127.0.0.1:9000</span><span><span class="badge yellow">&#8635; building</span></span></div>
+    <div class="service-row"><span class="name">qdrant</span><span class="port">127.0.0.1:6333</span><span><span class="badge yellow">&#8635; starting</span></span></div>
+    <div class="service-row"><span class="name">frontend (Next.js)</span><span class="port">0.0.0.0:3000</span><span><span class="badge yellow">&#9888; healthcheck false-neg*</span></span></div>
+  </div>
+  <p>*Frontend healthcheck false-negative: BusyBox wget resolves <code>localhost</code> as IPv6 but Next.js binds IPv4. Fixed in docker-compose.yml — clears on next restart. <code>curl localhost:3000/api/health</code> returns <code>{"status":"ok"}</code>.</p>
 
-        <div class="feature-card">
-          <div class="feature-header">
-            <h3 id="boss-victory">Boss battle victory</h3>
-          </div>
-          <p>Loot reveal modal appears after battle end.</p>
-          <div class="screenshot-placeholder">📸 Screenshot captured on next test run</div>
-        </div>
+  <div class="screenshot-box" id="ss-stack">
+    <div>&#128248; Screenshot: <strong>docker compose ps</strong> output — all containers healthy</div>
+    <div class="label">pending — shen capturing from pop-os</div>
+  </div>
+</section>
 
-        <div class="feature-card">
-          <div class="feature-header">
-            <h3 id="leaderboard">Leaderboard</h3>
-          </div>
-          <p>Rankings tab renders leaderboard with 5+ entries.</p>
-          <div class="screenshot-placeholder">📸 Screenshot captured on next test run</div>
-        </div>
+<!-- ── Smoke Tests ───────────────────────────────────────────────── -->
+<section id="smoke">
+  <h2>Smoke Tests</h2>
+  <p>Quick health checks — run after every stack restart.</p>
 
-        <div class="feature-card">
-          <div class="feature-header">
-            <h3 id="shop">Shop catalog + purchase</h3>
-          </div>
-          <p>/shop renders catalog; purchase API is reachable.</p>
-          <div class="screenshot-placeholder">📸 Screenshot captured on next test run</div>
-        </div>
-      <div class="test-results">
-        <h4>Test results</h4>
-        <p class="muted-text">No test results yet for this feature.</p>
-      </div>
-    </section>
+  <pre><code>curl -s localhost:8000/healthz | jq    # tutoring-service
+curl -s localhost:8080/healthz | jq    # user-service
+curl -s localhost:8083/healthz | jq    # gaming-service
+curl -s localhost:8085/healthz | jq    # analytics-service
+curl -s localhost:8001/healthz | jq    # ingestion-service
+curl -s localhost:8002/healthz | jq    # search-service
+curl -s localhost:9000/healthz | jq    # notification-service
+curl -s localhost:3000/api/health      # frontend</code></pre>
 
-    <section id="notifications">
-      <h2>Notification Service</h2>
-      
-        <div class="feature-card">
-          <div class="feature-header">
-            <h3 id="streak-risk">Streak-risk push notification</h3>
-          </div>
-          <p>Notification service sends push when streak is at 20–24 h (verified via API).</p>
-          <div class="screenshot-placeholder">📸 Screenshot captured on next test run</div>
-        </div>
+  <div class="note"><strong>Note:</strong> All services expose <code>/healthz</code> (liveness) and <code>/readyz</code> (readiness). Liveness checks DB + Redis ping. Readiness additionally checks AI gateway reachable.</div>
 
-        <div class="feature-card">
-          <div class="feature-header">
-            <h3 id="rag-search">Search / RAG curriculum retrieval</h3>
-          </div>
-          <p>GET /api/search returns curriculum results; RAG context appears in tutor response.</p>
-          <div class="screenshot-placeholder">📸 Screenshot captured on next test run</div>
-        </div>
-      <div class="test-results">
-        <h4>Test results</h4>
-        <p class="muted-text">No test results yet for this feature.</p>
-      </div>
-    </section>
-  </main>
-  <footer>
-    Generated by <code>scripts/gen-testing-doc.mjs</code> &mdash;
-    run <code>cd e2e &amp;&amp; npm test &amp;&amp; cd .. &amp;&amp; node scripts/gen-testing-doc.mjs</code> to refresh.
-  </footer>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Scenario</th><th>Status</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td>User registration + login</td><td><span class="badge yellow">&#9633; pending</span></td><td>Run against localhost:3000</td></tr>
+        <tr><td>Chat with tutoring service</td><td><span class="badge yellow">&#9633; pending</span></td><td>Requires ANTHROPIC_API_KEY</td></tr>
+        <tr><td>File upload &rarr; ingestion</td><td><span class="badge yellow">&#9633; pending</span></td><td>Requires GCS bucket config</td></tr>
+        <tr><td>Gaming: XP award</td><td><span class="badge yellow">&#9633; pending</span></td><td></td></tr>
+        <tr><td>Boss battle flow</td><td><span class="badge yellow">&#9633; pending</span></td><td></td></tr>
+        <tr><td>Flashcard creation + review</td><td><span class="badge yellow">&#9633; pending</span></td><td></td></tr>
+        <tr><td>Leaderboard display</td><td><span class="badge yellow">&#9633; pending</span></td><td></td></tr>
+        <tr><td>Subscription flow (Stripe test)</td><td><span class="badge yellow">&#9633; pending</span></td><td>Requires Stripe test keys</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── Chat / Tutoring ───────────────────────────────────────────── -->
+<section id="chat">
+  <h2>Chat / Tutoring</h2>
+  <span class="section-tag">tutoring-service &middot; port 8000</span>
+
+  <div class="screenshot-box" id="ss-chat">
+    <div>&#128248; Screenshot: <strong>Chat interface</strong> — tutoring session in progress, student question + AI tutor response visible</div>
+    <div class="label">pending — shen capturing from pop-os</div>
+  </div>
+
+  <div class="scenario">
+    <div class="scenario-header"><span class="badge blue">TC-01</span><h4>New session + first message</h4></div>
+    <ol class="steps">
+      <li>Register a new student account at <code>localhost:3000/register</code><span class="expect"> &rarr; redirected to dashboard</span></li>
+      <li>Navigate to Chat from the sidebar</li>
+      <li>Type: <em>"Explain the photoelectric effect"</em> and send<span class="expect"> &rarr; AI tutor responds within ~3s with SSE streaming</span></li>
+      <li>Check session created: <code>GET /v1/sessions</code> returns the new session ID</li>
+    </ol>
+  </div>
+
+  <div class="scenario">
+    <div class="scenario-header"><span class="badge blue">TC-02</span><h4>Context window + RAG query reformulation</h4></div>
+    <ol class="steps">
+      <li>Send 5+ messages in the same session</li>
+      <li>Use a pronoun reference: <em>"Can you explain that equation again?"</em><span class="expect"> &rarr; tutor understands the reference (RAG reformulation rewrites query before Search Service call)</span></li>
+      <li>Check tutoring-service logs: <code>reformulate_query</code> entry should appear with the rewritten query</li>
+      <li>Verify learning style hint appears in system prompt (LOG_LEVEL=debug)</li>
+    </ol>
+  </div>
+
+  <div class="scenario">
+    <div class="scenario-header"><span class="badge blue">TC-03</span><h4>Session summary endpoint</h4></div>
+    <ol class="steps">
+      <li>After 3+ exchanges, call: <code>GET /v1/sessions/{id}/summary</code> with auth header<span class="expect"> &rarr; returns message_count, avg_response_time_ms, topics, session_duration_seconds</span></li>
+      <li>Verify 403 on another user's session ID</li>
+      <li>Verify 404 on a nonexistent session ID</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ── Boss Battles ──────────────────────────────────────────────── -->
+<section id="boss">
+  <h2>Boss Battles</h2>
+  <span class="section-tag">gaming-service &middot; port 8083 &middot; frontend Three.js</span>
+
+  <div class="screenshot-box" id="ss-boss-entry">
+    <div>&#128248; Screenshot: <strong>Boss battle entry screen</strong> — boss selection, mastery gate progress bars</div>
+    <div class="label">pending — shen capturing from pop-os</div>
+  </div>
+
+  <div class="screenshot-box" id="ss-boss-battle">
+    <div>&#128248; Screenshot: <strong>Active boss battle</strong> — Three.js scene with boss HP bar, player HP bar, combo counter, round indicator</div>
+    <div class="label">pending — shen capturing from pop-os</div>
+  </div>
+
+  <div class="scenario">
+    <div class="scenario-header"><span class="badge purple">TC-10</span><h4>Mastery gate check</h4></div>
+    <ol class="steps">
+      <li>Navigate to Boss Battles from the sidebar</li>
+      <li>Select a boss chapter<span class="expect"> &rarr; gate shows mastery % across concept paths; boss locked if below threshold</span></li>
+      <li>If unlocked, click <strong>Enter Battle</strong><span class="expect"> &rarr; Three.js battle scene loads, WebSocket connects (Network tab: WS to localhost:8083/gaming/boss/{id}/stream)</span></li>
+    </ol>
+  </div>
+
+  <div class="scenario">
+    <div class="scenario-header"><span class="badge purple">TC-11</span><h4>Battle flow — answer cycle</h4></div>
+    <ol class="steps">
+      <li>Battle starts: boss HP and player HP bars appear<span class="expect"> &rarr; hp event received over WS, both HPs render</span></li>
+      <li>Submit a correct answer<span class="expect"> &rarr; damage event: boss HP drops, combo counter increments</span></li>
+      <li>Submit a wrong answer<span class="expect"> &rarr; player HP drops, combo resets</span></li>
+      <li>Defeat boss (boss HP &rarr; 0)<span class="expect"> &rarr; victory screen, XP awarded, loot reveal plays</span></li>
+    </ol>
+  </div>
+
+  <div class="screenshot-box" id="ss-loot">
+    <div>&#128248; Screenshot: <strong>Loot reveal screen</strong> — staggered item reveal animation (LootReveal component)</div>
+    <div class="label">pending — shen capturing from pop-os</div>
+  </div>
+
+  <div class="scenario">
+    <div class="scenario-header"><span class="badge purple">TC-12</span><h4>Boss defeat &rarr; XP + notification</h4></div>
+    <ol class="steps">
+      <li>After boss defeat, check gaming-service logs: <code>boss_defeats_total</code> Prometheus counter incremented</li>
+      <li>Verify XP awarded: <code>GET /gaming/profile</code> shows updated total_xp</li>
+      <li>Check notification-service WS push: browser receives boss_unlock event if new boss unlocked</li>
+    </ol>
+  </div>
+</section>
+
+<!-- ── Gaming / XP ───────────────────────────────────────────────── -->
+<section id="gaming">
+  <h2>Gaming / XP &amp; Store</h2>
+  <span class="section-tag">gaming-service &middot; port 8083</span>
+
+  <div class="scenario">
+    <div class="scenario-header"><span class="badge orange">TC-20</span><h4>XP award on correct answer</h4></div>
+    <ol class="steps">
+      <li>Answer a tutoring question correctly<span class="expect"> &rarr; POST /gaming/xp fired with reason=correct_answer</span></li>
+      <li>Check profile: <code>GET /gaming/profile</code> &rarr; xp increased, level may have changed</li>
+    </ol>
+  </div>
+
+  <div class="scenario">
+    <div class="scenario-header"><span class="badge orange">TC-21</span><h4>Leaderboard</h4></div>
+    <ol class="steps">
+      <li>Navigate to Leaderboard in the sidebar</li>
+      <li>Verify weekly, monthly, all-time tabs each load<span class="expect"> &rarr; table shows rank, username, XP; student's row highlighted</span></li>
+    </ol>
+  </div>
+
+  <div class="scenario">
+    <div class="scenario-header"><span class="badge orange">TC-22</span><h4>Shop purchase</h4></div>
+    <ol class="steps">
+      <li>Navigate to Shop</li>
+      <li>Purchase a cosmetic item with sufficient coins<span class="expect"> &rarr; coins deducted, item added to inventory</span></li>
+      <li>Attempt purchase with insufficient coins<span class="expect"> &rarr; error "insufficient coins"</span></li>
+    </ol>
+  </div>
+
+  <div class="screenshot-box" id="ss-leaderboard">
+    <div>&#128248; Screenshot: <strong>Leaderboard</strong> — weekly tab, top 10 students, current user highlighted</div>
+    <div class="label">pending — shen capturing from pop-os</div>
+  </div>
+</section>
+
+<!-- ── Adaptive Dashboard ────────────────────────────────────────── -->
+<section id="adaptive">
+  <h2>Adaptive Dashboard</h2>
+  <span class="section-tag">frontend &middot; analytics-service &middot; tutoring-service</span>
+
+  <div class="screenshot-box" id="ss-adaptive">
+    <div>&#128248; Screenshot: <strong>Adaptive dashboard</strong> — mastery heatmap, upcoming reviews, weak concept alerts, learning style indicator dial</div>
+    <div class="label">pending — shen capturing from pop-os</div>
+  </div>
+
+  <div class="scenario">
+    <div class="scenario-header"><span class="badge green">TC-30</span><h4>Mastery heatmap renders</h4></div>
+    <ol class="steps">
+      <li>Navigate to <strong>Dashboard &rarr; Adaptive</strong></li>
+      <li>Verify mastery heatmap loads with concept nodes<span class="expect"> &rarr; colour-coded by mastery level (green high, red low)</span></li>
+      <li>Verify "Upcoming Reviews" panel shows spaced-repetition schedule</li>
+      <li>Verify "Weak Concepts" alerts list low-mastery areas</li>
+    </ol>
+  </div>
+
+  <div class="scenario">
+    <div class="scenario-header"><span class="badge green">TC-31</span><h4>Learning style indicator</h4></div>
+    <ol class="steps">
+      <li>Complete the learning style assessment: Profile &rarr; Learning Style</li>
+      <li>Return to Adaptive Dashboard<span class="expect"> &rarr; dial shows Visual/Verbal, Active/Reflective dimensions</span></li>
+      <li>Send a question in chat<span class="expect"> &rarr; tutor adapts to detected style (visual learner gets diagram references)</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- ── Ingestion ─────────────────────────────────────────────────── -->
+<section id="ingestion">
+  <h2>File Ingestion + Search</h2>
+  <span class="section-tag">ingestion-service &middot; search-service &middot; qdrant</span>
+
+  <div class="scenario">
+    <div class="scenario-header"><span class="badge yellow">TC-40</span><h4>PDF upload &rarr; chunking &rarr; search</h4></div>
+    <ol class="steps">
+      <li>Upload a PDF via the curriculum upload UI (or: <code>POST /ingest/upload</code> multipart)</li>
+      <li>Monitor ingestion-service logs: chunk extraction, embedding, Qdrant upsert<span class="expect"> &rarr; Celery task completes, collection updated</span></li>
+      <li>Search for content from the PDF: <code>GET /v1/search?q=&lt;term&gt;</code><span class="expect"> &rarr; chunks from the PDF appear in results</span></li>
+    </ol>
+  </div>
+
+  <div class="scenario">
+    <div class="scenario-header"><span class="badge yellow">TC-41</span><h4>Table extraction</h4></div>
+    <ol class="steps">
+      <li>Upload a PDF containing a table</li>
+      <li>Query search-service for table content<span class="expect"> &rarr; chunk with metadata type=table returned, content as markdown table</span></li>
+    </ol>
+  </div>
+
+  <div class="scenario">
+    <div class="scenario-header"><span class="badge yellow">TC-42</span><h4>Query expansion (tl-afb)</h4></div>
+    <ol class="steps">
+      <li>Perform a short ambiguous search: <code>GET /v1/search?q=why%3F&amp;context_turns=tutor:+gas+laws</code></li>
+      <li>Check search-service logs for <code>expand_query</code> call and rewritten query<span class="expect"> &rarr; expanded query used for embedding + rerank</span></li>
+      <li>Shut down AI gateway, repeat search<span class="expect"> &rarr; graceful fallback to raw query, WARNING logged, search_query_expansion_total{outcome="fallback_error"} incremented</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- ── Unit Tests ────────────────────────────────────────────────── -->
+<section id="unit">
+  <h2>Unit &amp; Integration Tests</h2>
+
+  <h3>Run locally</h3>
+
+  <h4>Frontend (Next.js / Jest)</h4>
+  <pre><code>cd frontend
+npm test -- --watchAll=false    # all Jest tests (CI mode)
+npm run lint                     # ESLint
+npm run format:check             # Prettier</code></pre>
+
+  <h4>Python services</h4>
+  <pre><code>cd services/&lt;service-name&gt;
+pip install -r requirements.txt
+pytest --cov=app --cov-report=term-missing
+ruff check .</code></pre>
+
+  <h4>Go services</h4>
+  <pre><code>cd services/&lt;service-name&gt;
+go test ./...
+go test ./... -coverprofile=coverage.out &amp;&amp; go tool cover -summary=coverage.out
+go vet ./...
+golangci-lint run</code></pre>
+
+  <h4>Full stack (Docker Compose on pop-os)</h4>
+  <pre><code>cp .env.example .env.local
+docker compose --env-file .env.local up --build
+# Frontend: http://&lt;machine-ip&gt;:3000</code></pre>
+
+  <h3>Coverage targets</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Service</th><th>Language</th><th>Current</th><th>Target</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>frontend</td><td>TypeScript</td><td>&ge;80% patch</td><td>80%</td><td><span class="badge green">&#10003;</span></td></tr>
+        <tr><td>tutoring-service</td><td>Python</td><td>&ge;80% patch</td><td>90%</td><td><span class="badge yellow">&#8593; in progress</span></td></tr>
+        <tr><td>ingestion-service</td><td>Python</td><td>&ge;80% patch</td><td>90%</td><td><span class="badge yellow">&#8593; in progress</span></td></tr>
+        <tr><td>search-service</td><td>Python</td><td>~90%</td><td>90%</td><td><span class="badge green">&#10003;</span></td></tr>
+        <tr><td>analytics-service</td><td>Python</td><td>&ge;80% patch</td><td>90%</td><td><span class="badge yellow">&#8593; in progress</span></td></tr>
+        <tr><td>eval-service</td><td>Python</td><td>&ge;80% patch</td><td>90%</td><td><span class="badge yellow">&#8593; in progress</span></td></tr>
+        <tr><td>user-service</td><td>Go</td><td>~90%</td><td>90%</td><td><span class="badge green">&#10003;</span></td></tr>
+        <tr><td>gaming-service</td><td>Go</td><td>~87%</td><td>90%</td><td><span class="badge yellow">&#8593; in progress</span></td></tr>
+        <tr><td>notification-service</td><td>Go</td><td>&ge;80% patch</td><td>90%</td><td><span class="badge yellow">&#8593; in progress</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── CI Gates ──────────────────────────────────────────────────── -->
+<section id="ci-gates">
+  <h2>CI Gates</h2>
+  <p>All gates enforced on every PR via GitHub Actions. Any failure blocks merge.</p>
+
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Gate</th><th>Threshold</th><th>Enforced by</th></tr></thead>
+      <tbody>
+        <tr><td>Patch test coverage</td><td>&ge;80% legacy / &ge;90% new features (PR #144+)</td><td>Codecov</td></tr>
+        <tr><td>Frontend tests</td><td>all pass</td><td>GitHub Actions / Jest</td></tr>
+        <tr><td>Go tests</td><td>all pass</td><td>GitHub Actions</td></tr>
+        <tr><td>Python tests</td><td>all pass</td><td>GitHub Actions / pytest</td></tr>
+        <tr><td>Prettier format</td><td>clean</td><td>GitHub Actions</td></tr>
+        <tr><td>ESLint</td><td>clean</td><td>GitHub Actions</td></tr>
+        <tr><td>ruff</td><td>clean</td><td>GitHub Actions</td></tr>
+        <tr><td>go vet</td><td>clean</td><td>GitHub Actions</td></tr>
+        <tr><td>golangci-lint</td><td>clean</td><td>GitHub Actions</td></tr>
+        <tr><td>CodeQL</td><td>no new HIGH/CRITICAL</td><td>GitHub Advanced Security</td></tr>
+        <tr><td>5-agent review</td><td>all 5 agents must post + no blocking issues</td><td>PM (Petra)</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>5-Agent Review Matrix (required on every PR)</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Agent</th><th>Checks</th></tr></thead>
+      <tbody>
+        <tr><td><strong>code-reviewer</strong></td><td>Logic correctness, bug risk, security vulnerabilities, code quality</td></tr>
+        <tr><td><strong>silent-failure-hunter</strong></td><td>Error handling, catch blocks, silent failures, fallback paths</td></tr>
+        <tr><td><strong>type-design-analyzer</strong></td><td>Type invariants, encapsulation, enforcement quality</td></tr>
+        <tr><td><strong>comment-analyzer</strong></td><td>Comment accuracy vs. code, WHY vs. WHAT, technical debt</td></tr>
+        <tr><td><strong>pr-test-analyzer</strong></td><td>Coverage completeness, missing edge cases, test quality</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── TDD Standard ───────────────────────────────────────────────── -->
+<section id="tdd">
+  <h2>TDD Standard &amp; PR Checklist</h2>
+  <p>Melania mandate (cross-rig): tests before implementation. All paths. No happy-path-only PRs. Enforced by Petra at review time.</p>
+
+  <h3>TDD Checklist — every PR must check all boxes</h3>
+  <div class="scenario">
+    <ul style="list-style:none;line-height:2">
+      <li>&#9744; Tests written <strong>alongside or before</strong> implementation (not retrofitted)</li>
+      <li>&#9744; Happy path covered</li>
+      <li>&#9744; At least one error / edge-case test per exported function</li>
+      <li>&#9744; Coverage &ge;80% on new code (Codecov will report)</li>
+      <li>&#9744; No mocking of internal code — only mock at system boundaries (DB, external HTTP, FCM)</li>
+      <li>&#9744; Race detector clean (<code>go test -race</code> for Go services)</li>
+      <li>&#9744; Lint clean (<code>ruff check</code> / <code>go vet + golangci-lint</code> / <code>eslint</code>)</li>
+    </ul>
+    <p style="margin-top:0.75rem;color:var(--red);font-size:0.85rem">&#9888; PRs with zero new tests for new feature code are rejected without review.</p>
+  </div>
+
+  <h3>PR Test Plan Template</h3>
+  <pre><code>## Checklist
+- [ ] Tests written (TDD) — list test files added
+- [ ] Coverage &ge;80% on new code
+- [ ] Docstrings on all new functions/classes
+- [ ] Lint clean
+- [ ] No secrets committed
+
+## How to test
+&lt;step-by-step commands to verify the change works&gt;</code></pre>
+
+  <h3>PR Test Plan Standard (cross-rig, per Melania)</h3>
+  <p>All <code>- [ ]</code> checkboxes must be checked before merge. A PR body with unchecked boxes = tests not done = block. Reviewer must verify, not trust.</p>
+</section>
+
+<!-- ── Test Patterns ──────────────────────────────────────────────── -->
+<section id="patterns">
+  <h2>Test Patterns by Layer</h2>
+  <p>Standard patterns for the TL stack. New crew: read this before writing your first test.</p>
+
+  <h3>Go services (user-service, gaming-service, notification-service)</h3>
+  <pre><code>// Minimal table-driven test pattern
+func TestHandlerName(t *testing.T) {
+    cases := []struct {
+        name    string
+        input   RequestType
+        want    int // HTTP status
+        wantErr bool
+    }{
+        {"happy path", validInput, http.StatusOK, false},
+        {"bad request", invalidInput, http.StatusBadRequest, true},
+    }
+    for _, tc := range cases {
+        t.Run(tc.name, func(t *testing.T) {
+            // ... assert
+        })
+    }
+}</code></pre>
+  <p><strong>DB mocking:</strong> use <code>go-sqlmock</code> or in-memory SQLite (<code>modernc.org/sqlite</code>) — never mock production Postgres schema logic away. <strong>Redis:</strong> use <code>miniredis</code>. <strong>HTTP clients:</strong> <code>httptest.NewServer</code>.</p>
+  <p><strong>Cross-rig note (from cfutons):</strong> equivalent of cfutons' <code>suppressAuth</code> assertion in TL is verifying the JWT middleware short-circuits with 401 on bad/missing token — assert this explicitly in every handler test that touches an authenticated route.</p>
+
+  <h3>Python services (tutoring-service, search-service, ingestion-service)</h3>
+  <pre><code># pytest + httpx TestClient pattern
+def test_endpoint_happy_path(client: TestClient):
+    resp = client.post("/endpoint", json={"key": "value"})
+    assert resp.status_code == 200
+    assert resp.json()["field"] == expected
+
+def test_endpoint_validation_error(client: TestClient):
+    resp = client.post("/endpoint", json={})  # missing required fields
+    assert resp.status_code == 422</code></pre>
+  <p><strong>DB:</strong> use <code>pytest-postgresql</code> or SQLite in-memory. <strong>External HTTP:</strong> <code>respx</code> for httpx mocks. <strong>LLM calls:</strong> always mock — never hit real AI gateway in unit tests.</p>
+  <p><strong>Clock injection (from cfutons):</strong> never call <code>datetime.now()</code> directly in business logic. Accept a <code>clock</code> callable parameter so tests can inject a fixed time. This prevents flaky tests on streak/expiry logic.</p>
+
+  <h3>TypeScript / Next.js (frontend)</h3>
+  <pre><code>// Jest + React Testing Library pattern
+describe('ComponentName', () =&gt; {
+  it('renders correctly on happy path', () =&gt; {
+    render(&lt;ComponentName prop="value" /&gt;);
+    expect(screen.getByRole('button', { name: /submit/i })).toBeInTheDocument();
+  });
+
+  it('shows error state on failed fetch', async () =&gt; {
+    server.use(http.get('/api/data', () =&gt; HttpResponse.error()));
+    render(&lt;ComponentName /&gt;);
+    expect(await screen.findByText(/error/i)).toBeInTheDocument();
+  });
+});</code></pre>
+  <p><strong>MSW:</strong> use Mock Service Worker for API mocking — do not mock <code>fetch</code> directly. <strong>Playwright E2E (tl-c47):</strong> use <code>page.request</code> for auth setup (avoids CSP blocks in dev mode).</p>
+
+  <h3>Test isolation — module-level state leaks</h3>
+  <div class="scenario">
+    <p><strong>Pattern to avoid:</strong> module-level singletons (caches, counters, timers) that persist across test cases. In Python this means module globals; in Go it means package-level vars; in TS it means module-scope objects not reset in <code>beforeEach</code>.</p>
+    <p><strong>TL examples at risk:</strong> streak counters in gaming-service, funnel state in analytics, session caches in tutoring-service.</p>
+    <p><strong>Fix:</strong> reset or reconstruct stateful objects in each test's setup. For Python: use <code>importlib.reload</code> or extract state into a class. For Go: pass state as a parameter or use <code>t.Cleanup</code>. For TS: call <code>jest.resetModules()</code> or use <code>beforeEach</code> reset.</p>
+    <p style="color:var(--yellow);font-size:0.85rem">&#9888; Melania flagged this pattern after a funnelTracker regression in cfutons (2026-04-16). Same risk exists in TL streak/spaced-repetition logic.</p>
+  </div>
+
+  <h3>Regression anchors — critical test files</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>File</th><th>Protects</th><th>Service</th></tr></thead>
+      <tbody>
+        <tr><td><code>internal/handlers/boss_test.go</code></td><td>Boss battle HP flow, XP award, loot roll</td><td>gaming-service</td></tr>
+        <tr><td><code>internal/handlers/streak_test.go</code></td><td>Streak freeze, streak-risk push</td><td>gaming-service</td></tr>
+        <tr><td><code>internal/handlers/achievement_push_test.go</code></td><td>Level-up + quest-complete FCM dedup</td><td>notification-service</td></tr>
+        <tr><td><code>tests/test_rag.py</code></td><td>RAG pipeline, query expansion, pronoun resolution</td><td>tutoring-service</td></tr>
+        <tr><td><code>tests/test_expander.py</code></td><td>Search query expansion fallback</td><td>search-service</td></tr>
+        <tr><td><code>__tests__/BossBattleClient.test.ts</code></td><td>Three.js battle scene, loot reveal, WS hook</td><td>frontend</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── Test Debt ─────────────────────────────────────────────────── -->
+<section id="debt">
+  <h2>Test Debt</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Area</th><th>Gap</th><th>Bead</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr><td>Integration / E2E tests</td><td>Playwright E2E</td><td><code>tl-c47</code></td><td><span class="badge green">&#10003; Shipped PR #210</span></td></tr>
+        <tr><td>k6 load tests</td><td>Search + ingestion load</td><td><code>tl-3j2</code></td><td><span class="badge green">&#10003; Shipped PR #208</span></td></tr>
+        <tr><td>Learning style detection tests</td><td>New tutoring feature</td><td><code>tl-udx</code></td><td><span class="badge green">&#10003; Merged PR #223</span></td></tr>
+        <tr><td>N+1 batch mastery query</td><td>gaming-service per-boss DB calls</td><td><code>tl-7wv</code></td><td><span class="badge green">&#10003; Fixed PR #221</span></td></tr>
+        <tr><td>RAG query reformulation</td><td>tutoring-service pronoun resolution</td><td><code>tl-y3e</code></td><td><span class="badge yellow">&#8635; PR #237 open — 5-agent review blocking</span></td></tr>
+        <tr><td>GDPR data export endpoint</td><td>GET /users/{id}/export synchronous</td><td><code>tl-d3s</code></td><td><span class="badge yellow">&#8635; PR #238 open — lint failing</span></td></tr>
+        <tr><td>Search query expansion</td><td>Short follow-up query disambiguation</td><td><code>tl-afb</code></td><td><span class="badge yellow">&#8635; PR #239 open — 1 test fix</span></td></tr>
+        <tr><td>Frontend Jest coverage</td><td>1 test file for 50+ components</td><td><code>tl-fwg</code></td><td><span class="badge yellow">&#8635; Polecat running</span></td></tr>
+        <tr><td>Analytics service test suite</td><td>No pytest for student.py routes</td><td><code>tl-nsg</code></td><td><span class="badge yellow">&#8635; Polecat running</span></td></tr>
+        <tr><td>PDF ingestion Celery tests</td><td>New Celery task needs tests</td><td><code>tl-k2q</code></td><td><span class="badge yellow">&#8635; Polecat (dink) running</span></td></tr>
+        <tr><td>eval-service pytest coverage</td><td>Expand to 90% — scoring edge cases</td><td><code>tl-hj6</code></td><td><span class="badge yellow">&#8635; Polecat (shiny) running</span></td></tr>
+        <tr><td>notification-service errcheck</td><td>hub_test.go + ws.go SetReadDeadline</td><td><code>tl-w8y</code></td><td><span class="badge yellow">&#8635; Carn fixing</span></td></tr>
+        <tr><td>Adaptive dashboard tests</td><td>New component</td><td><code>tl-l63</code></td><td><span class="badge yellow">&#8635; Polecat running</span></td></tr>
+        <tr><td>Streak freeze item (frontend)</td><td>New shop item + freeze logic</td><td><code>tl-2n5</code></td><td><span class="badge yellow">&#8635; Shen working</span></td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── Known Issues ──────────────────────────────────────────────── -->
+<section id="known">
+  <h2>Known Issues</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>Issue</th><th>Severity</th><th>Status</th></tr></thead>
+      <tbody>
+        <tr>
+          <td>Frontend healthcheck false-negative (BusyBox IPv6 vs Next.js IPv4)</td>
+          <td><span class="badge green">Low</span></td>
+          <td>Fixed in docker-compose.yml, clears on next restart</td>
+        </tr>
+        <tr>
+          <td>Qdrant snapshot stale alert fires if CronJob has never run (no-data edge case)</td>
+          <td><span class="badge green">Low</span></td>
+          <td>Documented in qdrant-restore runbook §2</td>
+        </tr>
+        <tr>
+          <td>bd show phantom beads — Dolt sync gap between rigs (5 occurrences this session)</td>
+          <td><span class="badge yellow">Medium</span></td>
+          <td>Escalated to mayor for Dolt investigation</td>
+        </tr>
+        <tr>
+          <td>golangci-lint QF1008 in user-service pre-existing test files (jwt_coverage_test.go, handlers_coverage_test.go)</td>
+          <td><span class="badge yellow">Medium</span></td>
+          <td>Bean fixing in PR #238</td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  TeachersLounge Testing Master &middot; Maintained by Petra (PM) &middot; Updated after each merge batch<br>
+  Consolidates: testing-report.md + testing-report.html + testing-guide.html &middot; Screenshots pending capture from pop-os dev stack by Shen
+</footer>
+
 </body>
 </html>
