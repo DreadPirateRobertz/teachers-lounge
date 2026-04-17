@@ -678,6 +678,14 @@ describe('ComponentName', () =&gt; {
 });</code></pre>
   <p><strong>MSW:</strong> use Mock Service Worker for API mocking — do not mock <code>fetch</code> directly. <strong>Playwright E2E (tl-c47):</strong> use <code>page.request</code> for auth setup (avoids CSP blocks in dev mode).</p>
 
+  <h3>Test isolation — module-level state leaks</h3>
+  <div class="scenario">
+    <p><strong>Pattern to avoid:</strong> module-level singletons (caches, counters, timers) that persist across test cases. In Python this means module globals; in Go it means package-level vars; in TS it means module-scope objects not reset in <code>beforeEach</code>.</p>
+    <p><strong>TL examples at risk:</strong> streak counters in gaming-service, funnel state in analytics, session caches in tutoring-service.</p>
+    <p><strong>Fix:</strong> reset or reconstruct stateful objects in each test's setup. For Python: use <code>importlib.reload</code> or extract state into a class. For Go: pass state as a parameter or use <code>t.Cleanup</code>. For TS: call <code>jest.resetModules()</code> or use <code>beforeEach</code> reset.</p>
+    <p style="color:var(--yellow);font-size:0.85rem">&#9888; Melania flagged this pattern after a funnelTracker regression in cfutons (2026-04-16). Same risk exists in TL streak/spaced-repetition logic.</p>
+  </div>
+
   <h3>Regression anchors — critical test files</h3>
   <div class="table-wrap">
     <table>
