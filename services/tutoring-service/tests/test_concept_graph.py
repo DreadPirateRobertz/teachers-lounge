@@ -8,6 +8,7 @@ from uuid import uuid4
 import pytest
 from httpx import AsyncClient
 from httpx._transports.asgi import ASGITransport
+from pydantic import ValidationError
 from sqlalchemy.exc import IntegrityError
 
 from app.auth import JWTClaims, require_auth
@@ -24,6 +25,7 @@ from app.concept_graph import (
 )
 from app.database import get_db
 from app.main import app
+from app.models import CreateConceptRequest
 from app.orm import ConceptGraphNode
 
 # ── Fixtures ──────────────────────────────────────────────────────────────────
@@ -449,3 +451,46 @@ async def test_post_concept_returns_409_on_duplicate():
     assert resp.status_code == 409
     session.rollback.assert_awaited_once()
     session.commit.assert_not_called()
+
+
+# ── CreateConceptRequest ltree path validator ─────────────────────────────────
+
+
+def test_create_concept_request_accepts_valid_ltree_path():
+    """Canonical dot-separated lowercase slugs pass validation."""
+    req = CreateConceptRequest(
+        concept_id="chirality",
+        label="Chirality",
+        subject="chemistry",
+        path="chemistry.organic.stereochemistry.chirality",
+    )
+    assert req.path == "chemistry.organic.stereochemistry.chirality"
+
+
+def test_create_concept_request_accepts_single_segment_path():
+    """Root-level paths (no dots) are valid ltree labels."""
+    req = CreateConceptRequest(
+        concept_id="chemistry", label="Chemistry", subject="chemistry", path="chemistry"
+    )
+    assert req.path == "chemistry"
+
+
+@pytest.mark.parametrize(
+    "bad_path",
+    [
+        "Chemistry.Organic",  # uppercase
+        "chemistry..organic",  # empty segment
+        ".chemistry.organic",  # leading dot
+        "chemistry.organic.",  # trailing dot
+        "1chemistry.organic",  # leading digit
+        "chemistry-organic",  # hyphen (not underscore)
+        "chemistry organic",  # space
+        "chemistry.organic/stereo",  # slash
+    ],
+)
+def test_create_concept_request_rejects_invalid_ltree_paths(bad_path):
+    """Paths that Postgres ltree would reject must fail validation client-side."""
+    with pytest.raises(ValidationError):
+        CreateConceptRequest(
+            concept_id="x", label="X", subject="chemistry", path=bad_path
+        )

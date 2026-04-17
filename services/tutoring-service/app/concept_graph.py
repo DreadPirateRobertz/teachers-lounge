@@ -45,6 +45,13 @@ async def get_concept_by_label(
     The RAG agent resolves the per-course ``Concept.name`` into a global
     :class:`ConceptGraphNode` through this lookup; labels are the most
     stable join key between the two representations.
+
+    Args:
+        db: Open async SQLAlchemy session.
+        label: Human-readable label (e.g. ``"Chirality"``), matched with ILIKE.
+
+    Returns:
+        The matching :class:`ConceptGraphNode`, or ``None`` if not found.
     """
     result = await db.execute(
         select(ConceptGraphNode).where(ConceptGraphNode.label.ilike(label))

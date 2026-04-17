@@ -33,6 +33,11 @@ from opentelemetry import trace
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .cache import get_cross_student_insights
+from .concept_graph import (
+    detect_ancestor_gaps,
+    format_gap_note,
+    get_concept_by_label,
+)
 from .graph import (
     detect_gaps,
     get_course_concepts,
@@ -115,6 +120,8 @@ async def build_rag_context(
         # in its transitive prerequisites. Non-fatal: skip on any DB error.
         gaps: list[dict] = []
         target: Concept | None = None
+        concepts: list[Concept] = []
+        mastery: dict = {}
         try:
             concepts = await get_course_concepts(db, course_id)
             if concepts:
@@ -132,6 +139,11 @@ async def build_rag_context(
         except Exception:
             # Non-fatal: concept graph is best-effort; skip rather than break chat.
             logger.exception("step2 concept graph check failed — skipping")
+
+        # Step 2b: Global ltree concept graph ancestor-gap check (tl-mhd).
+        ancestor_gap_notes = await _detect_ancestor_gap_notes(
+            db, student_id, target, concepts, mastery
+        )
 
         # Step 3: Retrieve curriculum chunks via hybrid vector search.
         chunks = await fetch_curriculum_chunks(question, course_id, limit=8)
@@ -155,7 +167,13 @@ async def build_rag_context(
                 logger.exception("step4 cross-student insight lookup failed — skipping")
 
         # Step 5: Build enriched system prompt including retrieved context, gaps, and insights.
-        system_prompt = _build_system_prompt(chunks, student_turns, gaps=gaps, insights=insights)
+        system_prompt = _build_system_prompt(
+            chunks,
+            student_turns,
+            gaps=gaps,
+            insights=insights,
+            ancestor_gap_notes=ancestor_gap_notes,
+        )
 
         # Step 6: Log concept interaction in the Student Knowledge Model (tl-dkm).
         # Creates or touches the StudentConceptMastery row to record engagement.
@@ -207,11 +225,62 @@ def _find_concept_for_question(question: str, concepts: list[Concept]) -> Concep
     return best if best_score > 0 else None
 
 
+async def _detect_ancestor_gap_notes(
+    db: AsyncSession,
+    student_id: UUID,
+    target: Concept | None,
+    concepts: list[Concept],
+    mastery: dict,
+) -> list[str]:
+    """Resolve the target to the global concept graph and collect gap notes.
+
+    Isolated from :func:`build_rag_context` so the main orchestration stays
+    below the project's cyclomatic-complexity ceiling. All failures inside
+    are swallowed — the global graph lookup is best-effort enrichment.
+
+    Args:
+        db: Open async SQLAlchemy session.
+        student_id: UUID of the student for logging context.
+        target: The per-course :class:`Concept` the question is about.
+        concepts: All enrolled-course concepts (used to build the label map).
+        mastery: Per-course ``{concept_id: StudentConceptMastery}`` snapshot.
+
+    Returns:
+        Zero or one formatted gap-note strings (a list for easy joining).
+    """
+    notes: list[str] = []
+    if target is None:
+        return notes
+    try:
+        global_target = await get_concept_by_label(db, target.name)
+        if global_target is None:
+            return notes
+        mastery_by_label = {
+            c.name: mastery[c.id].mastery_score for c in concepts if c.id in mastery
+        }
+        ancestor_gaps = await detect_ancestor_gaps(
+            db, global_target.concept_id, mastery_by_label
+        )
+        note = format_gap_note(global_target.label, ancestor_gaps)
+        if note:
+            notes.append(note)
+            logger.info(
+                "ancestor_gaps student_id=%s target_concept=%s gaps=%d",
+                _log_safe(student_id),
+                _log_safe(global_target.concept_id),
+                len(ancestor_gaps),
+            )
+    except Exception:
+        logger.exception("step2b ancestor-gap check failed — skipping")
+    return notes
+
+
 def _build_system_prompt(
     chunks: list[SearchResult],
     student_turns: int,
     gaps: list[dict] | None = None,
     insights: list[str] | None = None,
+    ancestor_gap_notes: list[str] | None = None,
 ) -> str:
     """Build the enriched system prompt from retrieved chunks, student context, gaps, and insights.
 
@@ -231,6 +300,9 @@ def _build_system_prompt(
         insights: List of insight strings from the cross-student cache (e.g.
             "72% of students struggle with step 3 of this derivation"). None or
             empty means no insights available.
+        ancestor_gap_notes: Optional global-concept-graph prerequisite-gap
+            notes (tl-mhd). When non-empty, prepended to the system prompt so
+            the tutor sees the prerequisite warning before curriculum content.
 
     Returns:
         Full system prompt string for the AI Gateway.
@@ -264,13 +336,11 @@ Student context: {experience_note}"""
     if insights:
         base = base + _build_insight_block(insights)
 
-    if not gaps:
-        return base
-
-    gap_lines = "\n".join(
-        f"  - {g['concept_name']} (mastery: {g['mastery_score']:.0%})" for g in gaps
-    )
-    gap_block = f"""
+    if gaps:
+        gap_lines = "\n".join(
+            f"  - {g['concept_name']} (mastery: {g['mastery_score']:.0%})" for g in gaps
+        )
+        gap_block = f"""
 
 --- PREREQUISITE GAPS DETECTED ---
 Before the student can fully grasp the topic they asked about, they have unmastered \
@@ -283,8 +353,14 @@ Recommended approach:
 3. Begin with the first unmastered prerequisite listed above.
 4. Keep it brief — return to their original question once the gap is addressed.
 --- END PREREQUISITE GAPS ---"""
+        base = base + gap_block
 
-    return base + gap_block
+    # Prepend the global concept-graph ancestor-gap note so Professor Nova
+    # reads the prerequisite warning before the curriculum/context block.
+    if ancestor_gap_notes:
+        base = "\n".join(ancestor_gap_notes) + "\n\n" + base
+
+    return base
 
 
 def _build_insight_block(insights: list[str]) -> str:

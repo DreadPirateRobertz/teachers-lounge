@@ -1,8 +1,13 @@
+import re
 from datetime import datetime
 from enum import Enum
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# Postgres ltree label regex: each dot-separated segment must start with a
+# lowercase letter and contain only lowercase alphanumerics + underscores.
+_LTREE_PATH_RE = re.compile(r"^[a-z][a-z0-9_]*(\.[a-z][a-z0-9_]*)*$")
 
 
 class Role(str, Enum):
@@ -386,6 +391,22 @@ class CreateConceptRequest(BaseModel):
         description="Dot-separated ltree path (e.g. 'chemistry.organic.chirality').",
     )
 
+    @field_validator("path")
+    @classmethod
+    def _validate_ltree_path(cls, v: str) -> str:
+        """Reject paths that Postgres ltree would fail to cast.
+
+        Postgres requires each segment to match ``[A-Za-z0-9_]+`` and start
+        with a letter; we additionally enforce lowercase here so every node
+        has exactly one canonical representation in the graph.
+        """
+        if not _LTREE_PATH_RE.match(v):
+            raise ValueError(
+                "path must be a dot-separated ltree path of lowercase "
+                "segments matching [a-z][a-z0-9_]* (e.g. 'chemistry.organic')."
+            )
+        return v
+
 
 class PrerequisiteGap(BaseModel):
     """Ancestor concept whose mastery is below the prereq threshold."""
@@ -396,3 +417,72 @@ class PrerequisiteGap(BaseModel):
     mastery_score: float = Field(
         ..., ge=0.0, le=1.0, description="Mastery score in [0, 1]."
     )
+
+
+# ── Flashcard DTOs (tl-y3v) ───────────────────────────────────────────────────
+
+
+class FlashcardResponse(BaseModel):
+    """A single flashcard returned by the listing / generation endpoints."""
+
+    id: UUID
+    front: str
+    back: str
+    concept_id: str | None
+    source_session_id: UUID | None
+    created_at: datetime
+    last_reviewed_at: datetime | None
+    due_at: datetime
+    sm2_interval_days: int
+    sm2_ease_factor: float
+    sm2_repetitions: int
+
+
+class GenerateFlashcardsRequest(BaseModel):
+    """Request body for POST /v1/flashcards/generate.
+
+    ``user_id`` is derived from the JWT (never the request body) so one
+    student cannot seed cards into another student's deck.  The session ID
+    selects the transcript that will be summarised into Q/A pairs.
+    """
+
+    session_id: UUID
+    max_cards: int = Field(
+        default=10,
+        ge=1,
+        le=30,
+        description="Upper bound on Q/A pairs the extractor may return.",
+    )
+
+
+class GenerateFlashcardsResponse(BaseModel):
+    """Result of POST /v1/flashcards/generate — the newly inserted cards."""
+
+    session_id: UUID
+    created_count: int
+    cards: list[FlashcardResponse]
+
+
+class FlashcardListResponse(BaseModel):
+    """Result of GET /v1/flashcards."""
+
+    items: list[FlashcardResponse]
+    total: int
+
+
+class FlashcardReviewRequest(BaseModel):
+    """Request body for POST /v1/flashcards/{id}/review."""
+
+    quality: int = Field(..., ge=0, le=5, description="SM-2 quality 0-5 (0=blackout, 5=perfect).")
+
+
+class FlashcardReviewResponse(BaseModel):
+    """Result of reviewing a flashcard — the updated SM-2 state + next due time."""
+
+    id: UUID
+    quality: int
+    sm2_interval_days: int
+    sm2_ease_factor: float
+    sm2_repetitions: int
+    last_reviewed_at: datetime
+    due_at: datetime

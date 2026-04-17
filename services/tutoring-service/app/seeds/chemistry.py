@@ -2,8 +2,8 @@
 
 The ``concept_graph`` table encodes prerequisite relationships positionally:
 a concept's ancestors in the ltree path are treated as its prerequisites. This
-module exposes a hand-authored catalog of 50 chemistry concepts — roughly 6
-category nodes ("Organic Chemistry", "Stereochemistry", …) plus 44 leaf
+module exposes a hand-authored catalog of 52 chemistry concepts — 6
+category nodes ("Organic Chemistry", "Stereochemistry", …) plus 46 leaf
 topics — so that querying, e.g., the ancestors of
 ``chemistry.organic.stereochemistry.chirality`` yields the expected
 prerequisite concepts ("Organic Chemistry", "Stereochemistry").
