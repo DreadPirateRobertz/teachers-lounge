@@ -50,6 +50,7 @@ from .models import MessageRequest
 from .rag import reformulate_query
 from .rag_agent import PROFESSOR_NOVA_SYSTEM_PROMPT, build_rag_context
 from .search_client import fetch_diagram_chunks
+from .spaced_repetition import get_session_start_reminder
 from .style_detector import build_style_prompt_section, detect_signals, update_dials
 
 # Keywords that suggest the student is asking about something visual / structural.
@@ -299,6 +300,17 @@ async def send_message(
     system_prompt = base_prompt + build_style_prompt_section(current_dials)
     if context_summary:
         system_prompt += f"\n\n[Earlier conversation summary: {context_summary}]"
+
+    # Session-start spaced-repetition hook: inject due concepts into the
+    # system prompt so Professor Nova can weave recall cues into the
+    # upcoming turn. Failure is non-fatal — the tutor still runs without it.
+    try:
+        srs_reminder = await get_session_start_reminder(db, user.user_id)
+        if srs_reminder:
+            system_prompt += f"\n\n{srs_reminder}"
+    except Exception:  # noqa: BLE001
+        logger.warning("Failed to fetch spaced-repetition reminder (user omitted)")
+
     messages = [
         {"role": "system", "content": system_prompt},
         *_history_to_messages(history),

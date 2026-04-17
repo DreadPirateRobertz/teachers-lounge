@@ -115,6 +115,7 @@ async def test_sse_stream_happy_path(client, auth_headers, user_id, session_id):
         })),
         patch("app.chat.update_learning_profile_dials", AsyncMock()),
         patch("app.chat.get_due_review_prompt", AsyncMock(return_value=None)),
+        patch("app.chat.get_session_start_reminder", AsyncMock(return_value=None)),
     ):
         resp = await client.post(
             f"/v1/sessions/{session_id}/messages",
@@ -191,6 +192,7 @@ async def test_sse_stream_rag_emits_sources_event(client, auth_headers, user_id,
         })),
         patch("app.chat.update_learning_profile_dials", AsyncMock()),
         patch("app.chat.get_due_review_prompt", AsyncMock(return_value=None)),
+        patch("app.chat.get_session_start_reminder", AsyncMock(return_value=None)),
     ):
         resp = await client.post(
             f"/v1/sessions/{session_id}/messages",
@@ -252,6 +254,7 @@ async def test_sse_stream_no_sources_event_when_chunks_empty(
         })),
         patch("app.chat.update_learning_profile_dials", AsyncMock()),
         patch("app.chat.get_due_review_prompt", AsyncMock(return_value=None)),
+        patch("app.chat.get_session_start_reminder", AsyncMock(return_value=None)),
     ):
         resp = await client.post(
             f"/v1/sessions/{session_id}/messages",
@@ -315,6 +318,7 @@ async def test_sse_stream_rag_calls_reformulate_query(
         })),
         patch("app.chat.update_learning_profile_dials", AsyncMock()),
         patch("app.chat.get_due_review_prompt", AsyncMock(return_value=None)),
+        patch("app.chat.get_session_start_reminder", AsyncMock(return_value=None)),
     ):
         resp = await client.post(
             f"/v1/sessions/{session_id}/messages",
@@ -377,6 +381,7 @@ async def test_append_message_runs_after_build_pruned_history(
         })),
         patch("app.chat.update_learning_profile_dials", AsyncMock()),
         patch("app.chat.get_due_review_prompt", AsyncMock(return_value=None)),
+        patch("app.chat.get_session_start_reminder", AsyncMock(return_value=None)),
     ):
         resp = await client.post(
             f"/v1/sessions/{session_id}/messages",
@@ -425,6 +430,7 @@ async def test_sse_stream_no_reformulation_when_no_course(
         })),
         patch("app.chat.update_learning_profile_dials", AsyncMock()),
         patch("app.chat.get_due_review_prompt", AsyncMock(return_value=None)),
+        patch("app.chat.get_session_start_reminder", AsyncMock(return_value=None)),
     ):
         resp = await client.post(
             f"/v1/sessions/{session_id}/messages",
@@ -473,6 +479,7 @@ async def test_sse_stream_emits_review_reminder_when_concepts_due(
         })),
         patch("app.chat.update_learning_profile_dials", AsyncMock()),
         patch("app.chat.get_due_review_prompt", AsyncMock(return_value=reminder_text)),
+        patch("app.chat.get_session_start_reminder", AsyncMock(return_value=None)),
     ):
         resp = await client.post(
             f"/v1/sessions/{session_id}/messages",
@@ -706,6 +713,7 @@ async def test_sse_stream_emits_diagram_events(
         patch("app.chat.get_dials", AsyncMock(return_value={})),
         patch("app.chat.update_learning_profile_dials", AsyncMock()),
         patch("app.chat.get_due_review_prompt", AsyncMock(return_value=None)),
+        patch("app.chat.get_session_start_reminder", AsyncMock(return_value=None)),
     ):
         mock_re.search.return_value = True  # force visual path
         resp = await client.post(
@@ -794,6 +802,7 @@ async def test_sse_stream_long_session_context_pruning(
         ),
         patch("app.chat.update_learning_profile_dials", AsyncMock()),
         patch("app.chat.get_due_review_prompt", AsyncMock(return_value=None)),
+        patch("app.chat.get_session_start_reminder", AsyncMock(return_value=None)),
     ):
         resp = await client.post(
             f"/v1/sessions/{session_id}/messages",
