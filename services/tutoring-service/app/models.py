@@ -344,3 +344,55 @@ class MisconceptionEntry(BaseModel):
     confidence: float
     recorded_at: datetime
     recency_weight: float
+
+
+# ── Concept graph DTOs (tl-mhd) ───────────────────────────────────────────────
+
+
+class ConceptGraphNodeResponse(BaseModel):
+    """Public projection of a :class:`app.orm.ConceptGraphNode` row."""
+
+    concept_id: str
+    label: str
+    subject: str
+    path: str
+
+
+class CreateConceptRequest(BaseModel):
+    """Request body for POST /concepts — create a new global concept."""
+
+    concept_id: str = Field(
+        ...,
+        min_length=1,
+        max_length=128,
+        description="Stable slug identifier (lowercase snake_case).",
+    )
+    label: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Human-readable title surfaced in tutoring prompts.",
+    )
+    subject: str = Field(
+        ...,
+        min_length=1,
+        max_length=64,
+        description="Top-level subject grouping (e.g. 'chemistry').",
+    )
+    path: str = Field(
+        ...,
+        min_length=1,
+        max_length=1024,
+        description="Dot-separated ltree path (e.g. 'chemistry.organic.chirality').",
+    )
+
+
+class PrerequisiteGap(BaseModel):
+    """Ancestor concept whose mastery is below the prereq threshold."""
+
+    concept_id: str
+    label: str
+    path: str
+    mastery_score: float = Field(
+        ..., ge=0.0, le=1.0, description="Mastery score in [0, 1]."
+    )

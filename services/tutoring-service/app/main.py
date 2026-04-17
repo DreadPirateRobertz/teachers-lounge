@@ -27,6 +27,7 @@ from opentelemetry.sdk.trace.export import BatchSpanProcessor
 from .cache import close_cache, init_cache
 from .chat import router as chat_router
 from .chat_simple import router as chat_simple_router
+from .concept_graph_routes import router as concept_graph_router
 from .concepts import router as concepts_router
 from .config import settings
 from .database import Base, engine
@@ -84,6 +85,7 @@ app.include_router(chat_router, prefix="/v1")
 app.include_router(chat_simple_router, prefix="/v1")
 app.include_router(reviews_router, prefix="/v1")
 app.include_router(concepts_router, prefix="/v1")
+app.include_router(concept_graph_router, prefix="/v1")
 app.include_router(quiz_router, prefix="/v1")
 app.include_router(profile_router, prefix="/v1")
 
