@@ -565,9 +565,14 @@ export default function BossScene({
           cancelAnimationFrame(animId)
           return
         }
-        // Scale down boss as it dies
+        // Scale down + spin out + tilt forward as the boss disintegrates.
+        // Eased so the effect is gentle at the start and accelerates into
+        // the collapse — feels like collapse rather than a linear shrink.
         const progress = (elapsed - deathTimer) / deathParams.cycleSec
-        group.scale.setScalar(boss.scale * (1 - progress * 0.9))
+        const eased = progress * progress
+        group.scale.setScalar(boss.scale * (1 - eased * 0.95))
+        group.rotation.y += 0.15 * (1 + eased * 4)
+        group.rotation.x = eased * Math.PI * 0.4
       }
 
       update(elapsed, state)

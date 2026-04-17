@@ -3,7 +3,7 @@
  */
 
 import React from 'react'
-import { render, screen, fireEvent } from '@testing-library/react'
+import { act, render, screen, fireEvent } from '@testing-library/react'
 import BossHUD, { POWER_UPS } from './BossHUD'
 import { getBossDef } from './BossCharacterLibrary'
 
@@ -125,5 +125,65 @@ describe('BossHUD', () => {
     expect(critBtn).not.toBeDisabled()
     fireEvent.click(critBtn)
     expect(handler).toHaveBeenCalledWith('critical')
+  })
+
+  describe('combo badge', () => {
+    it('omits the combo badge when comboCount is undefined', () => {
+      render(<BossHUD {...defaultProps} />)
+      expect(screen.queryByTestId('combo-badge')).toBeNull()
+    })
+
+    it('omits the combo badge when comboCount is 0 or 1 (below threshold)', () => {
+      const { rerender } = render(<BossHUD {...defaultProps} comboCount={0} />)
+      expect(screen.queryByTestId('combo-badge')).toBeNull()
+      rerender(<BossHUD {...defaultProps} comboCount={1} />)
+      expect(screen.queryByTestId('combo-badge')).toBeNull()
+    })
+
+    it('shows the combo badge with count when comboCount ≥ 2', () => {
+      render(<BossHUD {...defaultProps} comboCount={3} />)
+      const badge = screen.getByTestId('combo-badge')
+      expect(badge).toBeInTheDocument()
+      expect(badge.textContent).toMatch(/3.*COMBO/)
+      expect(badge).toHaveAttribute('aria-label', 'Combo streak: 3')
+    })
+
+    it('updates the combo badge when count grows mid-battle', () => {
+      const { rerender } = render(<BossHUD {...defaultProps} comboCount={2} />)
+      expect(screen.getByTestId('combo-badge').textContent).toMatch(/2.*COMBO/)
+      rerender(<BossHUD {...defaultProps} comboCount={5} />)
+      expect(screen.getByTestId('combo-badge').textContent).toMatch(/5.*COMBO/)
+    })
+  })
+
+  describe('HP readout tween', () => {
+    it('renders the initial HP value immediately on first mount', () => {
+      render(<BossHUD {...defaultProps} bossHP={75} bossMaxHP={100} />)
+      expect(screen.getByTestId('hp-readout-BOSS HP').textContent).toBe('75 / 100')
+    })
+
+    it('animates the HP readout toward the new target when bossHP changes', async () => {
+      jest.useFakeTimers()
+      let rafCb: FrameRequestCallback | null = null
+      const rafSpy = jest.spyOn(window, 'requestAnimationFrame').mockImplementation((cb) => {
+        rafCb = cb
+        return 1 as unknown as number
+      })
+      jest.spyOn(window, 'cancelAnimationFrame').mockImplementation(() => {})
+
+      const { rerender } = render(<BossHUD {...defaultProps} bossHP={100} bossMaxHP={100} />)
+      expect(screen.getByTestId('hp-readout-BOSS HP').textContent).toBe('100 / 100')
+
+      rerender(<BossHUD {...defaultProps} bossHP={20} bossMaxHP={100} />)
+      // Tween completes by HP_TWEEN_MS — drive the rAF callback at t = duration.
+      const start = performance.now()
+      await act(async () => {
+        rafCb?.(start + 10_000)
+      })
+      expect(screen.getByTestId('hp-readout-BOSS HP').textContent).toBe('20 / 100')
+
+      rafSpy.mockRestore()
+      jest.useRealTimers()
+    })
   })
 })

@@ -7,6 +7,7 @@
  * the current turn number, power-up buttons, and the latest taunt.
  */
 
+import { useEffect, useRef, useState } from 'react'
 import { type BossVisualDef } from './BossCharacterLibrary'
 
 /** A power-up option the player can spend gems to activate. */
@@ -29,6 +30,11 @@ export interface BossHUDProps {
   taunt: string | null
   onPowerUpAction: (type: PowerUp['type']) => void
   disabled: boolean
+  /**
+   * Consecutive correct answers in the current streak. When ≥ 2, a combo
+   * badge is rendered above the HP bars. Optional — omit to hide entirely.
+   */
+  comboCount?: number
 }
 
 /** All power-ups available in a boss fight. */
@@ -39,8 +45,57 @@ export const POWER_UPS: PowerUp[] = [
   { type: 'critical', label: 'Critical', icon: '💥', gemCost: 5 },
 ]
 
+/** Duration in ms over which the displayed HP number tweens to a new target. */
+const HP_TWEEN_MS = 600
+
 /**
- * HPBar renders a labeled health bar with a neon fill.
+ * useTweenedNumber animates a numeric value toward `target` over `durationMs`,
+ * returning the rounded interpolated value each frame. Cancels in-flight
+ * tweens when `target` changes mid-animation. SSR-safe — falls straight to
+ * `target` when `requestAnimationFrame` is unavailable.
+ */
+export function useTweenedNumber(target: number, durationMs: number = HP_TWEEN_MS): number {
+  const [display, setDisplay] = useState(target)
+  const fromRef = useRef(target)
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.requestAnimationFrame !== 'function') {
+      setDisplay(target)
+      return
+    }
+    const from = fromRef.current
+    if (from === target) return
+    const start = performance.now()
+    let rafId = 0
+
+    const tick = (now: number) => {
+      const t = Math.min(1, (now - start) / durationMs)
+      // ease-out cubic — fast start, gentle settle
+      const eased = 1 - Math.pow(1 - t, 3)
+      const value = Math.round(from + (target - from) * eased)
+      setDisplay(value)
+      if (t < 1) {
+        rafId = window.requestAnimationFrame(tick)
+      } else {
+        fromRef.current = target
+      }
+    }
+    rafId = window.requestAnimationFrame(tick)
+    return () => {
+      if (typeof window.cancelAnimationFrame === 'function') {
+        window.cancelAnimationFrame(rafId)
+      }
+    }
+  }, [target, durationMs])
+
+  return display
+}
+
+/**
+ * HPBar renders a labeled health bar with a neon fill. The numeric readout
+ * tweens between values over ~600 ms (ease-out) and the fill width animates
+ * via CSS over the same window so visible changes feel weighty rather than
+ * snapping instantly.
  */
 function HPBar({
   label,
@@ -53,18 +108,19 @@ function HPBar({
   maxHP: number
   color: string
 }) {
-  const pct = maxHP > 0 ? Math.max(0, Math.min(100, Math.round((hp / maxHP) * 100))) : 0
+  const tweenedHp = useTweenedNumber(hp)
+  const pct = maxHP > 0 ? Math.max(0, Math.min(100, Math.round((tweenedHp / maxHP) * 100))) : 0
   return (
     <div className="w-full">
       <div className="flex justify-between items-center mb-1">
         <span className="text-xs font-mono text-text-dim">{label}</span>
-        <span className="text-xs font-mono text-text-bright">
-          {hp} / {maxHP}
+        <span className="text-xs font-mono text-text-bright" data-testid={`hp-readout-${label}`}>
+          {tweenedHp} / {maxHP}
         </span>
       </div>
       <div className="h-3 w-full bg-bg-input rounded-full overflow-hidden border border-border-dim">
         <div
-          className="h-full rounded-full transition-all duration-300"
+          className="h-full rounded-full transition-all duration-700 ease-out"
           style={{ width: `${pct}%`, backgroundColor: color, boxShadow: `0 0 6px ${color}88` }}
         />
       </div>
@@ -86,6 +142,7 @@ export default function BossHUD({
   taunt,
   onPowerUpAction,
   disabled,
+  comboCount,
 }: BossHUDProps) {
   return (
     <div className="flex flex-col gap-3 w-full max-w-md px-4">
@@ -100,6 +157,18 @@ export default function BossHUD({
         <span className="text-xs text-text-dim font-mono">Tier {boss.tier}</span>
         <span className="ml-auto text-xs text-text-dim font-mono">Turn {turn}</span>
       </div>
+
+      {/* Combo streak — only when ≥ 2 consecutive correct answers */}
+      {comboCount !== undefined && comboCount >= 2 && (
+        <div
+          data-testid="combo-badge"
+          aria-label={`Combo streak: ${comboCount}`}
+          className="self-end text-xs font-mono font-bold px-2 py-1 rounded-md border border-neon-gold/50 bg-neon-gold/10 text-neon-gold animate-pulse-slow"
+          style={{ textShadow: '0 0 6px #ffd700aa' }}
+        >
+          ⚡ {comboCount}× COMBO
+        </div>
+      )}
 
       {/* Boss HP */}
       <HPBar label="BOSS HP" hp={bossHP} maxHP={bossMaxHP} color={boss.primaryColor} />

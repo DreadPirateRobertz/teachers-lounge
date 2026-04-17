@@ -32,6 +32,7 @@ import LootReveal, { type LootItem } from './LootReveal'
 import QuestionCard, { type BattleQuestion } from './QuestionCard'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import useSwipeGesture, { SwipeDirection } from '@/hooks/useSwipeGesture'
+import { useBattleStream } from '@/hooks/useBattleStream'
 
 // BossScene is client-only WebGL; dynamic import prevents SSR errors.
 const BossScene = dynamic(() => import('./BossScene'), { ssr: false })
@@ -129,6 +130,15 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
   const [turn, setTurn] = useState(0)
   const [gems, setGems] = useState(initialGems)
   const [taunt, setTaunt] = useState<string | null>(null)
+  const [combo, setCombo] = useState(0)
+
+  // ── Real-time battle stream ────────────────────────────────────────────────
+  // Subscribed once a battle session exists. The REST attack flow remains the
+  // canonical action path (it returns explanation + correct_key for the resolve
+  // overlay), but the WS push lets us reflect server-authoritative HP / combo /
+  // phase changes the moment they happen — including ones triggered outside
+  // this client (e.g. boss-attack server ticks).
+  const { battleState: streamState } = useBattleStream(sessionId)
 
   // ── Quiz session ───────────────────────────────────────────────────────────
   const [quizSessionId, setQuizSessionId] = useState<string | null>(null)
@@ -351,6 +361,24 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
     }
   }, [])
 
+  // ── Mirror real-time stream state into local state ────────────────────────
+  // The WS hook delivers normalised camelCase snapshots; we apply them to HP /
+  // combo so the HUD reflects server truth as soon as it arrives. Phase
+  // transitions (victory / defeat) from the stream nudge the state machine
+  // when the REST attack response hasn't done so yet — defensive in case the
+  // attack POST is slower than the broadcast event.
+  useEffect(() => {
+    if (!streamState) return
+    setBossHP(streamState.bossHp)
+    setPlayerHP(streamState.playerHp)
+    setCombo(streamState.comboCount)
+    if (streamState.phase === 'victory' && phase !== 'victory' && animState !== 'death') {
+      setAnimState('death')
+    } else if (streamState.phase === 'defeat' && phase !== 'defeat') {
+      setPhase('defeat')
+    }
+  }, [streamState, phase, animState])
+
   // ── Swipe gesture: right = option A, left = last option ──────────────────
 
   const {
@@ -424,6 +452,7 @@ export default function BossBattleClient({ boss, userId, initialGems }: BossBatt
             taunt={taunt}
             onPowerUpAction={activatePowerUp}
             disabled={actionPending || phase !== 'question'}
+            comboCount={combo}
           />
 
           {/* Question card — visible during question phase */}
