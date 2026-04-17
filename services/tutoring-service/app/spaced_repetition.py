@@ -13,13 +13,14 @@ can freeze time; see :mod:`app.clock`.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from uuid import UUID
 
 from fastapi import APIRouter, Depends
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from .auth import JWTClaims, require_auth
-from .clock import Clock, get_clock
+from .clock import Clock, _utc_now, get_clock
 from .database import get_db
 from .models import (
     SpacedRepetitionDueItem,
@@ -31,6 +32,53 @@ from .orm import ConceptReviewSchedule
 from .srs import sm2_update
 
 router = APIRouter(prefix="/spaced-repetition", tags=["spaced-repetition"])
+
+
+async def get_session_start_reminder(
+    db: AsyncSession,
+    user_id: UUID,
+    now: datetime | None = None,
+    limit: int = 3,
+) -> str | None:
+    """Build a short system-prompt snippet listing concepts due for review.
+
+    The snippet is appended to the tutor's system prompt at the start of each
+    chat turn so Professor Nova can weave the due concepts into the session
+    ("You have these concepts due for review: ..."). Returns ``None`` when
+    the student has nothing due, in which case callers should skip injection.
+
+    Args:
+        db:      Async SQLAlchemy session.
+        user_id: UUID of the student.
+        now:     Current UTC time; defaults to a wall-clock read so callers
+                 outside the request-scoped Depends tree can still use it.
+        limit:   Maximum number of concept ids to include.
+
+    Returns:
+        A human-readable reminder string, or None when nothing is due.
+    """
+    current = now if now is not None else _utc_now()
+    result = await db.execute(
+        select(ConceptReviewSchedule)
+        .where(
+            ConceptReviewSchedule.user_id == user_id,
+            (ConceptReviewSchedule.due_at.is_(None))
+            | (ConceptReviewSchedule.due_at <= current),
+        )
+        .order_by(ConceptReviewSchedule.due_at.asc().nullsfirst())
+        .limit(limit)
+    )
+    rows = list(result.scalars().all())
+    if not rows:
+        return None
+
+    names = [row.concept_id for row in rows]
+    joined = ", ".join(names)
+    return (
+        "[Spaced-repetition check-in] The student has "
+        f"{len(names)} concept(s) due for review: {joined}. Find a natural "
+        "moment to weave one in — quick recall prompt, analogy, or callback."
+    )
 
 
 async def _get_or_create_schedule(
@@ -50,7 +98,7 @@ async def _get_or_create_schedule(
         row = ConceptReviewSchedule(
             user_id=user_id,
             concept_id=concept_id,
-            ease_factor=2.5,
+            easiness_factor=2.5,
             interval_days=1,
             repetitions=0,
             last_reviewed_at=None,
@@ -78,14 +126,14 @@ async def record_review_result(
 
     new_interval, new_ef, new_reps = sm2_update(
         quality=body.quality,
-        ease_factor=schedule.ease_factor,
+        ease_factor=schedule.easiness_factor,
         interval_days=schedule.interval_days,
         repetitions=schedule.repetitions,
     )
     now = clock()
     next_due = now + timedelta(days=new_interval)
 
-    schedule.ease_factor = new_ef
+    schedule.easiness_factor = new_ef
     schedule.interval_days = new_interval
     schedule.repetitions = new_reps
     schedule.last_reviewed_at = now
@@ -96,7 +144,7 @@ async def record_review_result(
     return SpacedRepetitionReviewResponse(
         concept_id=body.concept_id,
         quality=body.quality,
-        ease_factor=new_ef,
+        easiness_factor=new_ef,
         interval_days=new_interval,
         repetitions=new_reps,
         last_reviewed_at=now,
@@ -147,7 +195,7 @@ async def list_due(
     items = [
         SpacedRepetitionDueItem(
             concept_id=row.concept_id,
-            ease_factor=row.ease_factor,
+            easiness_factor=row.easiness_factor,
             interval_days=row.interval_days,
             repetitions=row.repetitions,
             last_reviewed_at=row.last_reviewed_at,

@@ -371,7 +371,7 @@ class SpacedRepetitionReviewResponse(BaseModel):
 
     concept_id: str
     quality: int
-    ease_factor: float
+    easiness_factor: float
     interval_days: int
     repetitions: int
     last_reviewed_at: datetime
@@ -382,7 +382,7 @@ class SpacedRepetitionDueItem(BaseModel):
     """One concept that is due (or overdue) for review."""
 
     concept_id: str
-    ease_factor: float
+    easiness_factor: float
     interval_days: int
     repetitions: int
     last_reviewed_at: datetime | None

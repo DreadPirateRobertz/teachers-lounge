@@ -9,7 +9,7 @@ CREATE EXTENSION IF NOT EXISTS pgcrypto;
 CREATE TABLE concept_review_schedule (
   user_id          UUID        NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   concept_id       TEXT        NOT NULL,
-  ease_factor      FLOAT       NOT NULL DEFAULT 2.5,
+  easiness_factor  FLOAT       NOT NULL DEFAULT 2.5,
   interval_days    INT         NOT NULL DEFAULT 1,
   repetitions      INT         NOT NULL DEFAULT 0,
   last_reviewed_at TIMESTAMPTZ,

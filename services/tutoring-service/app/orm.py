@@ -311,7 +311,7 @@ class ConceptReviewSchedule(Base):
 
     user_id: Mapped[UUID] = mapped_column(UUID(as_uuid=True), primary_key=True)
     concept_id: Mapped[str] = mapped_column(Text, primary_key=True)
-    ease_factor: Mapped[float] = mapped_column(Float, default=2.5, nullable=False)
+    easiness_factor: Mapped[float] = mapped_column(Float, default=2.5, nullable=False)
     interval_days: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
     repetitions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_reviewed_at: Mapped[datetime | None] = mapped_column(

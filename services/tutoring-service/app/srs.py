@@ -9,7 +9,7 @@ SM-2 Reference: Wozniak (1990), SuperMemo 2 algorithm.
 from __future__ import annotations
 
 import math
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timedelta
 
 # ── Constants ─────────────────────────────────────────────────────────────────
 
@@ -42,9 +42,16 @@ def sm2_update(
     if not 0 <= quality <= 5:
         raise ValueError(f"quality must be 0-5, got {quality}")
 
+    # Canonical SM-2 updates the ease factor on every response, including
+    # failures (EF' = EF + 0.1 - (5-q)(0.08 + (5-q)*0.02)), clamped to the
+    # MIN_EASE_FACTOR floor so repeated failures don't collapse the schedule.
+    delta = 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)
+    new_ef = max(MIN_EASE_FACTOR, ease_factor + delta)
+
     if quality < PASS_THRESHOLD:
-        # Failed recall — reset repetitions, restart from day 1
-        return 1, ease_factor, 0
+        # Failed recall — reset repetitions, restart from day 1, but keep the
+        # newly-decreased ease factor so the next success reflects the miss.
+        return 1, new_ef, 0
 
     # Successful recall — advance interval
     if repetitions == 0:
@@ -54,17 +61,12 @@ def sm2_update(
     else:
         new_interval = max(1, round(interval_days * ease_factor))
 
-    # Update ease factor (EF' = EF + 0.1 - (5-q)(0.08 + (5-q)*0.02))
-    delta = 0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02)
-    new_ef = max(MIN_EASE_FACTOR, ease_factor + delta)
-
     return new_interval, new_ef, repetitions + 1
 
 
-def next_review_time(interval_days: int, now: datetime | None = None) -> datetime:
+def next_review_time(interval_days: int, now: datetime) -> datetime:
     """Return the UTC datetime when the next review is due."""
-    base = now or datetime.now(timezone.utc)
-    return base + timedelta(days=interval_days)
+    return now + timedelta(days=interval_days)
 
 
 # ── Forgetting curve ──────────────────────────────────────────────────────────

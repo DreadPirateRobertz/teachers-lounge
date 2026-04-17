@@ -25,6 +25,7 @@ from app.clock import _utc_now, get_clock
 from app.database import get_db
 from app.main import app
 from app.orm import ConceptReviewSchedule
+from app.spaced_repetition import get_session_start_reminder
 
 # ── Shared constants ──────────────────────────────────────────────────────────
 
@@ -75,7 +76,7 @@ def _clear_overrides() -> None:
 
 def _make_schedule_row(
     concept_id: str = CONCEPT,
-    ease_factor: float = 2.5,
+    easiness_factor: float = 2.5,
     interval_days: int = 6,
     repetitions: int = 2,
     last_reviewed_at: datetime | None = None,
@@ -85,7 +86,7 @@ def _make_schedule_row(
     row = MagicMock(spec=ConceptReviewSchedule)
     row.user_id = STUDENT_ID
     row.concept_id = concept_id
-    row.ease_factor = ease_factor
+    row.easiness_factor = easiness_factor
     row.interval_days = interval_days
     row.repetitions = repetitions
     row.last_reviewed_at = last_reviewed_at
@@ -179,7 +180,7 @@ class TestRecordReviewResult:
         parsed_reviewed = datetime.fromisoformat(body["last_reviewed_at"].replace("Z", "+00:00"))
         assert parsed_reviewed == FROZEN_NOW
         # Ease factor for quality=5 rises from 2.5 by +0.1 → 2.6.
-        assert body["ease_factor"] == pytest.approx(2.6)
+        assert body["easiness_factor"] == pytest.approx(2.6)
         # New row was added and committed.
         db.add.assert_called_once()
         db.commit.assert_awaited_once()
@@ -189,7 +190,7 @@ class TestRecordReviewResult:
     async def test_failing_review_resets_repetitions_on_existing_row(self):
         """Quality < 3 on an established row restarts from interval=1, reps=0."""
         row = _make_schedule_row(
-            ease_factor=2.7, interval_days=10, repetitions=4, due_at=FROZEN_NOW
+            easiness_factor=2.7, interval_days=10, repetitions=4, due_at=FROZEN_NOW
         )
         db = AsyncMock()
         db.execute = AsyncMock(return_value=_single_lookup_result(row))
@@ -205,8 +206,10 @@ class TestRecordReviewResult:
         body = resp.json()
         assert body["interval_days"] == 1
         assert body["repetitions"] == 0
-        # SM-2 resets interval/reps but retains the existing ease factor on failure.
-        assert body["ease_factor"] == pytest.approx(2.7)
+        # Canonical SM-2 applies the EF delta on failure too: for quality=1
+        # the delta is -0.54, so 2.7 → 2.16. The MIN_EASE_FACTOR floor (1.3)
+        # keeps the value well above the minimum on a single miss.
+        assert body["easiness_factor"] == pytest.approx(2.16)
         # Due date lands one day after the frozen clock.
         parsed_due = datetime.fromisoformat(body["due_at"].replace("Z", "+00:00"))
         assert parsed_due == FROZEN_NOW + timedelta(days=1)
@@ -218,7 +221,7 @@ class TestRecordReviewResult:
     async def test_second_passing_review_moves_to_six_day_interval(self):
         """SM-2 second-success path yields interval=6 regardless of existing interval."""
         row = _make_schedule_row(
-            ease_factor=2.5, interval_days=1, repetitions=1, due_at=FROZEN_NOW
+            easiness_factor=2.5, interval_days=1, repetitions=1, due_at=FROZEN_NOW
         )
         db = AsyncMock()
         db.execute = AsyncMock(return_value=_single_lookup_result(row))
@@ -422,3 +425,45 @@ class TestListDue:
             resp = await client.get("/v1/spaced-repetition/due")
 
         assert resp.status_code in (401, 403)
+
+
+# ── get_session_start_reminder ────────────────────────────────────────────────
+
+
+class TestSessionStartReminder:
+    """Unit tests for the system-prompt injection helper."""
+
+    @pytest.mark.asyncio
+    async def test_returns_none_when_nothing_due(self):
+        """No due rows → None so the system prompt stays untouched."""
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=_scalars_list_result([]))
+        result = await get_session_start_reminder(db, STUDENT_ID, now=FROZEN_NOW)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_builds_reminder_listing_due_concept_ids(self):
+        """Due rows are summarised as a short prompt naming each concept_id."""
+        rows = [
+            _make_schedule_row(
+                concept_id="chemistry.organic.alkenes", due_at=FROZEN_NOW - timedelta(days=1)
+            ),
+            _make_schedule_row(concept_id="chemistry.organic.alkynes", due_at=None),
+        ]
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=_scalars_list_result(rows))
+        result = await get_session_start_reminder(db, STUDENT_ID, now=FROZEN_NOW)
+        assert result is not None
+        assert "2 concept(s) due" in result
+        assert "chemistry.organic.alkenes" in result
+        assert "chemistry.organic.alkynes" in result
+
+    @pytest.mark.asyncio
+    async def test_now_defaults_to_wall_clock(self):
+        """When ``now`` is omitted the helper still issues a query (no crash)."""
+        db = AsyncMock()
+        db.execute = AsyncMock(return_value=_scalars_list_result([]))
+        # Should not raise — exercises the `_utc_now()` fallback branch.
+        result = await get_session_start_reminder(db, STUDENT_ID)
+        assert result is None
+        db.execute.assert_awaited_once()

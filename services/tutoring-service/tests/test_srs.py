@@ -70,9 +70,16 @@ class TestSm2Update:
         _, ef, _ = sm2_update(quality=5, ease_factor=2.5, interval_days=1, repetitions=0)
         assert ef > 2.5
 
-    def test_failed_review_preserves_ef(self):
+    def test_failed_review_applies_ef_delta(self):
+        # Canonical SM-2 subtracts the EF delta on failure too (quality=0 → -0.80).
+        # The floor clamp at MIN_EASE_FACTOR (1.3) keeps EF above the minimum.
         _, ef, _ = sm2_update(quality=0, ease_factor=2.5, interval_days=10, repetitions=5)
-        assert ef == 2.5  # EF unchanged on failure
+        assert ef == pytest.approx(1.7)
+
+    def test_failed_review_clamped_to_min_ef(self):
+        # Repeated failures must not drive EF below MIN_EASE_FACTOR (1.3).
+        _, ef, _ = sm2_update(quality=0, ease_factor=1.4, interval_days=1, repetitions=0)
+        assert ef == MIN_EASE_FACTOR
 
 
 # ── next_review_time ──────────────────────────────────────────────────────────
