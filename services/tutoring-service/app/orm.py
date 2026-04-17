@@ -290,3 +290,24 @@ class Misconception(Base):
     recorded_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     last_seen_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=_now)
     resolved: Mapped[bool] = mapped_column(Boolean, default=False)
+
+
+# ── Global concept knowledge graph — Postgres ltree (tl-mhd) ──────────────────
+
+
+class ConceptGraphNode(Base):
+    """Single node in the global ltree-backed concept graph.
+
+    The ``path`` column is stored using Postgres' ``ltree`` type — declared
+    here as ``Text`` because SQLAlchemy lacks a first-class ltree mapping.
+    Ancestor / descendant queries use raw ``text()`` statements from
+    :mod:`app.concept_graph`.
+    """
+
+    __tablename__ = "concept_graph"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    concept_id: Mapped[str] = mapped_column(Text, nullable=False, unique=True)
+    label: Mapped[str] = mapped_column(Text, nullable=False)
+    subject: Mapped[str] = mapped_column(Text, nullable=False, index=True)
+    path: Mapped[str] = mapped_column(Text, nullable=False)
