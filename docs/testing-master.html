@@ -88,6 +88,8 @@
     <a href="#ingestion">Ingestion</a>
     <a href="#unit">Unit Tests</a>
     <a href="#ci-gates">CI Gates</a>
+    <a href="#tdd">TDD Standard</a>
+    <a href="#patterns">Test Patterns</a>
     <a href="#debt">Test Debt</a>
     <a href="#known">Known Issues</a>
   </nav>
@@ -582,6 +584,111 @@ docker compose --env-file .env.local up --build
         <tr><td><strong>type-design-analyzer</strong></td><td>Type invariants, encapsulation, enforcement quality</td></tr>
         <tr><td><strong>comment-analyzer</strong></td><td>Comment accuracy vs. code, WHY vs. WHAT, technical debt</td></tr>
         <tr><td><strong>pr-test-analyzer</strong></td><td>Coverage completeness, missing edge cases, test quality</td></tr>
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<!-- ── TDD Standard ───────────────────────────────────────────────── -->
+<section id="tdd">
+  <h2>TDD Standard &amp; PR Checklist</h2>
+  <p>Melania mandate (cross-rig): tests before implementation. All paths. No happy-path-only PRs. Enforced by Petra at review time.</p>
+
+  <h3>TDD Checklist — every PR must check all boxes</h3>
+  <div class="scenario">
+    <ul style="list-style:none;line-height:2">
+      <li>&#9744; Tests written <strong>alongside or before</strong> implementation (not retrofitted)</li>
+      <li>&#9744; Happy path covered</li>
+      <li>&#9744; At least one error / edge-case test per exported function</li>
+      <li>&#9744; Coverage &ge;80% on new code (Codecov will report)</li>
+      <li>&#9744; No mocking of internal code — only mock at system boundaries (DB, external HTTP, FCM)</li>
+      <li>&#9744; Race detector clean (<code>go test -race</code> for Go services)</li>
+      <li>&#9744; Lint clean (<code>ruff check</code> / <code>go vet + golangci-lint</code> / <code>eslint</code>)</li>
+    </ul>
+    <p style="margin-top:0.75rem;color:var(--red);font-size:0.85rem">&#9888; PRs with zero new tests for new feature code are rejected without review.</p>
+  </div>
+
+  <h3>PR Test Plan Template</h3>
+  <pre><code>## Checklist
+- [ ] Tests written (TDD) — list test files added
+- [ ] Coverage &ge;80% on new code
+- [ ] Docstrings on all new functions/classes
+- [ ] Lint clean
+- [ ] No secrets committed
+
+## How to test
+&lt;step-by-step commands to verify the change works&gt;</code></pre>
+
+  <h3>PR Test Plan Standard (cross-rig, per Melania)</h3>
+  <p>All <code>- [ ]</code> checkboxes must be checked before merge. A PR body with unchecked boxes = tests not done = block. Reviewer must verify, not trust.</p>
+</section>
+
+<!-- ── Test Patterns ──────────────────────────────────────────────── -->
+<section id="patterns">
+  <h2>Test Patterns by Layer</h2>
+  <p>Standard patterns for the TL stack. New crew: read this before writing your first test.</p>
+
+  <h3>Go services (user-service, gaming-service, notification-service)</h3>
+  <pre><code>// Minimal table-driven test pattern
+func TestHandlerName(t *testing.T) {
+    cases := []struct {
+        name    string
+        input   RequestType
+        want    int // HTTP status
+        wantErr bool
+    }{
+        {"happy path", validInput, http.StatusOK, false},
+        {"bad request", invalidInput, http.StatusBadRequest, true},
+    }
+    for _, tc := range cases {
+        t.Run(tc.name, func(t *testing.T) {
+            // ... assert
+        })
+    }
+}</code></pre>
+  <p><strong>DB mocking:</strong> use <code>go-sqlmock</code> or in-memory SQLite (<code>modernc.org/sqlite</code>) — never mock production Postgres schema logic away. <strong>Redis:</strong> use <code>miniredis</code>. <strong>HTTP clients:</strong> <code>httptest.NewServer</code>.</p>
+  <p><strong>Cross-rig note (from cfutons):</strong> equivalent of cfutons' <code>suppressAuth</code> assertion in TL is verifying the JWT middleware short-circuits with 401 on bad/missing token — assert this explicitly in every handler test that touches an authenticated route.</p>
+
+  <h3>Python services (tutoring-service, search-service, ingestion-service)</h3>
+  <pre><code># pytest + httpx TestClient pattern
+def test_endpoint_happy_path(client: TestClient):
+    resp = client.post("/endpoint", json={"key": "value"})
+    assert resp.status_code == 200
+    assert resp.json()["field"] == expected
+
+def test_endpoint_validation_error(client: TestClient):
+    resp = client.post("/endpoint", json={})  # missing required fields
+    assert resp.status_code == 422</code></pre>
+  <p><strong>DB:</strong> use <code>pytest-postgresql</code> or SQLite in-memory. <strong>External HTTP:</strong> <code>respx</code> for httpx mocks. <strong>LLM calls:</strong> always mock — never hit real AI gateway in unit tests.</p>
+  <p><strong>Clock injection (from cfutons):</strong> never call <code>datetime.now()</code> directly in business logic. Accept a <code>clock</code> callable parameter so tests can inject a fixed time. This prevents flaky tests on streak/expiry logic.</p>
+
+  <h3>TypeScript / Next.js (frontend)</h3>
+  <pre><code>// Jest + React Testing Library pattern
+describe('ComponentName', () =&gt; {
+  it('renders correctly on happy path', () =&gt; {
+    render(&lt;ComponentName prop="value" /&gt;);
+    expect(screen.getByRole('button', { name: /submit/i })).toBeInTheDocument();
+  });
+
+  it('shows error state on failed fetch', async () =&gt; {
+    server.use(http.get('/api/data', () =&gt; HttpResponse.error()));
+    render(&lt;ComponentName /&gt;);
+    expect(await screen.findByText(/error/i)).toBeInTheDocument();
+  });
+});</code></pre>
+  <p><strong>MSW:</strong> use Mock Service Worker for API mocking — do not mock <code>fetch</code> directly. <strong>Playwright E2E (tl-c47):</strong> use <code>page.request</code> for auth setup (avoids CSP blocks in dev mode).</p>
+
+  <h3>Regression anchors — critical test files</h3>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th>File</th><th>Protects</th><th>Service</th></tr></thead>
+      <tbody>
+        <tr><td><code>internal/handlers/boss_test.go</code></td><td>Boss battle HP flow, XP award, loot roll</td><td>gaming-service</td></tr>
+        <tr><td><code>internal/handlers/streak_test.go</code></td><td>Streak freeze, streak-risk push</td><td>gaming-service</td></tr>
+        <tr><td><code>internal/handlers/achievement_push_test.go</code></td><td>Level-up + quest-complete FCM dedup</td><td>notification-service</td></tr>
+        <tr><td><code>tests/test_rag.py</code></td><td>RAG pipeline, query expansion, pronoun resolution</td><td>tutoring-service</td></tr>
+        <tr><td><code>tests/test_expander.py</code></td><td>Search query expansion fallback</td><td>search-service</td></tr>
+        <tr><td><code>__tests__/BossBattleClient.test.ts</code></td><td>Three.js battle scene, loot reveal, WS hook</td><td>frontend</td></tr>
       </tbody>
     </table>
   </div>
