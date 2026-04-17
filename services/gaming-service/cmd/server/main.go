@@ -20,6 +20,7 @@ import (
 	"github.com/teacherslounge/gaming-service/internal/handler"
 	tlmetrics "github.com/teacherslounge/gaming-service/internal/metrics"
 	"github.com/teacherslounge/gaming-service/internal/middleware"
+	"github.com/teacherslounge/gaming-service/internal/notifier"
 	"github.com/teacherslounge/gaming-service/internal/ratelimit"
 	"github.com/teacherslounge/gaming-service/internal/rival"
 	"github.com/teacherslounge/gaming-service/internal/store"
@@ -72,7 +73,18 @@ func main() {
 		logger.Info("boss taunts: static fallback (AI_GATEWAY_URL not set)")
 	}
 
-	h := handler.New(st, taunter, logger)
+	// Wire the achievement-push notifier. When NOTIFICATION_SERVICE_URL is
+	// set, level-up and quest-complete events POST to notification-service
+	// for FCM fan-out. Otherwise the handler runs without pushes.
+	handlerOpts := []handler.Option{}
+	if cfg.notificationServiceURL != "" {
+		handlerOpts = append(handlerOpts, handler.WithNotifier(notifier.NewHTTP(cfg.notificationServiceURL)))
+		logger.Info("achievement push: notification-service wired", zap.String("url", cfg.notificationServiceURL))
+	} else {
+		logger.Info("achievement push: disabled (NOTIFICATION_SERVICE_URL not set)")
+	}
+
+	h := handler.New(st, taunter, logger, handlerOpts...)
 
 	// Seed simulated rivals into the leaderboard (idempotent — ZAddNX).
 	if err := st.SeedRivals(context.Background(), rival.Roster); err != nil {
@@ -187,19 +199,23 @@ type config struct {
 	jwtSecret          string
 	aiGatewayURL       string
 	aiGatewayKey       string
+	// notificationServiceURL is the base URL (e.g. http://notification-service:9000)
+	// used to POST achievement events. Empty disables push dispatch.
+	notificationServiceURL string
 }
 
 func loadConfig() config {
 	return config{
-		port:               getEnv("PORT", "8083"),
-		databaseURL:        requireEnv("DATABASE_URL"),
-		redisAddr:          getEnv("REDIS_ADDR", "localhost:6379"),
-		redisPassword:      getEnv("REDIS_PASSWORD", ""),
-		redisTLSEnabled:    getEnv("REDIS_TLS_ENABLED", "false") == "true",
-		redisTLSServerName: getEnv("REDIS_TLS_SERVER_NAME", ""),
-		jwtSecret:          requireEnv("JWT_SECRET"),
-		aiGatewayURL:       getEnv("AI_GATEWAY_URL", ""),
-		aiGatewayKey:       getEnv("AI_GATEWAY_KEY", ""),
+		port:                   getEnv("PORT", "8083"),
+		databaseURL:            requireEnv("DATABASE_URL"),
+		redisAddr:              getEnv("REDIS_ADDR", "localhost:6379"),
+		redisPassword:          getEnv("REDIS_PASSWORD", ""),
+		redisTLSEnabled:        getEnv("REDIS_TLS_ENABLED", "false") == "true",
+		redisTLSServerName:     getEnv("REDIS_TLS_SERVER_NAME", ""),
+		jwtSecret:              requireEnv("JWT_SECRET"),
+		aiGatewayURL:           getEnv("AI_GATEWAY_URL", ""),
+		aiGatewayKey:           getEnv("AI_GATEWAY_KEY", ""),
+		notificationServiceURL: getEnv("NOTIFICATION_SERVICE_URL", ""),
 	}
 }
 
