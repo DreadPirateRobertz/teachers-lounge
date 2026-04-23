@@ -1,5 +1,5 @@
-project_id     = "teachers-lounge"
+project_id     = "teachers-lounge-494218"
 region         = "us-central1"
 environment    = "dev"
 cluster_name   = "tl-cluster-dev"
-project_number = "123456789012" # replace with actual project number
+project_number = "796153156886"
