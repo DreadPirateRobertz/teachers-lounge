@@ -1,5 +1,5 @@
 # tl-logging installed via Dockerfile COPY + pip install step (see ci.yml docker-build)
-fastapi==0.115.6
+fastapi==0.135.3
 uvicorn[standard]==0.42.0
 httpx==0.28.1
 sqlalchemy[asyncio]==2.0.48
