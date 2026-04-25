@@ -23,7 +23,7 @@ openpyxl==3.1.5
 # Video/audio transcription
 ffmpeg-python==0.2.0
 httpx==0.28.1
-google-cloud-speech==2.28.0
+google-cloud-speech==2.38.0
 
 # Image OCR
 google-cloud-documentai==2.29.0
