@@ -56,21 +56,28 @@ resource "google_kms_crypto_key" "app" {
   }
 }
 
+## Ensure the Cloud SQL service agent exists before granting permissions.
+resource "google_project_service_identity" "cloudsql" {
+  provider = google-beta
+  project  = var.project_id
+  service  = "sqladmin.googleapis.com"
+}
+
 ## Grant the Cloud SQL service account permission to use the cloudsql key.
-## The service account identity follows the pattern
-## service-<project_number>@gcp-sa-cloud-sql.iam.gserviceaccount.com.
-## The project number must be provided via var.project_number.
 resource "google_kms_crypto_key_iam_member" "cloudsql_sa" {
   crypto_key_id = google_kms_crypto_key.cloudsql.id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
-  member        = "serviceAccount:service-${var.project_number}@gcp-sa-cloud-sql.iam.gserviceaccount.com"
+  member        = "serviceAccount:${google_project_service_identity.cloudsql.email}"
+}
+
+## Ensure the GCS service agent exists before granting permissions.
+data "google_storage_project_service_account" "gcs" {
+  project = var.project_id
 }
 
 ## Grant the GCS service account permission to use the gcs key.
-## The service account identity follows the pattern
-## service-<project_number>@gs-project-accounts.iam.gserviceaccount.com.
 resource "google_kms_crypto_key_iam_member" "gcs_sa" {
   crypto_key_id = google_kms_crypto_key.gcs.id
   role          = "roles/cloudkms.cryptoKeyEncrypterDecrypter"
-  member        = "serviceAccount:service-${var.project_number}@gs-project-accounts.iam.gserviceaccount.com"
+  member        = "serviceAccount:${data.google_storage_project_service_account.gcs.email_address}"
 }
