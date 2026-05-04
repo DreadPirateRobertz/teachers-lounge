@@ -3,7 +3,7 @@ setuptools>=70.0.0
 
 # tl-logging installed via Dockerfile COPY + pip install step (see ci.yml docker-build)
 fastapi==0.115.0
-uvicorn[standard]==0.30.6
+uvicorn[standard]==0.44.0
 pydantic==2.9.2
 pydantic-settings==2.5.2
 google-cloud-storage==2.18.2
