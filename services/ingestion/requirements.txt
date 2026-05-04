@@ -12,7 +12,7 @@ asyncpg==0.30.0
 prometheus_client==0.21.1
 
 # PDF processing
-unstructured[pdf]==0.16.19
+unstructured[pdf]==0.22.18
 pdfminer.six==20231228
 
 # Office document processing
