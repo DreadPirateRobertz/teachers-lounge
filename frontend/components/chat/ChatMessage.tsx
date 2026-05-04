@@ -4,7 +4,9 @@ import { type ReactNode, useState } from 'react'
 import dynamic from 'next/dynamic'
 import MathBlock from './MathBlock'
 import TtsPlayer, { type Phrase } from './TtsPlayer'
+import TTSButton from './TTSButton'
 import NotesPanel, { type NoteEntry } from './NotesPanel'
+import ResponseRenderer from './ResponseRenderer'
 
 /** Dynamically imported molecule viewer — no SSR so WebGL runs client-side only. */
 const MoleculeViewer = dynamic(() => import('../chemistry/MoleculeViewer'), { ssr: false })
@@ -263,7 +265,10 @@ export default function ChatMessage({ message }: Props) {
           <div className="text-[10px] font-mono text-neon-blue mb-1.5 font-bold">PROF NOVA</div>
         )}
         <div className={message.streaming ? 'typing-cursor' : ''}>
-          {renderContent(message.content)}
+          <ResponseRenderer
+            text={message.content}
+            renderTextSegment={(segment, key) => <span key={key}>{renderContent(segment)}</span>}
+          />
         </div>
 
         {/* Inline diagrams (Phase 6) */}
@@ -290,6 +295,13 @@ export default function ChatMessage({ message }: Props) {
         {!isUser && message.notes && message.notes.length > 0 && (
           <div className="mt-2">
             <NotesPanel notes={message.notes} />
+          </div>
+        )}
+
+        {/* On-demand TTS — auditory mode, available on every assistant message */}
+        {!isUser && !message.streaming && message.content.trim().length > 0 && (
+          <div className="mt-2 flex justify-end">
+            <TTSButton text={message.content} />
           </div>
         )}
       </div>
