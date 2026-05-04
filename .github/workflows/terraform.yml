@@ -41,7 +41,7 @@ jobs:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
@@ -103,7 +103,7 @@ jobs:
           workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
           service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
 
-      - uses: hashicorp/setup-terraform@v3
+      - uses: hashicorp/setup-terraform@v4
         with:
           terraform_version: ${{ env.TF_VERSION }}
 
