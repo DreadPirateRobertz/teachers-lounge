@@ -4,7 +4,7 @@
 ## Requires:
 ##   - A static external IP reserved in GCP named "argocd-ip"
 ##     gcloud compute addresses create argocd-ip --global
-##   - DNS: argocd.teacherslounge.app → that IP (before applying)
+##   - DNS: argocd.konch-crunch.art → that IP (before applying)
 ##   - The ManagedCertificate controller (enabled by default on GKE)
 apiVersion: networking.gke.io/v1
 kind: ManagedCertificate
@@ -13,7 +13,7 @@ metadata:
   namespace: argocd
 spec:
   domains:
-    - argocd.teacherslounge.app
+    - argocd.konch-crunch.art
 ---
 apiVersion: networking.k8s.io/v1
 kind: Ingress
@@ -29,7 +29,7 @@ metadata:
     nginx.ingress.kubernetes.io/backend-protocol: "GRPCS"
 spec:
   rules:
-    - host: argocd.teacherslounge.app
+    - host: argocd.konch-crunch.art
       http:
         paths:
           - path: /
@@ -38,7 +38,7 @@ spec:
               service:
                 name: argocd-server
                 port:
-                  number: 443
+                  number: 80
 ---
 apiVersion: networking.gke.io/v1beta1
 kind: FrontendConfig

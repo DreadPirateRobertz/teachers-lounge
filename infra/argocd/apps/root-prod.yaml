@@ -12,7 +12,7 @@ metadata:
 spec:
   project: default
   source:
-    repoURL: https://github.com/teachers-lounge/teachers-lounge.git
+    repoURL: https://github.com/DreadPirateRobertz/teachers-lounge.git
     targetRevision: main
     path: infra/argocd/apps/prod
   destination:

@@ -2,11 +2,11 @@
 ## Chart: argo/argo-cd  (https://argoproj.github.io/argo-helm)
 
 global:
-  domain: argocd.teacherslounge.app
+  domain: argocd.konch-crunch.art
 
 configs:
   params:
-    server.insecure: false  # TLS terminated at GKE Ingress — but ArgoCD still serves HTTPS internally
+    server.insecure: true  # TLS terminated at GKE Ingress — communication between LB and Pod can be HTTP
 
   # RBAC policy — restrict manual sync/delete to infra & pm roles; everyone else read-only
   rbac:
@@ -34,7 +34,7 @@ configs:
 
   # ArgoCD ConfigMap — OIDC and repository creds live here via Secrets (see install.sh)
   cm:
-    url: https://argocd.teacherslounge.app
+    url: https://argocd.konch-crunch.art
     # Uncomment and fill in when Google OIDC is configured:
     # oidc.config: |
     #   name: Google

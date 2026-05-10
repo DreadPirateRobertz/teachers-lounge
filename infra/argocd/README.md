@@ -67,11 +67,22 @@ gcloud compute addresses describe argocd-ip --global --format="value(address)"
 
 ### 2. Point DNS to that IP
 
-Add an A record: `argocd.teacherslounge.app → <IP from above>`
+Add an A record: `argocd.konch-crunch.art → <IP from above>`
 
 Wait for DNS to propagate before continuing (required for TLS provisioning).
 
-### 3. Run the install script
+### 3. Configure Repository Credentials
+
+If the repository is private, ArgoCD needs credentials to pull the code.
+
+1. Edit `infra/argocd/repo-secret.yaml` and uncomment the `username` and `password` fields.
+2. Provide a GitHub Personal Access Token (PAT) with `repo` scope in the `password` field.
+3. Apply the secret:
+   ```bash
+   kubectl apply -f infra/argocd/repo-secret.yaml
+   ```
+
+### 4. Run the install script
 
 ```bash
 cd infra/argocd
@@ -86,10 +97,10 @@ This:
 ArgoCD then syncs all child Applications automatically. The first sync pulls
 the Helm charts from this repo and deploys all Phase 1 services.
 
-### 4. Log into the ArgoCD UI
+### 5. Log into the ArgoCD UI
 
 ```
-https://argocd.teacherslounge.app
+https://argocd.konch-crunch.art
 Username: admin
 Password: (printed at the end of install.sh, also: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)
 ```
@@ -159,7 +170,7 @@ ArgoCD detects the change within ~3 minutes and rolls out the new image.
 
 ```bash
 argocd app sync frontend-dev
-# or via the UI: https://argocd.teacherslounge.app
+# or via the UI: https://argocd.konch-crunch.art
 ```
 
 ### Roll back a deployment
