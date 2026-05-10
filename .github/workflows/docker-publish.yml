@@ -12,15 +12,15 @@ on:
 
 permissions:
   contents: read
-  packages: write # GitHub Container Registry
+  id-token: write # Required for Workload Identity Federation
 
 concurrency:
   group: docker-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  REGISTRY: ghcr.io
-  REPOSITORY: dreadpiraterobertz/teachers-lounge
+  REGISTRY: us-docker.pkg.dev
+  REPOSITORY: teachers-lounge-494218/services
 
 jobs:
   changes:
@@ -56,6 +56,9 @@ jobs:
     if: needs.changes.outputs.services != '[]'
     runs-on: ubuntu-latest
     timeout-minutes: 30
+    permissions:
+      contents: read
+      id-token: write
     strategy:
       fail-fast: false
       matrix:
@@ -74,12 +77,20 @@ jobs:
             echo "path=services/${SERVICE_NAME}" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Log in to GitHub Container Registry
-        uses: docker/login-action@v4
+      - name: Google Auth
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          token_format: 'access_token'
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: ${{ secrets.WIF_SERVICE_ACCOUNT }}
+
+      - name: Log in to Google Artifact Registry
+        uses: docker/login-action@v3
         with:
           registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+          username: oauth2accesstoken
+          password: ${{ steps.auth.outputs.access_token }}
 
       - uses: docker/setup-buildx-action@v4
 

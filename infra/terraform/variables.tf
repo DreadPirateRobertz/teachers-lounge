@@ -26,3 +26,9 @@ variable "project_number" {
   description = "GCP project number (numeric). Required for KMS IAM grants to managed service accounts (Cloud SQL, GCS)."
   type        = string
 }
+
+variable "github_repo" {
+  description = "GitHub repository in 'owner/repo' format"
+  type        = string
+  default     = "DreadPirateRobertz/teachers-lounge"
+}

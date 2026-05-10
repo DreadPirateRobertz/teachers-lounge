@@ -43,3 +43,13 @@ output "qdrant_snapshot_sa_email" {
   description = "GCP service account email for the Helm values-prod.yaml Workload Identity annotation"
   value       = module.qdrant_gcs.gcp_sa_email
 }
+
+output "wif_provider_name" {
+  description = "Workload Identity Provider name for GitHub Actions WIF_PROVIDER secret"
+  value       = module.wif.workload_identity_provider
+}
+
+output "wif_service_account_email" {
+  description = "Service account email for GitHub Actions WIF_SERVICE_ACCOUNT secret"
+  value       = module.wif.service_account_email
+}

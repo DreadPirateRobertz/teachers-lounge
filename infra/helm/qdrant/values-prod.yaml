@@ -23,4 +23,4 @@ serviceAccount:
   annotations:
     ## Workload Identity binding — maps the K8s SA to the GCP SA that has
     ## roles/storage.objectCreator on the snapshot bucket.
-    iam.gke.io/gcp-service-account: "qdrant-snapshots@teachers-lounge.iam.gserviceaccount.com"
+    iam.gke.io/gcp-service-account: "qdrant-snapshots@teachers-lounge-494218.iam.gserviceaccount.com"
