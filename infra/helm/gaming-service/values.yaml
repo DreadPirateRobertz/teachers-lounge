@@ -1,7 +1,7 @@
 replicaCount: 2
 
 image:
-  repository: us-docker.pkg.dev/teachers-lounge/services/gaming-service
+  repository: us-docker.pkg.dev/teachers-lounge-494218/services/gaming-service
   tag: latest
   pullPolicy: IfNotPresent
 

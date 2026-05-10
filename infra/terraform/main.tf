@@ -87,3 +87,12 @@ module "qdrant_gcs" {
 
   depends_on = [module.gke]
 }
+
+## Workload Identity Federation for GitHub Actions.
+## Creates the pool, provider, and SA for keyless CI/CD.
+module "wif" {
+  source = "./modules/wif"
+
+  project_id  = var.project_id
+  github_repo = var.github_repo
+}

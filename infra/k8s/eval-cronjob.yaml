@@ -28,7 +28,7 @@ spec:
           serviceAccountName: eval-service   # Workload Identity for BigQuery + Cloud SQL
           containers:
             - name: eval-weekly
-              image: gcr.io/teachers-lounge/eval-service:latest
+              image: us-docker.pkg.dev/teachers-lounge-494218/services/eval-service:latest
               command: ["python", "weekly_eval.py"]
               env:
                 - name: DATABASE_URL
@@ -37,7 +37,7 @@ spec:
                       name: cloudsql-credentials
                       key: database-url
                 - name: BIGQUERY_PROJECT
-                  value: "teachers-lounge"
+                  value: "teachers-lounge-494218"
                 - name: BIGQUERY_DATASET
                   value: "analytics"
                 - name: RAGAS_WEEKLY_SAMPLE_SIZE
