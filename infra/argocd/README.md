@@ -67,7 +67,7 @@ gcloud compute addresses describe argocd-ip --global --format="value(address)"
 
 ### 2. Point DNS to that IP
 
-Add an A record: `argocd.teacherslounge.app → <IP from above>`
+Add an A record: `argocd.konch-crunch.art → <IP from above>`
 
 Wait for DNS to propagate before continuing (required for TLS provisioning).
 
@@ -89,7 +89,7 @@ the Helm charts from this repo and deploys all Phase 1 services.
 ### 4. Log into the ArgoCD UI
 
 ```
-https://argocd.teacherslounge.app
+https://argocd.konch-crunch.art
 Username: admin
 Password: (printed at the end of install.sh, also: kubectl -n argocd get secret argocd-initial-admin-secret -o jsonpath='{.data.password}' | base64 -d)
 ```
@@ -159,7 +159,7 @@ ArgoCD detects the change within ~3 minutes and rolls out the new image.
 
 ```bash
 argocd app sync frontend-dev
-# or via the UI: https://argocd.teacherslounge.app
+# or via the UI: https://argocd.konch-crunch.art
 ```
 
 ### Roll back a deployment
