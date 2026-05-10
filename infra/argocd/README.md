@@ -71,7 +71,18 @@ Add an A record: `argocd.konch-crunch.art → <IP from above>`
 
 Wait for DNS to propagate before continuing (required for TLS provisioning).
 
-### 3. Run the install script
+### 3. Configure Repository Credentials
+
+If the repository is private, ArgoCD needs credentials to pull the code.
+
+1. Edit `infra/argocd/repo-secret.yaml` and uncomment the `username` and `password` fields.
+2. Provide a GitHub Personal Access Token (PAT) with `repo` scope in the `password` field.
+3. Apply the secret:
+   ```bash
+   kubectl apply -f infra/argocd/repo-secret.yaml
+   ```
+
+### 4. Run the install script
 
 ```bash
 cd infra/argocd
@@ -86,7 +97,7 @@ This:
 ArgoCD then syncs all child Applications automatically. The first sync pulls
 the Helm charts from this repo and deploys all Phase 1 services.
 
-### 4. Log into the ArgoCD UI
+### 5. Log into the ArgoCD UI
 
 ```
 https://argocd.konch-crunch.art

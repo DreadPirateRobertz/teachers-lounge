@@ -34,6 +34,14 @@ helm upgrade --install "${RELEASE}" argo/argo-cd \
 echo "==> Applying GKE Ingress for ArgoCD UI"
 kubectl apply -f "${SCRIPT_DIR}/ingress.yaml"
 
+echo "==> Applying Repository Credentials"
+if grep -q "username: <github-username>" "${SCRIPT_DIR}/repo-secret.yaml"; then
+  echo "WARN: Repository credentials not configured in repo-secret.yaml. Skipping."
+  echo "      If your repo is private, root apps will fail to sync."
+else
+  kubectl apply -f "${SCRIPT_DIR}/repo-secret.yaml"
+fi
+
 echo "==> Bootstrapping app-of-apps (dev)"
 kubectl apply -f "${SCRIPT_DIR}/apps/root-dev.yaml"
 
