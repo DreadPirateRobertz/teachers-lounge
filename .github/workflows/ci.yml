@@ -300,7 +300,7 @@ jobs:
           fi
       - name: Build Docker image
         if: steps.check.outputs.exists == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ${{ matrix.svc_path }}
           push: false
