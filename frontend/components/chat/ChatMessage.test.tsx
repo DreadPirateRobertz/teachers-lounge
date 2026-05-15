@@ -260,3 +260,43 @@ describe('ChatMessage — NotesPanel', () => {
     expect(screen.queryByRole('heading', { name: /notes/i })).toBeNull()
   })
 })
+
+// ── Diagram tag (multi-modal Phase 5) ─────────────────────────────────────────
+
+describe('ChatMessage — [DIAGRAM:] tag rendering', () => {
+  it('renders an inline diagram placeholder for [DIAGRAM:] tags', () => {
+    render(
+      <ChatMessage message={msg({ role: 'assistant', content: 'Look: [DIAGRAM: cell wall]' })} />,
+    )
+    expect(screen.getByTestId('diagram-placeholder')).toBeInTheDocument()
+    expect(screen.getByText('cell wall')).toBeInTheDocument()
+  })
+
+  it('does not leak the raw [DIAGRAM:] tag into the DOM', () => {
+    render(
+      <ChatMessage message={msg({ role: 'assistant', content: '[DIAGRAM: photosynthesis]' })} />,
+    )
+    expect(screen.queryByText(/\[DIAGRAM:/)).toBeNull()
+  })
+})
+
+// ── On-demand TTS button (multi-modal Phase 5) ────────────────────────────────
+
+describe('ChatMessage — on-demand TTS button', () => {
+  it('renders a TTS button on assistant messages with content', () => {
+    render(<ChatMessage message={msg({ role: 'assistant', content: 'Hi there.' })} />)
+    expect(screen.getByTestId('tts-button')).toBeInTheDocument()
+  })
+
+  it('does not render the TTS button for user messages', () => {
+    render(<ChatMessage message={msg({ role: 'user', content: 'Hi' })} />)
+    expect(screen.queryByTestId('tts-button')).toBeNull()
+  })
+
+  it('does not render the TTS button while the message is streaming', () => {
+    render(
+      <ChatMessage message={msg({ role: 'assistant', content: 'partial', streaming: true })} />,
+    )
+    expect(screen.queryByTestId('tts-button')).toBeNull()
+  })
+})

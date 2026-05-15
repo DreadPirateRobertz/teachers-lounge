@@ -4,6 +4,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import ChatMessage, { type DiagramAttachment, type Message } from './ChatMessage'
 import ChatInput from './ChatInput'
 import MoleculeBuilder from './MoleculeBuilder'
+import LearningStyleBadge from './LearningStyleBadge'
 
 const WELCOME_MESSAGE: Message = {
   id: 'welcome',
@@ -200,7 +201,8 @@ export default function ChatPanel() {
           <span className="w-1 h-1 rounded-full bg-border-mid" />
           <span className="font-mono text-xs text-text-dim">Organic Chemistry 101</span>
         </div>
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-2">
+          <LearningStyleBadge dials={dials} />
           <span className="w-1.5 h-1.5 rounded-full bg-neon-green animate-pulse-slow" />
           <span className="text-[10px] text-text-dim">Connected</span>
         </div>
