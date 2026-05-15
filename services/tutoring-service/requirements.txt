@@ -4,7 +4,7 @@ uvicorn[standard]==0.42.0
 httpx==0.28.1
 sqlalchemy[asyncio]==2.0.48
 asyncpg==0.30.0
-pydantic==2.12.5
+pydantic==2.13.0
 pydantic-settings==2.7.0
 openai==1.60.0
 python-dotenv==1.2.2
