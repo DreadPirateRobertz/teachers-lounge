@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from 'react'
+import VictoryParticles from './VictoryParticles'
 
 /** A single loot line item. */
 export interface LootItem {
@@ -61,37 +62,40 @@ export default function LootReveal({
   }, [revealed, items.length, staggerMs, onContinue])
 
   return (
-    <div
-      role="region"
-      aria-label="Battle rewards"
-      className="flex flex-col gap-2 w-full max-w-sm mx-auto px-4 py-6 rounded-lg border border-neon-gold/40 bg-bg-panel/60"
-    >
-      <h2 className="text-sm font-mono font-bold text-neon-gold tracking-wider text-center mb-2">
-        LOOT REVEALED
-      </h2>
-      {items.map((item, idx) => {
-        const visible = idx < revealed
-        return (
-          <div
-            key={item.key}
-            data-testid={`loot-row-${item.key}`}
-            aria-hidden={!visible}
-            className={`flex items-center gap-3 px-3 py-2 rounded-md border transition-all duration-300 ${
-              visible
-                ? 'opacity-100 translate-y-0 border-neon-gold/30 bg-neon-gold/5'
-                : 'opacity-0 translate-y-2 border-transparent'
-            }`}
-          >
-            <span aria-hidden="true" className="text-lg">
-              {item.icon}
-            </span>
-            <span className="text-xs font-mono text-text-bright flex-1">{item.label}</span>
-            {item.amount !== null && (
-              <span className="text-xs font-mono font-bold text-neon-gold">+{item.amount}</span>
-            )}
-          </div>
-        )
-      })}
-    </div>
+    <>
+      <VictoryParticles active={items.length > 0} />
+      <div
+        role="region"
+        aria-label="Battle rewards"
+        className="flex flex-col gap-2 w-full max-w-sm mx-auto px-4 py-6 rounded-lg border border-neon-gold/40 bg-bg-panel/60"
+      >
+        <h2 className="text-sm font-mono font-bold text-neon-gold tracking-wider text-center mb-2">
+          LOOT REVEALED
+        </h2>
+        {items.map((item, idx) => {
+          const visible = idx < revealed
+          return (
+            <div
+              key={item.key}
+              data-testid={`loot-row-${item.key}`}
+              aria-hidden={!visible}
+              className={`flex items-center gap-3 px-3 py-2 rounded-md border transition-all duration-300 ${
+                visible
+                  ? 'opacity-100 translate-y-0 border-neon-gold/30 bg-neon-gold/5'
+                  : 'opacity-0 translate-y-2 border-transparent'
+              }`}
+            >
+              <span aria-hidden="true" className="text-lg">
+                {item.icon}
+              </span>
+              <span className="text-xs font-mono text-text-bright flex-1">{item.label}</span>
+              {item.amount !== null && (
+                <span className="text-xs font-mono font-bold text-neon-gold">+{item.amount}</span>
+              )}
+            </div>
+          )
+        })}
+      </div>
+    </>
   )
 }
